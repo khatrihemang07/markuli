@@ -218,6 +218,9 @@ impl Pointer {
         reason = "1:1 port, kept linear and with the library's names to diff against the source"
     )]
     fn outline_long(&self, now: f64, s: &mut Scratch, out: &mut Vec<V>) {
+        // Long on purpose (rule 15): this mirrors the upstream `getStrokeOutline`
+        // structure (laser-pointer 1.3.1) so parity fixtures and a future
+        // upstream diff stay easy. Do not split it.
         let len = self.len();
         let size_at = |p: P, index: usize| SIZE * size_mapping(now, p[2], index, len);
         s.forward.clear();

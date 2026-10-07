@@ -111,6 +111,7 @@ impl Scratch {
 
     /// perfect-freehand `getStrokePoints`.
     fn compute_stroke_points(&mut self, size: f64, is_complete: bool) {
+        // Mirrors `getStrokePoints` step by step (rule 15), for parity diffs.
         self.stroke_points.clear();
         if self.input.is_empty() {
             return;
@@ -192,6 +193,9 @@ impl Scratch {
         reason = "1:1 port, kept linear to diff against the source"
     )]
     fn compute_outline(&mut self, size: f64) {
+        // Long on purpose (rule 15): this mirrors `getStrokeOutlinePoints` line
+        // for line, so a change upstream can be diffed and re-ported. Splitting
+        // it would hide parity drift.
         let simulate = !self.input.iter().any(|p| p[2] >= 0.0);
         let points = &self.stroke_points;
         let (Some(&first_sp), Some(&last_sp)) = (points.first(), points.last()) else {
