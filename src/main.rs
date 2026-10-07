@@ -12,11 +12,12 @@ use hotkeys::{Binding, Hotkeys, RebindError};
 use markuli_core::{Annotator, Config, Cursor, DisplayId, Event, Key, Point, Theme, View};
 use platform::{Presenter, SettingsWindow};
 use settings::SettingsEvent;
+use std::time::{Duration, Instant};
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, KeyEvent, MouseButton, TouchPhase, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, StartCause, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
@@ -38,6 +39,8 @@ struct Overlay {
 
 struct App {
     core: Annotator,
+    /// The origin of the core's clock (`Event::Clock` milliseconds).
+    started: Instant,
     overlay: Option<Overlay>,
     cursor: Point,
     cursor_shape: Cursor,
@@ -54,6 +57,12 @@ struct App {
 }
 
 impl App {
+    /// The current time as a core event; pointer events need it for the Laser.
+    fn clock(&self) -> Event {
+        let ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        Event::Clock(ms)
+    }
+
     fn on_toggle(&mut self, event_loop: &ActiveEventLoop) {
         let Some(monitor) = platform::monitor_under_cursor(event_loop)
             .or_else(|| event_loop.primary_monitor())
@@ -339,6 +348,21 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
+    /// A frame is due: the Laser is fading. Only the core schedules one
+    /// (`about_to_wait`), so the loop sleeps once the trail is gone.
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
+        if matches!(cause, StartCause::ResumeTimeReached { .. }) {
+            self.input(event_loop, self.clock());
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.set_control_flow(match self.core.view().next_frame {
+            Some(ms) => ControlFlow::WaitUntil(self.started + Duration::from_millis(ms)),
+            None => ControlFlow::Wait,
+        });
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
@@ -348,6 +372,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
+                self.core.handle(self.clock());
                 self.core.handle(Event::Pressure(platform::pen_pressure()));
                 self.input(event_loop, Event::PointerMove(self.cursor));
             }
@@ -356,6 +381,7 @@ impl ApplicationHandler<UserEvent> for App {
                 state,
                 ..
             } => {
+                self.core.handle(self.clock());
                 self.core.handle(Event::Pressure(platform::pen_pressure()));
                 self.input(
                     event_loop,
@@ -368,6 +394,7 @@ impl ApplicationHandler<UserEvent> for App {
             // Windows pens (and touch) arrive here, with the pen's force.
             WindowEvent::Touch(touch) => {
                 self.cursor = point(touch.location);
+                self.core.handle(self.clock());
                 let pressure = touch.force.map(|f| {
                     #[allow(clippy::cast_possible_truncation, reason = "0..=1")]
                     let p = f.normalized() as f32;
@@ -446,6 +473,7 @@ fn main() {
 
     let mut app = App {
         core: Annotator::new(),
+        started: Instant::now(),
         overlay: None,
         cursor: Point { x: 0.0, y: 0.0 },
         cursor_shape: Cursor::Crosshair,

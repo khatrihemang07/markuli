@@ -31,7 +31,11 @@ fn three_strokes() -> Annotator {
 }
 
 fn ids(a: &Annotator) -> Vec<u64> {
-    a.ink().elements().iter().map(markuli_core::Element::id).collect()
+    a.ink()
+        .elements()
+        .iter()
+        .map(markuli_core::Element::id)
+        .collect()
 }
 
 fn drag(a: &mut Annotator, path: &[Point]) {
