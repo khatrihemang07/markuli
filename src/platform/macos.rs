@@ -5,11 +5,11 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSScreen, NSScreenSaverWindowLevel,
-    NSView, NSWindowCollectionBehavior,
+    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSPasteboard, NSPasteboardTypeString,
+    NSScreen, NSScreenSaverWindowLevel, NSView, NSWindowCollectionBehavior,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{ns_string, NSDictionary, NSNumber};
+use objc2_foundation::{ns_string, NSDictionary, NSNumber, NSString};
 use objc2_quartz_core::{CALayer, CATransaction};
 use std::ffi::c_void;
 use std::path::PathBuf;
@@ -316,6 +316,15 @@ pub fn set_launch_at_login(on: bool) -> Result<(), String> {
 /// Cmd is the shortcut modifier on macOS.
 pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.super_key()
+}
+
+/// Replaces the clipboard with plain text (what Excalidraw pastes from).
+pub fn set_clipboard_text(text: &str) {
+    let pasteboard = NSPasteboard::generalPasteboard();
+    pasteboard.clearContents();
+    // SAFETY: a constant string AppKit exports; it is valid for the process.
+    let kind = unsafe { NSPasteboardTypeString };
+    pasteboard.setString_forType(&NSString::from_str(text), kind);
 }
 
 extern "C" {

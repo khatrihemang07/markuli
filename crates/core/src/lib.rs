@@ -18,9 +18,9 @@ mod tools;
 pub use config::Config;
 use freehand::Scratch;
 use history::History;
-use selection::Selection;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
+use selection::Selection;
 pub use toolbar::{Button, Theme};
 use toolbar::{Chrome, Toolbar, UiState};
 pub use tools::Cursor;
@@ -54,7 +54,9 @@ pub enum Event {
     /// `None` is a mouse or trackpad: the Stroke simulates pressure.
     Pressure(Option<f32>),
     /// Whether Shift is held, for the pointer events that follow.
-    Modifiers { shift: bool },
+    Modifiers {
+        shift: bool,
+    },
     /// Physical pixels per logical pixel of the Overlay (default 1).
     ScaleFactor(f32),
     /// A key press in Draw Mode. The platform layer resolves `command` to
@@ -176,8 +178,7 @@ impl Annotator {
             Event::Clear => self.clear(),
             _ => {}
         }
-        self.selection
-            .flush(&self.ink, &mut self.paint, self.scale);
+        self.selection.flush(&self.ink, &mut self.paint, self.scale);
         self.view()
     }
 

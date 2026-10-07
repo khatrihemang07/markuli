@@ -18,11 +18,15 @@ use markuli_core::{Damage, Format};
 use std::path::PathBuf;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
-use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, POINT, RECT, SIZE};
+use windows_sys::Win32::Foundation::{GlobalFree, ERROR_FILE_NOT_FOUND, HWND, POINT, RECT, SIZE};
 use windows_sys::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA,
     AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
 };
+use windows_sys::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+};
+use windows_sys::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows_sys::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyW, RegDeleteValueW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, REG_SZ,
 };
@@ -258,6 +262,41 @@ pub fn set_launch_at_login(on: bool) -> Result<(), String> {
         } else {
             Err(format!("registry error {status}"))
         }
+    }
+}
+
+/// The clipboard format for UTF-16 text (`CF_UNICODETEXT`).
+const CF_UNICODETEXT: u32 = 13;
+
+/// Replaces the clipboard with plain text (what Excalidraw pastes from).
+/// Failures are ignored: there is nothing useful to tell the user mid-draw.
+pub fn set_clipboard_text(text: &str) {
+    let utf16 = wide(text);
+    let bytes = utf16.len() * size_of::<u16>();
+    // SAFETY: the memory block is sized for `utf16`, locked while written and
+    // handed to the clipboard, which then owns it; on any failure before the
+    // hand-over it is freed here. The clipboard is opened and closed in this
+    // function with no window (allowed for a process without a clipboard
+    // owner window).
+    unsafe {
+        if OpenClipboard(null_mut()) == 0 {
+            return;
+        }
+        EmptyClipboard();
+        let block = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if !block.is_null() {
+            let target = GlobalLock(block).cast::<u16>();
+            if target.is_null() {
+                GlobalFree(block);
+            } else {
+                core::ptr::copy_nonoverlapping(utf16.as_ptr(), target, utf16.len());
+                GlobalUnlock(block);
+                if SetClipboardData(CF_UNICODETEXT, block).is_null() {
+                    GlobalFree(block);
+                }
+            }
+        }
+        CloseClipboard();
     }
 }
 

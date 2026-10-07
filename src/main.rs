@@ -209,6 +209,7 @@ impl App {
         }
         let key = match &event.logical_key {
             WinitKey::Named(NamedKey::Escape) => Key::Escape,
+            WinitKey::Named(NamedKey::Delete | NamedKey::Backspace) => Key::Delete,
             WinitKey::Character(text) => match text.to_lowercase().chars().next() {
                 Some(c) => Key::Char(c),
                 None => return,
@@ -223,6 +224,10 @@ impl App {
                 shift: self.modifiers.shift_key(),
             },
         );
+        // Cmd/Ctrl+C: the core produced the Excalidraw clipboard JSON.
+        if let Some(text) = self.core.take_copy() {
+            platform::set_clipboard_text(&text);
+        }
     }
 
     /// Feeds an input event to the core and applies what changed: a toolbar
@@ -341,7 +346,12 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+                self.core.handle(Event::Modifiers {
+                    shift: self.modifiers.shift_key(),
+                });
+            }
             WindowEvent::KeyboardInput { event, .. } => self.key(event_loop, &event),
             WindowEvent::ThemeChanged(theme) => {
                 self.input(event_loop, Event::Theme(theme_of(Some(theme))));

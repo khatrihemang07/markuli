@@ -28,8 +28,9 @@ pub(crate) fn clipboard<'a>(elements: impl Iterator<Item = &'a Element>) -> Opti
     (count > 0).then_some(out)
 }
 
-fn write_element(out: &mut String, e: &Element, z: usize) {
-    let [l, t, r, b] = e.extent();
+fn write_element(out: &mut String, element: &Element, z: usize) {
+    let e = element;
+    let [left, top, right, bottom] = e.extent();
     let [red, green, blue] = e.stroke_color();
     // Writing to a String cannot fail.
     let _ = write!(
@@ -38,19 +39,19 @@ fn write_element(out: &mut String, e: &Element, z: usize) {
         id = e.id(),
         x = Num(e.x()),
         y = Num(e.y()),
-        w = Num(r - l),
-        h = Num(b - t),
+        w = Num(right - left),
+        h = Num(bottom - top),
         sw = Num(e.stroke_width()),
         op = e.opacity(),
         index = Index(z),
         seed = e.seed(),
         version = e.version(),
     );
-    for (i, p) in e.points().iter().enumerate() {
+    for (i, point) in e.points().iter().enumerate() {
         if i > 0 {
             out.push(',');
         }
-        let _ = write!(out, "[{},{}]", Num(p.x), Num(p.y));
+        let _ = write!(out, "[{},{}]", Num(point.x), Num(point.y));
     }
     out.push_str(r#"],"pressures":["#);
     for (i, pressure) in e.pressures().iter().enumerate() {
@@ -65,8 +66,8 @@ fn write_element(out: &mut String, e: &Element, z: usize) {
         e.simulate_pressure()
     );
     match e.points().last() {
-        Some(p) => {
-            let _ = write!(out, "[{},{}]", Num(p.x), Num(p.y));
+        Some(last) => {
+            let _ = write!(out, "[{},{}]", Num(last.x), Num(last.y));
         }
         None => out.push_str("null"),
     }

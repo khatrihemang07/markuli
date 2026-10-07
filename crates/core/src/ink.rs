@@ -271,7 +271,10 @@ impl Element {
     /// polyline: Excalidraw's freedraw hit test (centreline, not the outline).
     pub(crate) fn hit(&self, at: Point, tolerance: f32) -> bool {
         let [l, t, r, b] = self.absolute_extent();
-        if at.x < l - tolerance || at.x > r + tolerance || at.y < t - tolerance || at.y > b + tolerance
+        if at.x < l - tolerance
+            || at.x > r + tolerance
+            || at.y < t - tolerance
+            || at.y > b + tolerance
         {
             return false;
         }
@@ -406,7 +409,8 @@ impl Ink {
 
     /// Puts an Element back at `index` (clamped), keeping z-order.
     pub(crate) fn insert(&mut self, index: usize, element: Element) {
-        self.elements.insert(index.min(self.elements.len()), element);
+        self.elements
+            .insert(index.min(self.elements.len()), element);
     }
 
     pub(crate) fn last_mut(&mut self) -> Option<&mut Element> {

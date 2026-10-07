@@ -192,8 +192,8 @@ impl Selection {
 fn outline(target: &mut PixmapMut<'_>, rect: Rect, scale: f32, paint: &Paint<'_>, stroke: &Stroke) {
     let [l, t, r, b] = snap(rect, scale);
     let half = stroke.width / 2.0;
-    if let Some(path) = SkiaRect::from_ltrb(l + half, t + half, r + half, b + half)
-        .map(PathBuilder::from_rect)
+    if let Some(path) =
+        SkiaRect::from_ltrb(l + half, t + half, r + half, b + half).map(PathBuilder::from_rect)
     {
         target.stroke_path(&path, paint, stroke, Transform::identity(), None);
     }
@@ -211,14 +211,13 @@ fn snap([l, t, r, b]: Rect, scale: f32) -> Rect {
 
 fn stroke_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'static> {
     let [r, g, b] = rgb;
-    let (r, b) = if format == Format::Bgra { (b, r) } else { (r, b) };
+    let (r, b) = if format == Format::Bgra {
+        (b, r)
+    } else {
+        (r, b)
+    };
     let mut paint = Paint::default();
-    paint.set_color(Color::from_rgba8(
-        r,
-        g,
-        b,
-        alpha_byte(alpha),
-    ));
+    paint.set_color(Color::from_rgba8(r, g, b, alpha_byte(alpha)));
     paint.anti_alias = true;
     paint
 }
@@ -237,7 +236,12 @@ fn grow([l, t, r, b]: Rect, by: f32) -> Rect {
 }
 
 fn union(a: Rect, b: Rect) -> Rect {
-    [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]
+    [
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[2].max(b[2]),
+        a[3].max(b[3]),
+    ]
 }
 
 /// The box between two drag corners, whichever way it was dragged.

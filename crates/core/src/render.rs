@@ -112,7 +112,10 @@ impl Pending {
 /// redraw touches its region, the whole region is redrawn from the backdrop
 /// and the Ink, then the toolbar is painted over it (so its shadow never
 /// stacks on itself).
-#[allow(clippy::too_many_arguments, reason = "one call site; a struct would only rename them")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site; a struct would only rename them"
+)]
 pub fn render(
     ink: &Ink,
     selection: &Selection,

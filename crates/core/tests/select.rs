@@ -74,7 +74,11 @@ fn shift(a: &mut Annotator, held: bool) {
 }
 
 fn ids(a: &Annotator) -> Vec<u64> {
-    a.ink().elements().iter().map(|e| e.id()).collect()
+    a.ink()
+        .elements()
+        .iter()
+        .map(markuli_core::Element::id)
+        .collect()
 }
 
 /// Two horizontal strokes, A at y=100 and B at y=300, and the Select Tool.
@@ -176,7 +180,11 @@ fn cmd_a_selects_all_ink_even_from_the_pen() {
     let pen = a.active_tool();
     command(&mut a, 'a', false);
     assert_eq!(a.selection(), [first, second]);
-    assert_ne!(a.active_tool(), pen, "Cmd+A leaves the Pen for the Select Tool");
+    assert_ne!(
+        a.active_tool(),
+        pen,
+        "Cmd+A leaves the Pen for the Select Tool"
+    );
 }
 
 #[test]
@@ -226,7 +234,11 @@ fn dragging_an_unselected_element_selects_and_moves_it() {
     drag(&mut a, (150.0, 100.0), (180.0, 140.0));
     assert_eq!(a.selection(), [first]);
     assert_eq!(position(&a, 0), (x + 30.0, y + 40.0));
-    assert_eq!(a.ink().elements()[0].points(), points, "points stay relative");
+    assert_eq!(
+        a.ink().elements()[0].points(),
+        points,
+        "points stay relative"
+    );
     assert_eq!(position(&a, 1), (100.0, 300.0), "others stay put");
 }
 

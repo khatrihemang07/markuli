@@ -168,7 +168,10 @@ fn a_stroke_carries_its_geometry_and_style() {
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
     assert_eq!(e["type"], "freedraw");
-    assert_eq!((e["x"].as_f64(), e["y"].as_f64()), (Some(100.0), Some(100.0)));
+    assert_eq!(
+        (e["x"].as_f64(), e["y"].as_f64()),
+        (Some(100.0), Some(100.0))
+    );
     assert_eq!(pair(&e["points"][0]), (0.0, 0.0));
     // The pointer-up point is kept even when it repeats the last move.
     assert_eq!(e["points"].as_array().map(Vec::len), Some(4));
@@ -208,7 +211,10 @@ fn a_pen_stroke_stores_one_pressure_per_point() {
     let e = &elements(&doc)[0];
     assert_eq!(e["simulatePressure"], false);
     let pressures = e["pressures"].as_array().expect("array");
-    assert_eq!(pressures.len(), e["points"].as_array().expect("array").len());
+    assert_eq!(
+        pressures.len(),
+        e["points"].as_array().expect("array").len()
+    );
     assert!(pressures.iter().all(|v| v.as_f64() == Some(0.25)));
 }
 
@@ -257,7 +263,10 @@ fn a_moved_element_is_copied_at_its_new_position() {
     a.handle(Event::PointerUp(p(170.0, 130.0)));
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
-    assert_eq!((e["x"].as_f64(), e["y"].as_f64()), (Some(120.0), Some(130.0)));
+    assert_eq!(
+        (e["x"].as_f64(), e["y"].as_f64()),
+        (Some(120.0), Some(130.0))
+    );
 }
 
 #[test]
