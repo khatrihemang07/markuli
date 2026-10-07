@@ -1,0 +1,12 @@
+[package]
+name = "markuli-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Rasterizer only; pure Rust, no OS dependencies.
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
