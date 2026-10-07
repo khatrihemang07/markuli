@@ -7,14 +7,15 @@ mod platform;
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use markuli_core::{Annotator, DisplayId, Event, Point, View};
+use markuli_core::{Annotator, DisplayId, Event, Key, Point, View};
 use platform::Presenter;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -35,7 +36,9 @@ struct App {
     core: Annotator,
     overlay: Option<Overlay>,
     cursor: Point,
+    modifiers: ModifiersState,
     toggle_id: u32,
+    clear_id: u32,
     quit_id: Option<MenuId>,
     tray: Option<TrayIcon>,
 }
@@ -94,6 +97,32 @@ impl App {
         if let Some(damage) = self.core.render(&mut buffer, platform::FORMAT) {
             overlay.presenter.present(damage);
         }
+    }
+
+    /// The Clear hotkey: the core drops the Ink, and `sync` destroys the
+    /// Overlay because it reports it is no longer needed.
+    fn on_clear(&mut self, event_loop: &ActiveEventLoop) {
+        let view = self.core.handle(Event::Clear);
+        self.sync(event_loop, view, None);
+    }
+
+    fn key(&mut self, event: &KeyEvent) {
+        if event.state != ElementState::Pressed {
+            return;
+        }
+        let key = match &event.logical_key {
+            WinitKey::Named(NamedKey::Escape) => Key::Escape,
+            WinitKey::Character(text) => match text.to_lowercase().chars().next() {
+                Some(c) => Key::Char(c),
+                None => return,
+            },
+            _ => return,
+        };
+        self.pointer(Event::Key {
+            key,
+            command: platform::command_held(self.modifiers),
+            shift: self.modifiers.shift_key(),
+        });
     }
 
     fn pointer(&mut self, event: Event) {
@@ -156,6 +185,11 @@ impl ApplicationHandler<UserEvent> for App {
             {
                 self.on_toggle(event_loop);
             }
+            UserEvent::Hotkey(e)
+                if e.id() == self.clear_id && e.state() == HotKeyState::Pressed =>
+            {
+                self.on_clear(event_loop);
+            }
             UserEvent::Menu(e) if Some(&e.id) == self.quit_id.as_ref() => event_loop.exit(),
             _ => {}
         }
@@ -163,6 +197,8 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
                 self.pointer(Event::PointerMove(self.cursor));
@@ -226,6 +262,10 @@ fn main() {
     manager
         .register(toggle)
         .expect("Alt+` is taken by another app");
+    let clear = HotKey::new(Some(Modifiers::ALT), Code::Digit1);
+    manager
+        .register(clear)
+        .expect("Alt+1 is taken by another app");
     let hotkey_proxy = proxy.clone();
     GlobalHotKeyEvent::set_event_handler(Some(move |e| {
         let _ = hotkey_proxy.send_event(UserEvent::Hotkey(e));
@@ -238,7 +278,9 @@ fn main() {
         core: Annotator::new(),
         overlay: None,
         cursor: Point { x: 0.0, y: 0.0 },
+        modifiers: ModifiersState::empty(),
         toggle_id: toggle.id(),
+        clear_id: clear.id(),
         quit_id: None,
         tray: None,
     };

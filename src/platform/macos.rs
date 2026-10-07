@@ -16,6 +16,7 @@ use std::ptr;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -178,4 +179,9 @@ impl Presenter {
 /// Monochrome icon that macOS tints for light and dark menu bars.
 pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
     builder.with_icon_templated(icon)
+}
+
+/// Cmd is the shortcut modifier on macOS.
+pub fn command_held(modifiers: ModifiersState) -> bool {
+    modifiers.super_key()
 }

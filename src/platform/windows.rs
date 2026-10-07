@@ -27,6 +27,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     ULW_ALPHA, UPDATELAYEREDWINDOWINFO, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -195,4 +196,9 @@ impl Drop for Presenter {
 
 pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
     builder.with_icon(icon)
+}
+
+/// Ctrl is the shortcut modifier on Windows.
+pub fn command_held(modifiers: ModifiersState) -> bool {
+    modifiers.control_key()
 }
