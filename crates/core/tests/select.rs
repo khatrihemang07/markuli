@@ -204,3 +204,148 @@ fn leaving_draw_mode_drops_the_selection_but_keeps_the_ink() {
     assert!(a.selection().is_empty());
     assert_eq!(a.ink().len(), 2);
 }
+
+fn position(a: &Annotator, index: usize) -> (f32, f32) {
+    let e = &a.ink().elements()[index];
+    (e.x(), e.y())
+}
+
+fn undo(a: &mut Annotator) {
+    command(a, 'z', false);
+}
+
+fn redo(a: &mut Annotator) {
+    command(a, 'z', true);
+}
+
+#[test]
+fn dragging_an_unselected_element_selects_and_moves_it() {
+    let (mut a, first, _) = two_strokes();
+    let (x, y) = position(&a, 0);
+    let points = a.ink().elements()[0].points().to_vec();
+    drag(&mut a, (150.0, 100.0), (180.0, 140.0));
+    assert_eq!(a.selection(), [first]);
+    assert_eq!(position(&a, 0), (x + 30.0, y + 40.0));
+    assert_eq!(a.ink().elements()[0].points(), points, "points stay relative");
+    assert_eq!(position(&a, 1), (100.0, 300.0), "others stay put");
+}
+
+#[test]
+fn dragging_a_selection_moves_every_selected_element() {
+    let (mut a, _, _) = two_strokes();
+    command(&mut a, 'a', false);
+    drag(&mut a, (150.0, 100.0), (130.0, 90.0));
+    assert_eq!(position(&a, 0), (80.0, 90.0));
+    assert_eq!(position(&a, 1), (80.0, 290.0));
+}
+
+#[test]
+fn a_shaky_click_does_not_move_or_log_anything() {
+    let (mut a, _, _) = two_strokes();
+    a.handle(Event::PointerDown(p(150.0, 100.0)));
+    a.handle(Event::PointerMove(p(151.0, 101.0)));
+    a.handle(Event::PointerUp(p(151.0, 101.0)));
+    assert_eq!(position(&a, 0), (100.0, 100.0));
+    undo(&mut a);
+    assert_eq!(a.ink().len(), 1, "undo removed a stroke, not a move");
+}
+
+#[test]
+fn a_move_is_one_undoable_step_with_exact_positions() {
+    let (mut a, first, _) = two_strokes();
+    let start = position(&a, 0);
+    drag(&mut a, (150.0, 100.0), (183.3, 141.7));
+    let moved = position(&a, 0);
+    assert_ne!(moved, start);
+    undo(&mut a);
+    assert_eq!(position(&a, 0), start);
+    assert_eq!(a.selection(), [first], "still selected");
+    redo(&mut a);
+    assert_eq!(position(&a, 0), moved);
+    assert_eq!(a.ink().len(), 2);
+}
+
+#[test]
+fn delete_removes_the_selection_and_undo_restores_z_order() {
+    let mut a = session();
+    for y in [100.0, 200.0, 300.0] {
+        stroke(&mut a, &[(100.0, y), (200.0, y)]);
+    }
+    key(&mut a, 'v');
+    let before = ids(&a);
+    click(&mut a, (150.0, 100.0));
+    shift(&mut a, true);
+    click(&mut a, (150.0, 300.0));
+    shift(&mut a, false);
+    press(&mut a, Key::Delete);
+    assert_eq!(ids(&a), [before[1]]);
+    assert!(a.selection().is_empty());
+    undo(&mut a);
+    assert_eq!(ids(&a), before);
+    redo(&mut a);
+    assert_eq!(ids(&a), [before[1]]);
+    undo(&mut a);
+    click(&mut a, (150.0, 200.0));
+    press(&mut a, Key::Delete);
+    assert_eq!(ids(&a), [before[0], before[2]]);
+}
+
+#[test]
+fn delete_with_nothing_selected_logs_nothing() {
+    let (mut a, _, _) = two_strokes();
+    press(&mut a, Key::Delete);
+    assert_eq!(a.ink().len(), 2);
+    undo(&mut a);
+    assert_eq!(a.ink().len(), 1, "undo removed the last stroke");
+}
+
+#[test]
+fn select_all_then_delete_empties_the_ink_and_undo_brings_it_back() {
+    let (mut a, _, _) = two_strokes();
+    command(&mut a, 'a', false);
+    press(&mut a, Key::Delete);
+    assert!(a.ink().is_empty());
+    undo(&mut a);
+    assert_eq!(a.ink().len(), 2);
+}
+
+#[test]
+fn undoing_a_stroke_drops_only_that_stroke_from_the_selection() {
+    let (mut a, first, _) = two_strokes();
+    command(&mut a, 'a', false);
+    undo(&mut a);
+    assert_eq!(a.selection(), [first]);
+}
+
+#[test]
+fn a_press_inside_a_selected_elements_box_grabs_it() {
+    let mut a = session();
+    stroke(&mut a, &[(100.0, 100.0), (150.0, 150.0), (200.0, 200.0)]);
+    key(&mut a, 'v');
+    // Far from the diagonal but inside its box: an unselected miss, so a box.
+    drag(&mut a, (190.0, 110.0), (190.0, 70.0));
+    assert!(a.selection().is_empty());
+    click(&mut a, (150.0, 150.0));
+    drag(&mut a, (190.0, 110.0), (190.0, 160.0));
+    assert_eq!(a.selection().len(), 1);
+    assert_eq!(position(&a, 0), (100.0, 150.0));
+}
+
+#[test]
+fn a_press_in_a_multi_selection_without_dragging_narrows_to_that_element() {
+    let (mut a, first, _) = two_strokes();
+    command(&mut a, 'a', false);
+    click(&mut a, (150.0, 100.0));
+    assert_eq!(a.selection(), [first]);
+}
+
+#[test]
+fn keys_wait_while_a_drag_is_in_progress() {
+    let (mut a, _, _) = two_strokes();
+    click(&mut a, (150.0, 100.0));
+    a.handle(Event::PointerDown(p(150.0, 100.0)));
+    a.handle(Event::PointerMove(p(160.0, 110.0)));
+    press(&mut a, Key::Delete);
+    assert_eq!(a.ink().len(), 2);
+    a.handle(Event::PointerUp(p(160.0, 110.0)));
+}
