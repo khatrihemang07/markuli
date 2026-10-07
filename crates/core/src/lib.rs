@@ -3,6 +3,7 @@
 //! One way in: [`Annotator::handle`] takes an [`Event`]. Out come the
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
+pub mod freehand;
 mod ink;
 mod render;
 
