@@ -26,7 +26,7 @@ fn pointer_events_without_pressure_simulate_it_and_store_no_pressures() {
     stroke(&mut a, &[p(10.0, 10.0), p(20.0, 15.0), p(30.0, 40.0)]);
     let e = &a.ink().elements()[0];
     assert!(e.simulate_pressure());
-    assert!(e.pressures().is_empty());
+    assert_eq!(e.pressures(), &[] as &[f32]);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn a_pressure_of_exactly_one_half_is_treated_as_simulated_like_excalidraw() {
     stroke(&mut a, &[p(10.0, 10.0), p(30.0, 40.0)]);
     let e = &a.ink().elements()[0];
     assert!(e.simulate_pressure());
-    assert!(e.pressures().is_empty());
+    assert_eq!(e.pressures(), &[] as &[f32]);
 }
 
 #[test]
