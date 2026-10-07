@@ -16,6 +16,11 @@ pedantic = { level = "warn", priority = -1 }
 [lints]
 workspace = true
 
+[features]
+# Manual-test environment hooks (MARKULI_CONFIG_DIR, MARKULI_LAUNCH_AGENT_DIR,
+# MARKULI_OPEN_SETTINGS). Off by default: release builds do not read them.
+dev-hooks = []
+
 [dependencies]
 markuli-core = { path = "crates/core" }
 # Window, event loop, raw handles for the native presenters. 0.31 is still beta.

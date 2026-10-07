@@ -31,11 +31,14 @@ pub fn emit(event: SettingsEvent) {
     }
 }
 
-/// `MARKULI_CONFIG_DIR` overrides the OS directory, for tests and portable use.
+/// With the `dev-hooks` feature, `MARKULI_CONFIG_DIR` overrides the OS
+/// directory (manual tests); release builds ignore it.
 fn config_path() -> Option<PathBuf> {
-    let dir = std::env::var_os("MARKULI_CONFIG_DIR")
-        .map(PathBuf::from)
-        .or_else(crate::platform::config_dir)?;
+    #[cfg(feature = "dev-hooks")]
+    let over = std::env::var_os("MARKULI_CONFIG_DIR").map(PathBuf::from);
+    #[cfg(not(feature = "dev-hooks"))]
+    let over = None;
+    let dir = over.or_else(crate::platform::config_dir)?;
     Some(dir.join("config"))
 }
 

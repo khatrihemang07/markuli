@@ -269,12 +269,14 @@ pub fn config_dir() -> Option<PathBuf> {
 
 const AGENT_LABEL: &str = "com.markuli.app";
 
-/// `MARKULI_LAUNCH_AGENT_DIR` redirects the plist, so tests never touch the
-/// real `~/Library/LaunchAgents`.
+/// With the `dev-hooks` feature, `MARKULI_LAUNCH_AGENT_DIR` redirects the
+/// plist, so manual tests never touch the real `~/Library/LaunchAgents`.
 fn launch_agent_path() -> Option<PathBuf> {
-    let dir = std::env::var_os("MARKULI_LAUNCH_AGENT_DIR")
-        .map(PathBuf::from)
-        .or_else(|| Some(home()?.join("Library/LaunchAgents")))?;
+    #[cfg(feature = "dev-hooks")]
+    let over = std::env::var_os("MARKULI_LAUNCH_AGENT_DIR").map(PathBuf::from);
+    #[cfg(not(feature = "dev-hooks"))]
+    let over = None;
+    let dir = over.or_else(|| Some(home()?.join("Library/LaunchAgents")))?;
     Some(dir.join(format!("{AGENT_LABEL}.plist")))
 }
 

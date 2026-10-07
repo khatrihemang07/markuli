@@ -49,7 +49,9 @@ struct App {
     /// Exists only while the Settings window is open.
     settings: Option<SettingsWindow>,
     settings_id: Option<MenuId>,
-    /// Test hook: reopen Settings this many more times after it closes.
+    /// Test hook (`dev-hooks`): reopen Settings this many more times after it
+    /// closes.
+    #[cfg(feature = "dev-hooks")]
     reopen: u32,
     modifiers: ModifiersState,
     quit_id: Option<MenuId>,
@@ -167,6 +169,7 @@ impl App {
             // Dropping the handle is what returns the window's memory.
             SettingsEvent::Closed => {
                 self.settings = None;
+                #[cfg(feature = "dev-hooks")]
                 if self.reopen > 0 {
                     self.reopen -= 1;
                     self.open_settings();
@@ -333,8 +336,10 @@ impl ApplicationHandler<UserEvent> for App {
         self.quit_id = Some(quit.id().clone());
         menu.append_items(&[&settings, &quit])
             .expect("failed to build the tray menu");
-        // Test hook: the tray menu cannot be clicked from a script. The value
-        // is how many times Settings opens (again after each close).
+        // Test hook, absent from release builds: the tray menu cannot be
+        // clicked from a script. The value is how many times Settings opens
+        // (again after each close).
+        #[cfg(feature = "dev-hooks")]
         if let Some(times) = std::env::var("MARKULI_OPEN_SETTINGS")
             .ok()
             .and_then(|v| v.parse::<u32>().ok())
@@ -505,6 +510,7 @@ fn main() {
         config,
         settings: None,
         settings_id: None,
+        #[cfg(feature = "dev-hooks")]
         reopen: 0,
         modifiers: ModifiersState::empty(),
         quit_id: None,

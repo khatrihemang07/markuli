@@ -63,6 +63,8 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 
 ## 5. Test hooks (not for users)
 
+These exist only in a build made with `cargo build --release --features dev-hooks`. The shipped release binary does not contain them (check with `strings target/release/markuli | grep MARKULI_`, which must print nothing). Footprint numbers in section 1 come from the build without the feature.
+
 - `MARKULI_CONFIG_DIR` points the config file at another folder.
 - `MARKULI_LAUNCH_AGENT_DIR` (macOS) redirects the LaunchAgent plist.
 - `MARKULI_OPEN_SETTINGS=N` opens Settings at start and again after each close, N times. Use it to script the open/close footprint check, since a tray menu cannot be clicked from a script.
