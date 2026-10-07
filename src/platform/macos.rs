@@ -5,8 +5,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSScreen, NSScreenSaverWindowLevel, NSView,
-    NSWindowCollectionBehavior,
+    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSScreen, NSScreenSaverWindowLevel,
+    NSView, NSWindowCollectionBehavior,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{ns_string, NSDictionary, NSNumber};
