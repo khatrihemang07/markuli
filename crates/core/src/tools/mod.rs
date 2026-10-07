@@ -131,13 +131,17 @@ impl Tools {
             Box::new(eraser::Eraser::default()),
             Box::new(laser::LaserTool::default()),
         ]);
-        // The Pen is the default Tool when Draw Mode starts.
-        tools.select_by_key('p');
+        tools.reset();
         tools
     }
 
     fn with(list: Vec<Box<dyn Tool>>) -> Self {
         Self { list, active: 0 }
+    }
+
+    /// The Pen is the default Tool whenever Draw Mode starts.
+    pub fn reset(&mut self) {
+        self.select_by_key('p');
     }
 
     pub fn len(&self) -> usize {

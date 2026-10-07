@@ -560,6 +560,7 @@ impl Annotator {
             }
             self.display = Some(display);
             self.draw_mode = true;
+            self.tools.reset();
         }
         // Backdrop (hit-test layer) appears and disappears with Draw Mode.
         self.paint.full();

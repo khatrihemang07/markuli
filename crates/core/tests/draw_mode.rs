@@ -1,6 +1,6 @@
 //! Seam 1: scripted events in, view state / Ink / pixels out.
 
-use markuli_core::{Annotator, DisplayId, Event, Point};
+use markuli_core::{Annotator, DisplayId, Event, Key, Point, ToolKind};
 
 const D1: DisplayId = DisplayId::new(1);
 const D2: DisplayId = DisplayId::new(2);
@@ -115,4 +115,26 @@ fn toggling_on_the_same_display_keeps_ink() {
     a.handle(Event::ToggleDrawMode(D1));
     a.handle(Event::ToggleDrawMode(D1));
     assert_eq!(a.ink().len(), 1);
+}
+
+#[test]
+fn entering_draw_mode_always_starts_with_the_pen() {
+    // Story 14: the Pen is the default Tool when Draw Mode starts.
+    let mut a = Annotator::new();
+    assert_eq!(a.handle(Event::ToggleDrawMode(D1)).tool, ToolKind::Pen);
+    for (c, kind) in [
+        ('e', ToolKind::Eraser),
+        ('k', ToolKind::Laser),
+        ('v', ToolKind::Select),
+    ] {
+        a.handle(Event::Key {
+            key: Key::Char(c),
+            command: false,
+            shift: false,
+        });
+        assert_eq!(a.view().tool, kind);
+        a.handle(Event::ToggleDrawMode(D1));
+        let v = a.handle(Event::ToggleDrawMode(D1));
+        assert_eq!(v.tool, ToolKind::Pen, "re-entered after {kind:?}");
+    }
 }
