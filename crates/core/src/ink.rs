@@ -73,7 +73,10 @@ impl Element {
             stroke_color: DEFAULT_COLOR,
             stroke_width: DEFAULT_WIDTH,
             opacity: DEFAULT_OPACITY,
-            #[allow(clippy::cast_possible_truncation, reason = "a seed only needs to differ")]
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "a seed only needs to differ"
+            )]
             seed: (id as u32).wrapping_mul(2_654_435_761),
             version: 1,
             outline: Vec::new(),
@@ -158,14 +161,15 @@ impl Element {
     fn refresh(&mut self, scratch: &mut Scratch, last: bool) -> Option<Rect> {
         std::mem::swap(&mut self.outline, &mut self.previous);
         scratch.load(
-            self.points
-                .iter()
-                .map(|p| [f64::from(p.x), f64::from(p.y)]),
+            self.points.iter().map(|p| [f64::from(p.x), f64::from(p.y)]),
             self.pressures.iter().map(|&p| f64::from(p)),
         );
         let size = f64::from(self.stroke_width) * SIZE_PER_WIDTH;
         self.outline.clear();
-        #[allow(clippy::cast_possible_truncation, reason = "the cache is f32 by design")]
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "the cache is f32 by design"
+        )]
         self.outline.extend(
             scratch
                 .outline(size, last)
@@ -257,10 +261,21 @@ fn union_of(vertices: impl Iterator<Item = [f32; 2]>) -> Option<Rect> {
     })
 }
 
+/// The vertices around a changed run, with two neighbours on each side.
+fn span(v: &[[f32; 2]], head: usize, tail: usize) -> impl Iterator<Item = [f32; 2]> + '_ {
+    let from = head.saturating_sub(2);
+    let to = (v.len() - tail + 2).min(v.len());
+    v.get(from..to).unwrap_or(&[]).iter().copied()
+}
+
 /// Box covering everything that differs between two outlines. Outlines are
 /// deterministic, so the vertices only change in one run: the common head and
-/// tail are skipped, and one neighbour is kept on each side because the
+/// tail are skipped, and two neighbours are kept on each side because the
 /// filled shape is quadratic curves between vertex midpoints.
+#[allow(
+    clippy::float_cmp,
+    reason = "outlines are deterministic: identical input gives bit-identical vertices"
+)]
 fn changed_box(old: &[[f32; 2]], new: &[[f32; 2]]) -> Option<Rect> {
     let shortest = old.len().min(new.len());
     let head = old.iter().zip(new).take_while(|(a, b)| a == b).count();
@@ -273,11 +288,6 @@ fn changed_box(old: &[[f32; 2]], new: &[[f32; 2]]) -> Option<Rect> {
         .count();
     if head == old.len() && head == new.len() {
         return None;
-    }
-    fn span(v: &[[f32; 2]], head: usize, tail: usize) -> impl Iterator<Item = [f32; 2]> + '_ {
-        let from = head.saturating_sub(1);
-        let to = (v.len() - tail + 1).min(v.len());
-        v.get(from..to).unwrap_or(&[]).iter().copied()
     }
     union_of(span(old, head, tail).chain(span(new, head, tail)))
 }

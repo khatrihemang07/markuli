@@ -12,9 +12,7 @@
 //! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
 use crate::ink::{Element, Ink, Rect};
-use tiny_skia::{
-    Color, FillRule, Paint, PathBuilder, PixmapMut, Transform,
-};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
 /// layered-window DIBs are BGRA, so colours are swapped at paint time and
@@ -62,13 +60,13 @@ impl Pending {
 
     /// Marks an element-local logical box as changed.
     pub fn damage_local(&mut self, local: Rect, origin: (f32, f32), scale: f32) {
-        let [l, t, r, b] = local;
-        let (x, y) = origin;
+        let [left, top, right, bottom] = local;
+        let (ox, oy) = origin;
         let rect = [
-            (l + x) * scale - DAMAGE_PAD,
-            (t + y) * scale - DAMAGE_PAD,
-            (r + x) * scale + DAMAGE_PAD,
-            (b + y) * scale + DAMAGE_PAD,
+            (left + ox) * scale - DAMAGE_PAD,
+            (top + oy) * scale - DAMAGE_PAD,
+            (right + ox) * scale + DAMAGE_PAD,
+            (bottom + oy) * scale + DAMAGE_PAD,
         ];
         if !rect.iter().all(|v| v.is_finite()) {
             return;
@@ -135,7 +133,10 @@ pub fn render(
 }
 
 /// Redraws one band of the damaged region through the scratch pixmap.
-#[allow(clippy::too_many_arguments, reason = "internal helper over disjoint buffers")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "internal helper over disjoint buffers"
+)]
 fn draw_band(
     ink: &Ink,
     builder: &mut Option<PathBuilder>,
@@ -189,39 +190,49 @@ fn draw_elements(
             && (t + ey) * scale - DAMAGE_PAD < vb
             && (b + ey) * scale + DAMAGE_PAD > oy;
         if touches {
-            let to_pixels = Transform::from_row(scale, 0.0, 0.0, scale, ex * scale - ox, ey * scale - oy);
-            fill_element(element, builder, pm, to_pixels, format);
+            fill_element(element, builder, pm, (scale, ox, oy), format);
         }
     }
 }
 
+/// Fills one Element. Vertices are mapped to absolute target pixels first and
+/// the integer view origin is subtracted last: that subtraction is exact, so a
+/// band redraw rasterizes bit-identically to a full redraw (a combined
+/// transform would round differently and flip edge-coverage samples).
 fn fill_element(
     element: &Element,
     builder: &mut Option<PathBuilder>,
     pm: &mut PixmapMut<'_>,
-    transform: Transform,
+    (scale, ox, oy): (f32, f32, f32),
     format: Format,
 ) {
     let outline = element.outline();
     if outline.len() < 3 {
         return;
     }
+    let (ex, ey) = (element.x(), element.y());
+    let absolute = |v: [f32; 2]| ((v[0] + ex) * scale, (v[1] + ey) * scale);
     let mut path = builder.take().unwrap_or_default();
-    let mid = |a: [f32; 2], b: [f32; 2]| ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
-    path.move_to(outline[0][0], outline[0][1]);
-    for (i, &p) in outline.iter().enumerate() {
-        let next = outline[(i + 1) % outline.len()];
-        let (mx, my) = mid(p, next);
-        path.quad_to(p[0], p[1], mx, my);
+    let (x0, y0) = absolute(outline[0]);
+    path.move_to(x0 - ox, y0 - oy);
+    for (i, &v) in outline.iter().enumerate() {
+        let (x, y) = absolute(v);
+        let (nx, ny) = absolute(outline[(i + 1) % outline.len()]);
+        path.quad_to(
+            x - ox,
+            y - oy,
+            f32::midpoint(x, nx) - ox,
+            f32::midpoint(y, ny) - oy,
+        );
     }
-    path.line_to(outline[0][0], outline[0][1]);
+    path.line_to(x0 - ox, y0 - oy);
     path.close();
     if let Some(path) = path.finish() {
         pm.fill_path(
             &path,
             &ink_paint(element, format),
             FillRule::Winding,
-            transform,
+            Transform::identity(),
             None,
         );
         *builder = Some(path.clear());
@@ -230,7 +241,11 @@ fn fill_element(
 
 fn ink_paint(element: &Element, format: Format) -> Paint<'static> {
     let [r, g, b] = element.stroke_color();
-    let (r, b) = if format == Format::Bgra { (b, r) } else { (r, b) };
+    let (r, b) = if format == Format::Bgra {
+        (b, r)
+    } else {
+        (r, b)
+    };
     let alpha = u16::from(element.opacity().min(100)) * 255 / 100;
     let mut paint = Paint::default();
     paint.set_color_rgba8(r, g, b, u8::try_from(alpha).unwrap_or(255));

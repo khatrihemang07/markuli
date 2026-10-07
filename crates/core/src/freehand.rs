@@ -96,7 +96,8 @@ impl Scratch {
     ) {
         self.input.clear();
         for p in points {
-            self.input.push([p[0], p[1], pressures.next().unwrap_or(f64::NAN)]);
+            self.input
+                .push([p[0], p[1], pressures.next().unwrap_or(f64::NAN)]);
         }
     }
 
@@ -178,7 +179,10 @@ impl Scratch {
     }
 
     /// perfect-freehand `getStrokeOutlinePoints` (no tapers, round caps).
-    #[allow(clippy::too_many_lines, reason = "1:1 port, kept linear to diff against the source")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "1:1 port, kept linear to diff against the source"
+    )]
     fn compute_outline(&mut self, size: f64) {
         let simulate = !self.input.iter().any(|p| p[2] >= 0.0);
         let points = &self.stroke_points;
@@ -194,15 +198,18 @@ impl Scratch {
         self.end_cap.clear();
         let (left, right) = (&mut self.left, &mut self.right);
 
-        let mut prev_pressure = points.iter().take(10).fold(points[0].pressure, |acc, curr| {
-            let mut pressure = curr.pressure;
-            if simulate {
-                let sp = (curr.distance / size).min(1.0);
-                let rp = (1.0 - sp).min(1.0);
-                pressure = (acc + (rp - acc) * (sp * RATE_OF_PRESSURE_CHANGE)).min(1.0);
-            }
-            (acc + pressure) / 2.0
-        });
+        let mut prev_pressure = points
+            .iter()
+            .take(10)
+            .fold(points[0].pressure, |acc, curr| {
+                let mut pressure = curr.pressure;
+                if simulate {
+                    let sp = (curr.distance / size).min(1.0);
+                    let rp = (1.0 - sp).min(1.0);
+                    pressure = (acc + (rp - acc) * (sp * RATE_OF_PRESSURE_CHANGE)).min(1.0);
+                }
+                f64::midpoint(acc, pressure)
+            });
         let mut radius = stroke_radius(size, last_sp.pressure);
         let mut first_radius: Option<f64> = None;
         let mut prev_vector = points[0].vector;
@@ -227,8 +234,8 @@ impl Scratch {
             if simulate {
                 let sp = (distance / size).min(1.0);
                 let rp = (1.0 - sp).min(1.0);
-                pressure =
-                    (prev_pressure + (rp - prev_pressure) * (sp * RATE_OF_PRESSURE_CHANGE)).min(1.0);
+                pressure = (prev_pressure + (rp - prev_pressure) * (sp * RATE_OF_PRESSURE_CHANGE))
+                    .min(1.0);
             }
             radius = stroke_radius(size, pressure);
             if first_radius.is_none() {
@@ -305,12 +312,16 @@ impl Scratch {
             // A dot: 13 points around the first point.
             let start = add(
                 first_point,
-                mul(uni(per(sub(first_point, last_point))), -first_radius.unwrap_or(radius)),
+                mul(
+                    uni(per(sub(first_point, last_point))),
+                    -first_radius.unwrap_or(radius),
+                ),
             );
             let step = 1.0 / 13.0;
             let mut t = step;
             while t <= 1.0 {
-                self.out.push(rot_around(start, first_point, FIXED_PI * 2.0 * t));
+                self.out
+                    .push(rot_around(start, first_point, FIXED_PI * 2.0 * t));
                 t += step;
             }
             return;
@@ -319,7 +330,8 @@ impl Scratch {
             let step = 1.0 / 13.0;
             let mut t = step;
             while t <= 1.0 {
-                self.start_cap.push(rot_around(r0, first_point, FIXED_PI * t));
+                self.start_cap
+                    .push(rot_around(r0, first_point, FIXED_PI * t));
                 t += step;
             }
         }
@@ -329,7 +341,8 @@ impl Scratch {
         let step = 1.0 / 29.0;
         let mut t = step;
         while t < 1.0 {
-            self.end_cap.push(rot_around(start, last_point, FIXED_PI * 3.0 * t));
+            self.end_cap
+                .push(rot_around(start, last_point, FIXED_PI * 3.0 * t));
             t += step;
         }
         self.out.extend_from_slice(left);
