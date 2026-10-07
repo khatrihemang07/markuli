@@ -327,6 +327,7 @@ impl Toolbar {
             .then_some(Hit::Dead)
     }
 
+    #[cfg(feature = "test-support")]
     pub fn center_of(&self, button: Button, tools: usize) -> Option<Point> {
         let l = self.layout(tools)?;
         let i = match button {

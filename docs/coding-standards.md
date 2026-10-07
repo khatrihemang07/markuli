@@ -7,7 +7,7 @@ Markuli's two goals are **lean and fast** and **easy to change**. Every rule bel
 1. **Core and platform are separate.**
    - The annotator core (Ink, Tools, Draw Mode state, rendering to a pixel buffer, Excalidraw JSON) is pure Rust. It never imports winit, the OS crates, the clipboard, the hotkey or tray crates, or the filesystem.
    - The platform layer only translates OS events into core events and core output into OS calls. If logic can live in the core, it belongs in the core.
-2. **One way into the core.** The core exposes one entry point: events in; Ink, view state, render and copy text out. Don't add side doors for tests or the platform layer. If a test needs one, the interface is wrong.
+2. **One way into the core.** The core exposes one entry point: events in; Ink, view state, render and copy text out. Don't add side doors for tests or the platform layer. If a test needs one, the interface is wrong. Read access to Ink and Selection is part of the output; test-only layout locators are allowed only behind a compile-time feature (`test-support`) that release builds do not enable.
 3. **Deep modules, small interfaces.**
    - Each module owns one concept from `CONTEXT.md`: freehand, laser, ink, render, toolbar UI, clipboard, config.
    - Keep module internals private (`pub(crate)` at most), and export the fewest types possible.

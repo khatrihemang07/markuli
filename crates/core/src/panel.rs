@@ -262,6 +262,7 @@ impl Panel {
         round_to_u8((t * 100.0 / step).round() * step)
     }
 
+    #[cfg(feature = "test-support")]
     pub fn center_of(&self, control: Control) -> Point {
         let r = self.rect(control);
         let x = match control {

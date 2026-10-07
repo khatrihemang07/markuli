@@ -593,6 +593,7 @@ name = "markuli-core"
 version = "0.1.0"
 dependencies = [
  "libm",
+ "markuli-core",
  "serde_json",
  "tiny-skia",
 ]

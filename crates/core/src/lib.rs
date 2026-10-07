@@ -265,6 +265,7 @@ impl Annotator {
 
     /// The centre of a toolbar button in Overlay pixels; `None` while the
     /// toolbar is hidden (outside Draw Mode, or before the first `Resize`).
+    #[cfg(feature = "test-support")]
     #[must_use]
     pub fn button_center(&self, button: Button) -> Option<Point> {
         if !self.draw_mode {
@@ -276,6 +277,7 @@ impl Annotator {
     /// The centre of a style panel control in Overlay pixels (for
     /// `Opacity`, the thumb at that value); `None` while the panel is hidden.
     /// It shows for the Pen and, with a Selection, for the Select Tool.
+    #[cfg(feature = "test-support")]
     #[must_use]
     pub fn panel_center(&self, control: Control) -> Option<Point> {
         self.panel_view().map(|_| self.panel.center_of(control))

@@ -7,6 +7,12 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+# Layout locators (`button_center`, `panel_center`) for tests that click the
+# toolbar and style panel. Enabled only through the dev-dependency below, so
+# release builds do not contain them (standards rule 2).
+test-support = []
+
 [dependencies]
 libm = { version = "0.2", default-features = false }
 # Rasterizer only; pure Rust, no OS dependencies.
@@ -18,3 +24,5 @@ tiny-skia = { version = "0.12", default-features = false, features = ["std", "si
 serde_json = { version = "1.0.151", default-features = false, features = ["std"] }
 # PNG read/write for the golden-image tests only; never linked into the app.
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+# Turns on `test-support` for this crate's own integration tests.
+markuli-core = { path = ".", features = ["test-support"] }
