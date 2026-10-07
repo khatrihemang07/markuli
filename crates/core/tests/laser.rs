@@ -54,7 +54,9 @@ fn render(a: &mut Annotator) -> Vec<u8> {
 }
 
 fn red_pixels(buf: &[u8]) -> usize {
-    buf.chunks_exact(4)
+    buf.as_chunks::<4>()
+        .0
+        .iter()
         .filter(|px| px[0] > 200 && px[1] < 50 && px[2] < 50)
         .count()
 }

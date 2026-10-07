@@ -115,7 +115,7 @@ fn click_selects_the_element_under_the_pointer_and_empty_space_deselects() {
     click(&mut a, (250.0, 302.0));
     assert_eq!(a.selection(), [second]);
     click(&mut a, (500.0, 450.0));
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn click_hits_within_eight_pixels_of_the_stroke_and_no_further() {
     assert_eq!(a.selection(), [first]);
     click(&mut a, (500.0, 450.0));
     click(&mut a, (250.0, 110.0));
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn dragging_on_empty_space_selects_the_elements_inside_the_box() {
 fn a_box_only_selects_elements_it_fully_encloses() {
     let (mut a, _, _) = two_strokes();
     drag(&mut a, (250.0, 50.0), (350.0, 200.0));
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn escape_deselects_but_keeps_the_ink() {
     let (mut a, _, _) = two_strokes();
     command(&mut a, 'a', false);
     press(&mut a, Key::Escape);
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
     assert_eq!(a.ink().len(), 2);
 }
 
@@ -204,7 +204,7 @@ fn switching_to_another_tool_drops_the_selection() {
     let (mut a, _, _) = two_strokes();
     command(&mut a, 'a', false);
     key(&mut a, 'p');
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
 }
 
 #[test]
@@ -212,7 +212,7 @@ fn leaving_draw_mode_drops_the_selection_but_keeps_the_ink() {
     let (mut a, _, _) = two_strokes();
     command(&mut a, 'a', false);
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
     assert_eq!(a.ink().len(), 2);
 }
 
@@ -294,7 +294,7 @@ fn delete_removes_the_selection_and_undo_restores_z_order() {
     shift(&mut a, false);
     press(&mut a, Key::Delete);
     assert_eq!(ids(&a), [before[1]]);
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
     undo(&mut a);
     assert_eq!(ids(&a), before);
     redo(&mut a);
@@ -339,7 +339,7 @@ fn a_press_inside_a_selected_elements_box_grabs_it() {
     key(&mut a, 'v');
     // Far from the diagonal but inside its box: an unselected miss, so a box.
     drag(&mut a, (290.0, 110.0), (290.0, 70.0));
-    assert!(a.selection().is_empty());
+    assert_eq!(a.selection(), []);
     click(&mut a, (250.0, 150.0));
     drag(&mut a, (290.0, 110.0), (290.0, 160.0));
     assert_eq!(a.selection().len(), 1);

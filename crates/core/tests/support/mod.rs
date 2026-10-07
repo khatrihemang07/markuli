@@ -44,7 +44,7 @@ pub fn encode(pm: &Pixmap, bg: [u8; 3]) -> Vec<u8> {
     let mut raw = Vec::with_capacity((w * 3 + 1) * h);
     for row in pm.data().chunks_exact(w * 4) {
         raw.push(0);
-        for px in row.chunks_exact(4) {
+        for px in row.as_chunks::<4>().0 {
             for c in 0..3 {
                 let over = u16::from(px[c]) + u16::from(bg[c]) * (255 - u16::from(px[3])) / 255;
                 raw.push(u8::try_from(over.min(255)).expect("clamped"));
