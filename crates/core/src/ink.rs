@@ -47,6 +47,9 @@ pub struct Element {
     /// The previous outline, kept to find what a change touched.
     previous: Vec<[f32; 2]>,
     bounds: Option<Rect>,
+    /// Box around the input points (not the outline), element-local. This is
+    /// what Excalidraw's selection and its `width`/`height` are based on.
+    extent: Rect,
 }
 
 impl Element {
@@ -82,6 +85,7 @@ impl Element {
             outline: Vec::new(),
             previous: Vec::new(),
             bounds: None,
+            extent: [0.0; 4],
         }
     }
 
@@ -139,6 +143,12 @@ impl Element {
 
     fn append(&mut self, local: Point, pressure: Option<f32>) {
         self.points.push(local);
+        self.extent = [
+            self.extent[0].min(local.x),
+            self.extent[1].min(local.y),
+            self.extent[2].max(local.x),
+            self.extent[3].max(local.y),
+        ];
         if !self.simulate_pressure {
             self.pressures.push(pressure.unwrap_or(0.5));
         }
@@ -238,6 +248,47 @@ impl Element {
         self.version
     }
 
+    /// Box around the input points, element-local.
+    pub(crate) fn extent(&self) -> Rect {
+        self.extent
+    }
+
+    /// Box around the input points in Overlay (logical) coordinates.
+    pub(crate) fn absolute_extent(&self) -> Rect {
+        let [l, t, r, b] = self.extent;
+        [l + self.x, t + self.y, r + self.x, b + self.y]
+    }
+
+    /// Moves the Element. Points and the cached outline are element-local,
+    /// so nothing else changes.
+    pub(crate) fn set_position(&mut self, x: f32, y: f32) {
+        self.x = x;
+        self.y = y;
+        self.version = self.version.wrapping_add(1);
+    }
+
+    /// Whether `at` (logical, absolute) is within `tolerance` of the input
+    /// polyline: Excalidraw's freedraw hit test (centreline, not the outline).
+    pub(crate) fn hit(&self, at: Point, tolerance: f32) -> bool {
+        let [l, t, r, b] = self.absolute_extent();
+        if at.x < l - tolerance || at.x > r + tolerance || at.y < t - tolerance || at.y > b + tolerance
+        {
+            return false;
+        }
+        let local = Point {
+            x: at.x - self.x,
+            y: at.y - self.y,
+        };
+        let limit = tolerance * tolerance;
+        match self.points.as_slice() {
+            [] => false,
+            [only] => distance_squared(local, *only, *only) <= limit,
+            points => points
+                .windows(2)
+                .any(|w| distance_squared(local, w[0], w[1]) <= limit),
+        }
+    }
+
     pub(crate) fn outline(&self) -> &[[f32; 2]] {
         &self.outline
     }
@@ -246,6 +297,19 @@ impl Element {
     pub(crate) fn bounds(&self) -> Option<Rect> {
         self.bounds
     }
+}
+
+/// Squared distance from `p` to the segment `a`-`b`.
+fn distance_squared(p: Point, a: Point, b: Point) -> f32 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let length = dx * dx + dy * dy;
+    let t = if length > 0.0 {
+        (((p.x - a.x) * dx + (p.y - a.y) * dy) / length).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (ex, ey) = (p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    ex * ex + ey * ey
 }
 
 fn bounds_of(vertices: &[[f32; 2]]) -> Option<Rect> {
@@ -330,6 +394,19 @@ impl Ink {
     /// Removes every Element and hands them back, for the operation log.
     pub(crate) fn take(&mut self) -> Vec<Element> {
         std::mem::take(&mut self.elements)
+    }
+
+    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut Element> {
+        self.elements.get_mut(index)
+    }
+
+    pub(crate) fn remove(&mut self, index: usize) -> Option<Element> {
+        (index < self.elements.len()).then(|| self.elements.remove(index))
+    }
+
+    /// Puts an Element back at `index` (clamped), keeping z-order.
+    pub(crate) fn insert(&mut self, index: usize, element: Element) {
+        self.elements.insert(index.min(self.elements.len()), element);
     }
 
     pub(crate) fn last_mut(&mut self) -> Option<&mut Element> {

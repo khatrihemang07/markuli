@@ -12,7 +12,7 @@ use tiny_skia::PixmapMut;
 
 const W: u32 = 640;
 const H: u32 = 240;
-const PEN: Button = Button::Tool(0);
+const PEN: Button = Button::Tool(1);
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }
@@ -154,15 +154,15 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
     let mut a = drawing();
     for k in ['p', '7'] {
         key(&mut a, Key::Char(k), false, false);
-        assert_eq!(a.active_tool(), 0);
+        assert_eq!(a.active_tool(), 1);
     }
     key(&mut a, Key::Char('p'), true, false); // Cmd+P is not a Tool key.
     key(&mut a, Key::Char('q'), false, false);
-    assert_eq!(a.active_tool(), 0);
+    assert_eq!(a.active_tool(), 1);
     // And keys do nothing outside Draw Mode.
     a.handle(Event::ToggleDrawMode(DisplayId(1)));
     key(&mut a, Key::Char('7'), false, false);
-    assert_eq!(a.active_tool(), 0);
+    assert_eq!(a.active_tool(), 1);
 }
 
 #[test]
@@ -204,7 +204,8 @@ fn ink_drawn_under_the_toolbar_does_not_erase_it() {
         screen.clone()
     };
     let before = paint(&mut a);
-    a.handle(Event::PointerDown(p(pen.x - 40.0, pen.y)));
+    a.handle(Event::PointerDown(p(pen.x, pen.y + 60.0)));
+    a.handle(Event::PointerMove(p(pen.x, pen.y)));
     a.handle(Event::PointerMove(p(pen.x + 40.0, pen.y)));
     a.handle(Event::PointerUp(p(pen.x + 40.0, pen.y)));
     let after = paint(&mut a);

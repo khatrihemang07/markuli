@@ -4,11 +4,13 @@
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
 mod config;
+mod excalidraw;
 pub mod freehand;
 mod history;
 mod icons;
 mod ink;
 mod render;
+mod selection;
 mod svg_path;
 mod toolbar;
 mod tools;
@@ -16,6 +18,7 @@ mod tools;
 pub use config::Config;
 use freehand::Scratch;
 use history::History;
+use selection::Selection;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
 pub use toolbar::{Button, Theme};
@@ -50,6 +53,8 @@ pub enum Event {
     /// Pressure (0..=1) of the pointer events that follow, until changed.
     /// `None` is a mouse or trackpad: the Stroke simulates pressure.
     Pressure(Option<f32>),
+    /// Whether Shift is held, for the pointer events that follow.
+    Modifiers { shift: bool },
     /// Physical pixels per logical pixel of the Overlay (default 1).
     ScaleFactor(f32),
     /// A key press in Draw Mode. The platform layer resolves `command` to
@@ -67,6 +72,8 @@ pub enum Event {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Key {
     Escape,
+    /// Delete or Backspace.
+    Delete,
     /// A character key, lowercase.
     Char(char),
 }
@@ -103,6 +110,9 @@ pub struct Annotator {
     freehand: Scratch,
     scale: f32,
     pressure: Option<f32>,
+    shift: bool,
+    selection: Selection,
+    copied: Option<String>,
     next_id: u64,
     tools: Tools,
     toolbar: Toolbar,
@@ -119,6 +129,9 @@ impl Default for Annotator {
             freehand: Scratch::default(),
             scale: 1.0,
             pressure: None,
+            shift: false,
+            selection: Selection::default(),
+            copied: None,
             next_id: 1,
             tools: Tools::new(),
             toolbar: Toolbar::default(),
@@ -141,7 +154,11 @@ impl Annotator {
                 self.toolbar.resize(width, height);
                 self.paint.full();
             }
-            Event::Theme(theme) => self.toolbar.theme = theme,
+            Event::Theme(theme) => {
+                self.toolbar.theme = theme;
+                self.selection.set_theme(theme);
+            }
+            Event::Modifiers { shift } => self.shift = shift,
             Event::Pressure(p) => self.pressure = p.filter(|p| p.is_finite()),
             Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
                 self.scale = scale;
@@ -159,6 +176,8 @@ impl Annotator {
             Event::Clear => self.clear(),
             _ => {}
         }
+        self.selection
+            .flush(&self.ink, &mut self.paint, self.scale);
         self.view()
     }
 
@@ -181,6 +200,20 @@ impl Annotator {
     #[must_use]
     pub fn ink(&self) -> &Ink {
         &self.ink
+    }
+
+    /// The ids ([`Element::id`]) of the selected Elements, in the order they
+    /// were selected.
+    #[must_use]
+    pub fn selection(&self) -> &[u64] {
+        self.selection.ids()
+    }
+
+    /// The Excalidraw clipboard JSON of the last copy (Cmd/Ctrl+C), once.
+    /// The platform layer calls this after each key event and writes the text
+    /// to the OS clipboard.
+    pub fn take_copy(&mut self) -> Option<String> {
+        self.copied.take()
     }
 
     /// The index of the active Tool, in registration order.
@@ -214,6 +247,7 @@ impl Annotator {
         };
         render::render(
             &self.ink,
+            &self.selection,
             &mut self.paint,
             self.draw_mode,
             self.scale,
@@ -239,9 +273,11 @@ impl Annotator {
             history: &mut self.history,
             paint: &mut self.paint,
             freehand: &mut self.freehand,
+            selection: &mut self.selection,
             next_id: &mut self.next_id,
             scale: self.scale,
             pressure: self.pressure,
+            shift: self.shift,
         };
         (self.tools.active_mut(), ctx)
     }
@@ -288,7 +324,7 @@ impl Annotator {
     /// A toolbar click does exactly what the matching key does.
     fn activate(&mut self, button: Button) {
         match button {
-            Button::Tool(index) => self.tools.select(index),
+            Button::Tool(index) => self.switch_tool(|tools| tools.select(index)),
             Button::Undo => self.undo(),
             Button::Redo => self.redo(),
             Button::Clear => self.clear(),
@@ -306,23 +342,56 @@ impl Annotator {
             (Key::Char(_), _, _) if self.tool_busy() => {}
             (Key::Char('z'), true, false) => self.undo(),
             (Key::Char('z'), true, true) | (Key::Char('y'), true, false) => self.redo(),
+            (Key::Char('a'), true, false) => {
+                // Like Excalidraw, Select All leaves the Pen for the Select Tool.
+                self.switch_tool(|tools| {
+                    tools.select_by_key('v');
+                });
+                self.selection.select_all(&self.ink);
+            }
+            (Key::Char('c'), true, false) => self.copy(),
             (Key::Char(c), false, false) => {
-                self.tools.select_by_key(c);
+                self.switch_tool(|tools| {
+                    tools.select_by_key(c);
+                });
             }
             _ => {}
         }
     }
 
+    /// Changes the active Tool; the Selection belongs to the Select Tool and
+    /// is dropped when another one takes over.
+    fn switch_tool(&mut self, change: impl FnOnce(&mut Tools)) {
+        let before = self.tools.active();
+        change(&mut self.tools);
+        if self.tools.active() != before {
+            self.selection.clear();
+        }
+    }
+
+    /// Cmd/Ctrl+C: the Selection, or all Ink when nothing is selected.
+    fn copy(&mut self) {
+        let chosen = |e: &&Element| self.selection.is_empty() || self.selection.contains(e.id());
+        self.copied = excalidraw::clipboard(self.ink.elements().iter().filter(chosen));
+    }
+
     fn undo(&mut self) {
         if self.history.undo(&mut self.ink) {
-            self.paint.full();
+            self.ink_replaced();
         }
     }
 
     fn redo(&mut self) {
         if self.history.redo(&mut self.ink) {
-            self.paint.full();
+            self.ink_replaced();
         }
+    }
+
+    /// Undo or redo changed the Ink under the Selection.
+    fn ink_replaced(&mut self) {
+        self.selection.retain_existing(&self.ink);
+        self.selection.touch();
+        self.paint.full();
     }
 
     fn clear(&mut self) {
@@ -331,6 +400,7 @@ impl Annotator {
             self.history.record_clear(self.ink.take());
         }
         self.draw_mode = false;
+        self.selection.clear();
         self.toolbar.forget_pointer();
         self.paint.full();
     }
@@ -338,6 +408,7 @@ impl Annotator {
     fn toggle(&mut self, display: DisplayId) {
         self.finish_gesture();
         self.toolbar.forget_pointer();
+        self.selection.clear();
         if self.draw_mode {
             self.draw_mode = false;
         } else {

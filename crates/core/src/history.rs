@@ -14,6 +14,17 @@ enum Op {
     /// Clear. Applied: the payload holds what was removed and the Ink is
     /// empty. Reverted: the payload is empty and the Ink holds them again.
     Clear(Vec<Element>),
+    /// Selected Elements moved. Each entry is an Ink index and the position
+    /// the Element is *not* at: applying and reverting swap it in, so undo is
+    /// exact (no float drift from adding and subtracting a delta).
+    Move(Vec<(usize, f32, f32)>),
+    /// Selected Elements deleted. `indices` (ascending) are where they sat in
+    /// the Ink; `removed` holds them while the delete is applied and is empty
+    /// while it is reverted.
+    Delete {
+        indices: Vec<usize>,
+        removed: Vec<Element>,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -32,6 +43,18 @@ impl History {
     /// Logs a Clear; `removed` is what it took out of the Ink.
     pub fn record_clear(&mut self, removed: Vec<Element>) {
         self.push(Op::Clear(removed));
+    }
+
+    /// Logs a move that already happened; `before` holds each moved Element's
+    /// Ink index and its position before the move.
+    pub fn record_move(&mut self, before: Vec<(usize, f32, f32)>) {
+        self.push(Op::Move(before));
+    }
+
+    /// Logs a delete that already happened: `indices` (ascending) are where
+    /// the `removed` Elements sat.
+    pub fn record_delete(&mut self, indices: Vec<usize>, removed: Vec<Element>) {
+        self.push(Op::Delete { indices, removed });
     }
 
     /// A new operation ends the redo branch.
@@ -99,6 +122,29 @@ fn flip(op: &mut Op, ink: &mut Ink, direction: Direction) -> bool {
         (Op::Clear(payload), _) => {
             ink.swap_elements(payload);
             true
+        }
+        (Op::Move(positions), _) => {
+            for (index, x, y) in positions.iter_mut() {
+                if let Some(element) = ink.get_mut(*index) {
+                    let (ex, ey) = (element.x(), element.y());
+                    element.set_position(*x, *y);
+                    (*x, *y) = (ex, ey);
+                }
+            }
+            !positions.is_empty()
+        }
+        (Op::Delete { indices, removed }, Direction::Revert) => {
+            for (&index, element) in indices.iter().zip(removed.drain(..)) {
+                ink.insert(index, element);
+            }
+            !indices.is_empty()
+        }
+        (Op::Delete { indices, removed }, Direction::Apply) => {
+            for &index in indices.iter().rev() {
+                removed.extend(ink.remove(index));
+            }
+            removed.reverse();
+            !indices.is_empty()
         }
     }
 }

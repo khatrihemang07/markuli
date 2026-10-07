@@ -12,6 +12,7 @@
 //! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
 use crate::ink::{Element, Ink, Rect};
+use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
 
@@ -111,8 +112,10 @@ impl Pending {
 /// redraw touches its region, the whole region is redrawn from the backdrop
 /// and the Ink, then the toolbar is painted over it (so its shadow never
 /// stacks on itself).
+#[allow(clippy::too_many_arguments, reason = "one call site; a struct would only rename them")]
 pub fn render(
     ink: &Ink,
+    selection: &Selection,
     pending: &mut Pending,
     draw_mode: bool,
     scale: f32,
@@ -122,6 +125,10 @@ pub fn render(
 ) -> Option<Damage> {
     let region = chrome.region();
     let dirty = chrome.is_dirty();
+    // The Selection overlay is painted as a whole, so any redraw touching it
+    // redraws all of it. Done again after the toolbar, whose region may bring
+    // in more damage.
+    grow_to_overlay(pending, selection);
     match region {
         // The toolbar vanished (Draw Mode ended): that is always a full redraw.
         None if dirty => pending.full(),
@@ -130,7 +137,13 @@ pub fn render(
         }
         _ => {}
     }
+    grow_to_overlay(pending, selection);
     let damage = render_ink(ink, pending, draw_mode, scale, target, format);
+    if let (Some(area), Some(d)) = (selection.shown(), damage) {
+        if overlaps(area, bounds_of(d)) {
+            selection.paint(ink, target, scale, format);
+        }
+    }
     if let (Some(r), Some(d)) = (region, damage) {
         if r.intersects(&Area::from_bounds(bounds_of(d))) {
             chrome.paint(target, format);
@@ -138,6 +151,18 @@ pub fn render(
     }
     chrome.done();
     damage
+}
+
+fn grow_to_overlay(pending: &mut Pending, selection: &Selection) {
+    if let Some(area) = selection.shown() {
+        if pending.touches(area) {
+            pending.add_physical(area);
+        }
+    }
+}
+
+fn overlaps(a: Rect, b: Rect) -> bool {
+    a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
 fn render_ink(

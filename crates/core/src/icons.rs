@@ -27,6 +27,17 @@ pub(crate) const PEN: Icon = Icon {
     ],
 };
 
+/// `SelectionIcon`, Excalidraw's own arrow. Its paths use a 24 grid inside a
+/// 22 viewBox, exactly as Excalidraw ships it.
+pub(crate) const SELECTION: Icon = Icon {
+    view: 22.0,
+    stroke: 1.25,
+    paths: &[
+        "M6 6l4.153 11.793a0.365 .365 0 0 0 .331 .207a0.366 .366 0 0 0 .332 -.207l2.184 -4.793l4.787 -1.994a0.355 .355 0 0 0 .213 -.323a0.355 .355 0 0 0 -.213 -.323l-11.787 -4.36z",
+        "M13.5 13.5l4.5 4.5",
+    ],
+};
+
 /// `UndoIcon`.
 pub(crate) const UNDO: Icon = Icon {
     view: 20.0,

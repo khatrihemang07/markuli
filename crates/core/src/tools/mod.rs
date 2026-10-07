@@ -6,12 +6,14 @@
 //! so no other Tool and no other module is edited.
 
 mod pen;
+mod select;
 
 use crate::freehand::Scratch;
 use crate::history::History;
 use crate::icons::Icon;
 use crate::ink::{Element, Ink, Point, Rect};
 use crate::render::Pending;
+use crate::selection::Selection;
 use crate::Key;
 use std::fmt::Debug;
 
@@ -29,11 +31,14 @@ pub(crate) struct Ctx<'a> {
     pub history: &'a mut History,
     pub paint: &'a mut Pending,
     pub freehand: &'a mut Scratch,
+    pub selection: &'a mut Selection,
     pub next_id: &'a mut u64,
     /// Physical pixels per logical pixel of the Overlay.
     pub scale: f32,
     /// Pressure of the pointer events in flight; `None` simulates it.
     pub pressure: Option<f32>,
+    /// Shift is held.
+    pub shift: bool,
 }
 
 impl Ctx<'_> {
@@ -86,8 +91,14 @@ pub(crate) struct Tools {
 
 impl Tools {
     pub fn new() -> Self {
-        // Registration: one line per Tool. The first one is the default.
-        Self::with(vec![Box::new(pen::Pen::default())])
+        // Registration: one line per Tool, in toolbar order.
+        let mut tools = Self::with(vec![
+            Box::new(select::Select::default()),
+            Box::new(pen::Pen::default()),
+        ]);
+        // The Pen is the default Tool when Draw Mode starts.
+        tools.select_by_key('p');
+        tools
     }
 
     fn with(list: Vec<Box<dyn Tool>>) -> Self {
