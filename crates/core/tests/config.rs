@@ -50,7 +50,13 @@ fn the_last_value_for_a_key_wins() {
 
 #[test]
 fn arbitrary_bytes_never_panic() {
-    for text in ["\0\0", "=\n=\n", "toggle", "toggle==", "\u{1F600}=\u{1F600}"] {
+    for text in [
+        "\0\0",
+        "=\n=\n",
+        "toggle",
+        "toggle==",
+        "\u{1F600}=\u{1F600}",
+    ] {
         let _ = Config::parse(text);
     }
 }

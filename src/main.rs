@@ -3,6 +3,7 @@
 //! This file is the event-loop glue: OS events become core events, core
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
+mod hotkeys;
 mod platform;
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
