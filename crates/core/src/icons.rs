@@ -38,6 +38,28 @@ pub(crate) const SELECTION: Icon = Icon {
     ],
 };
 
+/// `EraserIcon`: tabler eraser.
+pub(crate) const ERASER: Icon = Icon {
+    view: 24.0,
+    stroke: 1.5,
+    paths: &[
+        "M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3",
+        "M18 13.3l-6.3 -6.3",
+    ],
+};
+
+/// `laserPointerToolIcon`. Excalidraw draws it inside `rotate(90 10 10)`;
+/// `Icon` has no transform, so the paths are pre-rotated (x, y) -> (20 - y, x)
+/// into absolute coordinates, arcs included (circular, so only the end moves).
+pub(crate) const LASER: Icon = Icon {
+    view: 20.0,
+    stroke: 1.25,
+    paths: &[
+        "M6.31 9.644L14.083 17.418A2.357 2.357 0 0 0 17.417 14.084L9.643 6.311L8 8L6.31 9.643Z",
+        "M16.583 13.25L13.25 16.583M10 10L12 12M5 5L8 8M2.106 2.156L3.106 3.156M0.971 5.453L2.378 5.309M8.113 2.377L6.995 3.243M2.727 8.354L3.485 7.16M5.348 0.953L5.218 2.361",
+    ],
+};
+
 /// `UndoIcon`.
 pub(crate) const UNDO: Icon = Icon {
     view: 20.0,

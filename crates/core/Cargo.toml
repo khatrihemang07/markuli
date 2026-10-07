@@ -8,6 +8,7 @@ publish = false
 workspace = true
 
 [dependencies]
+libm = { version = "0.2", default-features = false }
 # Rasterizer only; pure Rust, no OS dependencies.
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
 

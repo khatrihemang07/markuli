@@ -179,7 +179,7 @@ fn hit_element(ctx: &Ctx<'_>, at: Point) -> Option<u64> {
     elements
         .iter()
         .rev()
-        .find(|e| e.hit(at, HIT_TOLERANCE))
+        .find(|e| e.is_near(at, HIT_TOLERANCE))
         .or_else(|| {
             elements
                 .iter()
@@ -232,7 +232,7 @@ fn delete_selection(ctx: &mut Ctx<'_>) {
     let mut removed: Vec<_> = indices
         .iter()
         .rev()
-        .filter_map(|&i| ctx.ink.remove(i))
+        .filter_map(|&i| ctx.ink.remove_at(i))
         .collect();
     removed.reverse();
     if removed.is_empty() {

@@ -4,7 +4,7 @@
 //! at. Regenerate after an intended change with `UPDATE_GOLDEN=1 cargo test`
 //! and look at the PNGs in `tests/golden/` before committing them.
 
-use markuli_core::{Annotator, Button, DisplayId, Event, Format, Point, Theme};
+use markuli_core::{Annotator, Button, DisplayId, Event, Format, Key, Point, Theme};
 use std::path::PathBuf;
 use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
 
@@ -37,6 +37,11 @@ fn stroke(a: &mut Annotator) {
 fn image(a: &mut Annotator, page: Color) -> Pixmap {
     let mut overlay = Pixmap::new(W, H).expect("size is non-zero");
     a.render(&mut overlay.as_mut(), Format::Rgba);
+    over(&overlay, page)
+}
+
+/// The Overlay buffer composited over the page.
+fn over(overlay: &Pixmap, page: Color) -> Pixmap {
     let mut out = Pixmap::new(W, H).expect("size is non-zero");
     out.fill(page);
     out.draw_pixmap(
@@ -115,9 +120,9 @@ fn toolbar_after_undo_enables_redo_in_dark_theme() {
     check("toolbar_dark_after_undo", &image(&mut a, dark_page()));
 }
 
-fn press_key(a: &mut Annotator, c: char) {
+fn key(a: &mut Annotator, c: char) {
     a.handle(Event::Key {
-        key: markuli_core::Key::Char(c),
+        key: Key::Char(c),
         command: false,
         shift: false,
     });
@@ -132,7 +137,7 @@ fn one_selected(theme: Theme, scale: f32) -> Annotator {
     a.handle(Event::PointerDown(p(200.0, 120.0)));
     a.handle(Event::PointerMove(p(250.0, 90.0)));
     a.handle(Event::PointerUp(p(320.0, 130.0)));
-    press_key(&mut a, 'v');
+    key(&mut a, 'v');
     a.handle(Event::PointerDown(p(80.0, 110.0)));
     a.handle(Event::PointerUp(p(80.0, 110.0)));
     a
@@ -159,4 +164,55 @@ fn selection_box_while_dragging_dark() {
     a.handle(Event::PointerDown(p(10.0, 50.0)));
     a.handle(Event::PointerMove(p(150.0, 140.0)));
     check("selection_box_dark", &image(a, dark_page()));
+}
+
+/// A wavy Laser drag of 60 points, 6 ms apart from t = 1000; returns the time
+/// of the pointer up.
+fn laser_swoosh(a: &mut Annotator) -> u64 {
+    key(a, 'k');
+    let at = |i: u32| {
+        let t = f32::from(u16::try_from(i).expect("small"));
+        p(25.0 + t * 5.0, 100.0 + 25.0 * (t / 7.0).sin())
+    };
+    a.handle(Event::Clock(1000));
+    a.handle(Event::PointerDown(at(0)));
+    for i in 1..60 {
+        a.handle(Event::Clock(1000 + u64::from(i) * 6));
+        a.handle(Event::PointerMove(at(i)));
+    }
+    a.handle(Event::Clock(1000 + 60 * 6));
+    a.handle(Event::PointerUp(at(60)));
+    1000 + 60 * 6
+}
+
+#[test]
+fn laser_trail_just_after_the_drag() {
+    let mut a = scene(Theme::Light, 1.0);
+    let end = laser_swoosh(&mut a);
+    a.handle(Event::Clock(end + 16));
+    check("laser_fresh", &image(&mut a, WHITE_PAGE));
+}
+
+#[test]
+fn laser_trail_mid_fade() {
+    let mut a = scene(Theme::Light, 1.0);
+    let end = laser_swoosh(&mut a);
+    a.handle(Event::Clock(end + 16));
+    // Frames draw incrementally into the same buffer, like the real Overlay.
+    let mut overlay = Pixmap::new(W, H).expect("size is non-zero");
+    a.render(&mut overlay.as_mut(), Format::Rgba);
+    a.handle(Event::Clock(end + 800));
+    a.render(&mut overlay.as_mut(), Format::Rgba);
+    check("laser_mid_fade", &over(&overlay, WHITE_PAGE));
+}
+
+#[test]
+fn eraser_drag_draws_the_marked_stroke_faded() {
+    let mut a = scene(Theme::Light, 1.0);
+    stroke(&mut a);
+    key(&mut a, 'e');
+    // Marks the stroke; the drag is still going, so it is drawn faded.
+    a.handle(Event::PointerDown(p(120.0, 100.0)));
+    a.handle(Event::PointerMove(p(122.0, 101.0)));
+    check("eraser_pending", &image(&mut a, WHITE_PAGE));
 }

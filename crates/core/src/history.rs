@@ -25,6 +25,10 @@ enum Op {
         indices: Vec<usize>,
         removed: Vec<Element>,
     },
+    /// One Eraser drag: the Elements it removed and where they were (oldest
+    /// first). Applied: they are in the payload. Reverted: the payload is
+    /// `None` and they are back in the Ink at their old positions.
+    Erase(Vec<(usize, Option<Element>)>),
 }
 
 #[derive(Debug, Default)]
@@ -55,6 +59,14 @@ impl History {
     /// the `removed` Elements sat.
     pub fn record_delete(&mut self, indices: Vec<usize>, removed: Vec<Element>) {
         self.push(Op::Delete { indices, removed });
+    }
+
+    /// Logs an Eraser drag; `removed` is what it took out, with positions.
+    pub fn record_erase(&mut self, removed: Vec<(usize, Element)>) {
+        if !removed.is_empty() {
+            let slots = removed.into_iter().map(|(i, e)| (i, Some(e))).collect();
+            self.push(Op::Erase(slots));
+        }
     }
 
     /// A new operation ends the redo branch.
@@ -118,6 +130,20 @@ fn flip(op: &mut Op, ink: &mut Ink, direction: Direction) -> bool {
             }
             None => false,
         },
+        (Op::Erase(slots), Direction::Revert) => {
+            for (index, slot) in slots.iter_mut() {
+                if let Some(element) = slot.take() {
+                    ink.insert_at(*index, element);
+                }
+            }
+            true
+        }
+        (Op::Erase(slots), Direction::Apply) => {
+            for (index, slot) in slots.iter_mut().rev() {
+                *slot = ink.remove_at(*index);
+            }
+            true
+        }
         // Applying and reverting a Clear are the same swap.
         (Op::Clear(payload), _) => {
             ink.swap_elements(payload);
@@ -135,13 +161,13 @@ fn flip(op: &mut Op, ink: &mut Ink, direction: Direction) -> bool {
         }
         (Op::Delete { indices, removed }, Direction::Revert) => {
             for (&index, element) in indices.iter().zip(removed.drain(..)) {
-                ink.insert(index, element);
+                ink.insert_at(index, element);
             }
             !indices.is_empty()
         }
         (Op::Delete { indices, removed }, Direction::Apply) => {
             for &index in indices.iter().rev() {
-                removed.extend(ink.remove(index));
+                removed.extend(ink.remove_at(index));
             }
             removed.reverse();
             !indices.is_empty()

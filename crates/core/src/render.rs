@@ -12,6 +12,7 @@
 //! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
 use crate::ink::{Element, Ink, Rect};
+use crate::laser::Laser;
 use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
@@ -114,10 +115,11 @@ impl Pending {
 /// stacks on itself).
 #[allow(
     clippy::too_many_arguments,
-    reason = "one call site; a struct would only rename them"
+    reason = "one call site; each is a distinct layer"
 )]
 pub fn render(
     ink: &Ink,
+    laser: &Laser,
     selection: &Selection,
     pending: &mut Pending,
     draw_mode: bool,
@@ -141,7 +143,7 @@ pub fn render(
         _ => {}
     }
     grow_to_overlay(pending, selection);
-    let damage = render_ink(ink, pending, draw_mode, scale, target, format);
+    let damage = render_ink(ink, laser, pending, draw_mode, scale, target, format);
     if let (Some(area), Some(d)) = (selection.shown(), damage) {
         if overlaps(area, bounds_of(d)) {
             selection.paint(ink, target, scale, format);
@@ -170,6 +172,7 @@ fn overlaps(a: Rect, b: Rect) -> bool {
 
 fn render_ink(
     ink: &Ink,
+    laser: &Laser,
     pending: &mut Pending,
     draw_mode: bool,
     scale: f32,
@@ -196,7 +199,7 @@ fn render_ink(
             width: w,
             height: h,
         };
-        draw_elements(ink, builder, target, view, scale, format);
+        draw_elements(ink, laser, builder, target, view, scale, format);
         return Some(view);
     }
     let damage = damage_of(dirty.take()?, w, h)?;
@@ -211,7 +214,9 @@ fn render_ink(
             height: rows,
             ..damage
         };
-        draw_band(ink, builder, scratch, target, band, backdrop, scale, format);
+        draw_band(
+            ink, laser, builder, scratch, target, band, backdrop, scale, format,
+        );
         y += rows;
     }
     Some(damage)
@@ -224,6 +229,7 @@ fn render_ink(
 )]
 fn draw_band(
     ink: &Ink,
+    laser: &Laser,
     builder: &mut Option<PathBuilder>,
     scratch: &mut Vec<u8>,
     target: &mut PixmapMut<'_>,
@@ -242,7 +248,7 @@ fn draw_band(
         return;
     };
     region.fill(backdrop);
-    draw_elements(ink, builder, &mut region, band, scale, format);
+    draw_elements(ink, laser, builder, &mut region, band, scale, format);
     let stride = target.width() as usize * 4;
     let data = target.data_mut();
     for (row, src) in scratch[..len].chunks_exact(row_bytes).enumerate() {
@@ -254,9 +260,10 @@ fn draw_band(
 }
 
 /// Fills every Element touching `view` (target pixels) into `pm`, whose
-/// top-left pixel is `view`'s top-left.
+/// top-left pixel is `view`'s top-left, then the Laser on top of them.
 fn draw_elements(
     ink: &Ink,
+    laser: &Laser,
     builder: &mut Option<PathBuilder>,
     pm: &mut PixmapMut<'_>,
     view: Damage,
@@ -278,6 +285,7 @@ fn draw_elements(
             fill_element(element, builder, pm, (scale, ox, oy), format);
         }
     }
+    laser.fill(builder, pm, (scale, ox, oy), format == Format::Bgra);
 }
 
 /// Fills one Element. Vertices are mapped to absolute target pixels first and
@@ -331,7 +339,9 @@ fn ink_paint(element: &Element, format: Format) -> Paint<'static> {
     } else {
         (r, b)
     };
-    let alpha = u16::from(element.opacity().min(100)) * 255 / 100;
+    // Excalidraw draws Elements pending erasure at a fifth of their opacity.
+    let fifth = if element.is_erasing() { 5 } else { 1 };
+    let alpha = u16::from(element.opacity().min(100)) * 255 / 100 / fifth;
     let mut paint = Paint::default();
     paint.set_color_rgba8(r, g, b, u8::try_from(alpha).unwrap_or(255));
     paint.anti_alias = true;
