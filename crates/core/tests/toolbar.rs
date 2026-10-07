@@ -7,7 +7,9 @@
     reason = "test pixel coordinates are small and positive"
 )]
 
-use markuli_core::{Annotator, Button, Cursor, DisplayId, Event, Format, Key, Point, Theme};
+use markuli_core::{
+    Annotator, Button, Cursor, DisplayId, Event, Format, Key, Point, Theme, ToolKind,
+};
 use tiny_skia::PixmapMut;
 
 const W: u32 = 640;
@@ -154,15 +156,15 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
     let mut a = drawing();
     for k in ['p', '7'] {
         key(&mut a, Key::Char(k), false, false);
-        assert_eq!(a.active_tool(), 1);
+        assert_eq!(a.view().tool, ToolKind::Pen);
     }
     key(&mut a, Key::Char('p'), true, false); // Cmd+P is not a Tool key.
     key(&mut a, Key::Char('q'), false, false);
-    assert_eq!(a.active_tool(), 1);
+    assert_eq!(a.view().tool, ToolKind::Pen);
     // And keys do nothing outside Draw Mode.
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, Key::Char('7'), false, false);
-    assert_eq!(a.active_tool(), 1);
+    assert_eq!(a.view().tool, ToolKind::Pen);
 }
 
 #[test]

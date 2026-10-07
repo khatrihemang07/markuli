@@ -28,6 +28,16 @@ pub enum Cursor {
     Crosshair,
 }
 
+/// Which Tool is active, for the platform layer and tests (the registry
+/// itself stays private).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolKind {
+    Select,
+    Pen,
+    Eraser,
+    Laser,
+}
+
 /// What the style panel does while a Tool is active.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StyleTarget {
@@ -81,6 +91,7 @@ impl Ctx<'_> {
 }
 
 pub(crate) trait Tool: Debug {
+    fn kind(&self) -> ToolKind;
     fn icon(&self) -> &'static Icon;
     /// Lowercase keys that select this Tool. The first digit is also the
     /// hint printed on its toolbar button.
@@ -137,6 +148,12 @@ impl Tools {
         self.active
     }
 
+    pub fn active_kind(&self) -> ToolKind {
+        self.list
+            .get(self.active)
+            .map_or(ToolKind::Pen, |t| t.kind())
+    }
+
     pub fn get(&self, index: usize) -> Option<&dyn Tool> {
         self.list.get(index).map(|t| &**t)
     }
@@ -174,6 +191,9 @@ mod tests {
     #[derive(Debug)]
     struct Stub;
     impl Tool for Stub {
+        fn kind(&self) -> ToolKind {
+            ToolKind::Laser
+        }
         fn icon(&self) -> &'static Icon {
             &icons::UNDO
         }

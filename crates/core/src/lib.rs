@@ -30,8 +30,8 @@ pub use style::Control;
 use style::Style;
 pub use toolbar::{Button, Theme};
 use toolbar::{Chrome, Toolbar, UiState};
-pub use tools::Cursor;
 use tools::{Ctx, StyleTarget, Tool, Tools};
+pub use tools::{Cursor, ToolKind};
 
 /// Identifies a display. Opaque to the core: it only compares them, so that
 /// moving the Overlay to another display can Clear the Ink (ADR-0002).
@@ -112,6 +112,8 @@ pub struct View {
     pub needs_render: bool,
     /// The cursor shape for the pointer's current position.
     pub cursor: Cursor,
+    /// The active Tool.
+    pub tool: ToolKind,
     /// The time (same clock as [`Event::Clock`]) the next frame is due. Set
     /// only while something animates (a visible Laser trail): wait for it,
     /// then send `Clock`. `None` means sleep until the next input.
@@ -234,6 +236,7 @@ impl Annotator {
                 Some(tool) if !over_toolbar => tool.cursor(),
                 _ => Cursor::Arrow,
             },
+            tool: self.tools.active_kind(),
             next_frame: self.laser.next_frame(),
         }
     }
@@ -255,12 +258,6 @@ impl Annotator {
     /// to the OS clipboard.
     pub fn take_copy(&mut self) -> Option<String> {
         self.copied.take()
-    }
-
-    /// The index of the active Tool, in registration order.
-    #[must_use]
-    pub fn active_tool(&self) -> usize {
-        self.tools.active()
     }
 
     /// The centre of a toolbar button in Overlay pixels; `None` while the

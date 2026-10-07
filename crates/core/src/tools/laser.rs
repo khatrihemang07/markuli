@@ -3,7 +3,7 @@
 //! It never touches Ink or the operation log (so it can't be undone, selected
 //! or copied). The trail itself lives in `crate::laser`.
 
-use super::{Ctx, Cursor, Tool};
+use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::Point;
 use crate::Key;
@@ -14,6 +14,10 @@ pub(crate) struct LaserTool {
 }
 
 impl Tool for LaserTool {
+    fn kind(&self) -> ToolKind {
+        ToolKind::Laser
+    }
+
     fn icon(&self) -> &'static Icon {
         &icons::LASER
     }

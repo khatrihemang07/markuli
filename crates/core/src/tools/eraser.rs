@@ -7,7 +7,7 @@
 //! marked Elements at once. Deviations: no eraser trail is drawn, and there is
 //! no Alt-to-restore.
 
-use super::{Ctx, Cursor, Tool};
+use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
 use crate::Key;
@@ -35,6 +35,10 @@ fn redraw(paint: &mut crate::render::Pending, scale: f32, element: &Element) {
 }
 
 impl Tool for Eraser {
+    fn kind(&self) -> ToolKind {
+        ToolKind::Eraser
+    }
+
     fn icon(&self) -> &'static Icon {
         &icons::ERASER
     }

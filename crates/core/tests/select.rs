@@ -94,14 +94,14 @@ fn two_strokes() -> (Annotator, u64, u64) {
 #[test]
 fn v_and_1_select_the_select_tool_and_p_returns_to_the_pen() {
     let mut a = session();
-    let pen = a.active_tool();
+    let pen = a.view().tool;
     key(&mut a, 'v');
-    let select = a.active_tool();
+    let select = a.view().tool;
     assert_ne!(select, pen);
     key(&mut a, 'p');
-    assert_eq!(a.active_tool(), pen);
+    assert_eq!(a.view().tool, pen);
     key(&mut a, '1');
-    assert_eq!(a.active_tool(), select);
+    assert_eq!(a.view().tool, select);
 }
 
 #[test]
@@ -177,11 +177,11 @@ fn shift_box_keeps_the_existing_selection() {
 fn cmd_a_selects_all_ink_even_from_the_pen() {
     let (mut a, first, second) = two_strokes();
     key(&mut a, 'p');
-    let pen = a.active_tool();
+    let pen = a.view().tool;
     command(&mut a, 'a', false);
     assert_eq!(a.selection(), [first, second]);
     assert_ne!(
-        a.active_tool(),
+        a.view().tool,
         pen,
         "Cmd+A leaves the Pen for the Select Tool"
     );

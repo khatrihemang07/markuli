@@ -9,7 +9,7 @@
 //!
 //! One gesture is one operation-log entry: a move is logged at pointer up.
 
-use super::{Ctx, Cursor, StyleTarget, Tool};
+use super::{Ctx, Cursor, StyleTarget, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Point, Rect};
 use crate::selection::{encloses, normalized};
@@ -45,6 +45,10 @@ pub(crate) struct Select {
 }
 
 impl Tool for Select {
+    fn kind(&self) -> ToolKind {
+        ToolKind::Select
+    }
+
     fn icon(&self) -> &'static Icon {
         &icons::SELECTION
     }

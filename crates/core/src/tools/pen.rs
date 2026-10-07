@@ -3,7 +3,7 @@
 //! The Stroke is the last Element of the Ink. It grows with each pointer
 //! event; the freehand outline and its damage come from `Element`.
 
-use super::{Ctx, Cursor, StyleTarget, Tool};
+use super::{Ctx, Cursor, StyleTarget, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
 use crate::Key;
@@ -14,6 +14,10 @@ pub(crate) struct Pen {
 }
 
 impl Tool for Pen {
+    fn kind(&self) -> ToolKind {
+        ToolKind::Pen
+    }
+
     fn icon(&self) -> &'static Icon {
         &icons::PEN
     }
