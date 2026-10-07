@@ -6,6 +6,7 @@
 mod config;
 pub mod freehand;
 mod history;
+pub mod laser;
 mod icons;
 mod ink;
 mod render;
