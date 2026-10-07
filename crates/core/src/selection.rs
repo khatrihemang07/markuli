@@ -39,6 +39,12 @@ pub(crate) struct Selection {
     /// Something visible changed since the last flush.
     stale: bool,
     theme: Theme,
+    /// Reused by [`Selection::set_union`], so a box drag allocates nothing.
+    spare: Vec<u64>,
+    /// The dashed stroke of the common rectangle and the scale it was built
+    /// for. `StrokeDash` owns its array, so it is built once per scale (in
+    /// `flush`, which runs after every event) instead of once per frame.
+    dashed: Option<(f32, Stroke)>,
 }
 
 impl Selection {
@@ -57,6 +63,27 @@ impl Selection {
     pub fn set(&mut self, ids: Vec<u64>) {
         if self.ids != ids {
             self.ids = ids;
+            self.stale = true;
+        }
+    }
+
+    /// Selects `base` followed by `more`, in place and without allocating once
+    /// warm (the box drag calls this on every pointer move).
+    pub fn set_union(&mut self, base: &[u64], more: impl Iterator<Item = u64>) {
+        self.spare.clear();
+        self.spare.extend_from_slice(base);
+        self.spare.extend(more);
+        if self.spare != self.ids {
+            std::mem::swap(&mut self.ids, &mut self.spare);
+            self.stale = true;
+        }
+    }
+
+    /// Selects exactly `id`.
+    pub fn set_one(&mut self, id: u64) {
+        if self.ids != [id] {
+            self.ids.clear();
+            self.ids.push(id);
             self.stale = true;
         }
     }
@@ -112,6 +139,9 @@ impl Selection {
 
     /// Marks the old and new overlay areas as damage, once per change.
     pub fn flush(&mut self, ink: &Ink, paint: &mut Pending, scale: f32) {
+        if self.dashed.as_ref().map(|d| d.0) != Some(scale) {
+            self.dashed = Some((scale, dashed_stroke(scale)));
+        }
         if !self.stale {
             return;
         }
@@ -168,13 +198,8 @@ impl Selection {
             outline(target, rect, scale, &line, &solid);
         }
         if count >= 2 {
-            let dashed = Stroke {
-                width,
-                dash: StrokeDash::new(vec![2.0 * scale, 2.0 * scale], 0.0),
-                ..Stroke::default()
-            };
-            if let Some(common) = self.common(ink) {
-                outline(target, common, scale, &line, &dashed);
+            if let (Some(common), Some((_, dashed))) = (self.common(ink), &self.dashed) {
+                outline(target, common, scale, &line, dashed);
             }
         }
         if let Some(rect) = self.dragging {
@@ -185,6 +210,15 @@ impl Selection {
             }
             outline(target, rect, scale, &line, &solid);
         }
+    }
+}
+
+/// 1 px lines, 2 on and 2 off (logical), for the common rectangle.
+fn dashed_stroke(scale: f32) -> Stroke {
+    Stroke {
+        width: scale.round().max(1.0),
+        dash: StrokeDash::new(vec![2.0 * scale, 2.0 * scale], 0.0),
+        ..Stroke::default()
     }
 }
 

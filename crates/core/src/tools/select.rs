@@ -78,7 +78,7 @@ impl Tool for Select {
             (Some(id), false) => {
                 let narrow = ctx.selection.contains(id) && ctx.selection.ids().len() > 1;
                 if !ctx.selection.contains(id) {
-                    ctx.selection.set(vec![id]);
+                    ctx.selection.set_one(id);
                 }
                 Gesture::Moving {
                     origin: at,
@@ -120,15 +120,14 @@ impl Tool for Select {
             Gesture::Boxing { origin, base } => {
                 let rect = normalized((origin.x, origin.y), (at.x, at.y));
                 ctx.selection.set_box(Some(rect));
-                let mut ids = base.clone();
-                ids.extend(
-                    ctx.ink
-                        .elements()
-                        .iter()
-                        .filter(|e| encloses(rect, e.absolute_extent()) && !base.contains(&e.id()))
-                        .map(crate::Element::id),
-                );
-                ctx.selection.set(ids);
+                // Per pointer move: rebuilt in the Selection's own buffer.
+                let more = ctx
+                    .ink
+                    .elements()
+                    .iter()
+                    .filter(|e| encloses(rect, e.absolute_extent()) && !base.contains(&e.id()))
+                    .map(crate::Element::id);
+                ctx.selection.set_union(base, more);
             }
         }
     }
@@ -172,7 +171,7 @@ impl Tool for Select {
                 if dragged {
                     ctx.history.record_move(before);
                 } else if narrow {
-                    ctx.selection.set(vec![pressed]);
+                    ctx.selection.set_one(pressed);
                 }
             }
             Gesture::Boxing { .. } => ctx.selection.set_box(None),
