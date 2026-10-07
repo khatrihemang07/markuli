@@ -121,6 +121,7 @@ impl Scratch {
         if self.pts.len() == 2 {
             // Extra points avoid "dash" lines. Interpolated points carry no
             // pressure: the library's `lrp` returns 2-vectors.
+            // Indexing is safe: the length is exactly 2 here.
             let (first, end) = (self.pts[0], self.pts[1]);
             self.pts.truncate(1);
             for i in 1..5_u8 {
@@ -129,11 +130,15 @@ impl Scratch {
             }
         }
         if self.pts.len() == 1 {
+            // Indexing is safe: the length is exactly 1 here.
             let p = self.pts[0];
             self.pts.push([p[0] + 1.0, p[1] + 1.0, p[2]]);
         }
         let pts = &self.pts;
-        let first = pts[0];
+        // `input` is non-empty (checked above), so `pts` has at least one point.
+        let Some(&first) = pts.first() else {
+            return;
+        };
         let mut prev = StrokePoint {
             point: [first[0], first[1]],
             pressure: if first[2] >= 0.0 { first[2] } else { 0.25 },
@@ -144,7 +149,8 @@ impl Scratch {
         self.stroke_points.push(prev);
         let mut reached_minimum = false;
         let mut running_length = 0.0;
-        let max = pts.len() - 1;
+        // `pts` is non-empty, so this cannot underflow.
+        let max = pts.len().saturating_sub(1);
         for (i, p) in pts.iter().enumerate().skip(1) {
             let target = [p[0], p[1]];
             let point = if is_complete && i == max {
@@ -175,7 +181,9 @@ impl Scratch {
             self.stroke_points.push(prev);
         }
         let second_vector = self.stroke_points.get(1).map_or([0.0, 0.0], |s| s.vector);
-        self.stroke_points[0].vector = second_vector;
+        if let Some(head) = self.stroke_points.first_mut() {
+            head.vector = second_vector;
+        }
     }
 
     /// perfect-freehand `getStrokeOutlinePoints` (no tapers, round caps).
@@ -186,10 +194,12 @@ impl Scratch {
     fn compute_outline(&mut self, size: f64) {
         let simulate = !self.input.iter().any(|p| p[2] >= 0.0);
         let points = &self.stroke_points;
-        if points.is_empty() || size <= 0.0 {
+        let (Some(&first_sp), Some(&last_sp)) = (points.first(), points.last()) else {
+            return;
+        };
+        if size <= 0.0 {
             return;
         }
-        let last_sp = points[points.len() - 1];
         let total_length = last_sp.running_length;
         let min_distance = (size * SMOOTHING).powi(2);
         self.left.clear();
@@ -198,36 +208,33 @@ impl Scratch {
         self.end_cap.clear();
         let (left, right) = (&mut self.left, &mut self.right);
 
-        let mut prev_pressure = points
-            .iter()
-            .take(10)
-            .fold(points[0].pressure, |acc, curr| {
-                let mut pressure = curr.pressure;
-                if simulate {
-                    let sp = (curr.distance / size).min(1.0);
-                    let rp = (1.0 - sp).min(1.0);
-                    pressure = (acc + (rp - acc) * (sp * RATE_OF_PRESSURE_CHANGE)).min(1.0);
-                }
-                f64::midpoint(acc, pressure)
-            });
+        let mut prev_pressure = points.iter().take(10).fold(first_sp.pressure, |acc, curr| {
+            let mut pressure = curr.pressure;
+            if simulate {
+                let sp = (curr.distance / size).min(1.0);
+                let rp = (1.0 - sp).min(1.0);
+                pressure = (acc + (rp - acc) * (sp * RATE_OF_PRESSURE_CHANGE)).min(1.0);
+            }
+            f64::midpoint(acc, pressure)
+        });
         let mut radius = stroke_radius(size, last_sp.pressure);
         let mut first_radius: Option<f64> = None;
-        let mut prev_vector = points[0].vector;
-        let mut pl = points[0].point;
+        let mut prev_vector = first_sp.vector;
+        let mut pl = first_sp.point;
         let mut pr = pl;
         let (mut tl, mut tr);
         let mut is_prev_point_sharp_corner = false;
 
-        for i in 0..points.len() {
+        for (i, &sp) in points.iter().enumerate() {
             let StrokePoint {
                 point,
                 vector,
                 distance,
                 running_length,
                 mut pressure,
-            } = points[i];
+            } = sp;
             // Removes noise from the end of the line.
-            if i < points.len() - 1 && total_length - running_length < 3.0 {
+            if i + 1 < points.len() && total_length - running_length < 3.0 {
                 continue;
             }
             // THINNING is non-zero for Excalidraw.
@@ -243,12 +250,9 @@ impl Scratch {
             }
             radius = radius.max(0.01);
 
-            let next_vector = if i < points.len() - 1 {
-                points[i + 1].vector
-            } else {
-                vector
-            };
-            let next_dpr = if i < points.len() - 1 {
+            let next = points.get(i + 1);
+            let next_vector = next.map_or(vector, |n| n.vector);
+            let next_dpr = if next.is_some() {
                 dpr(vector, next_vector)
             } else {
                 1.0
@@ -280,7 +284,7 @@ impl Scratch {
             }
             is_prev_point_sharp_corner = false;
 
-            if i == points.len() - 1 {
+            if i + 1 == points.len() {
                 let offset = mul(per(vector), radius);
                 left.push(sub(point, offset));
                 right.push(add(point, offset));
@@ -301,11 +305,11 @@ impl Scratch {
             prev_vector = vector;
         }
 
-        let first_point = points[0].point;
+        let first_point = first_sp.point;
         let last_point = if points.len() > 1 {
             last_sp.point
         } else {
-            add(points[0].point, [1.0, 1.0])
+            add(first_sp.point, [1.0, 1.0])
         };
 
         if points.len() == 1 {

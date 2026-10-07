@@ -107,7 +107,10 @@ impl History {
         let Some(index) = self.done.checked_sub(1) else {
             return false;
         };
-        let changed = flip(&mut self.ops[index], ink, scratch, Direction::Revert);
+        let Some(op) = self.ops.get_mut(index) else {
+            return false;
+        };
+        let changed = flip(op, ink, scratch, Direction::Revert);
         self.done = index;
         changed
     }

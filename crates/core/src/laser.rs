@@ -86,7 +86,7 @@ fn ease_out(k: f64) -> f64 {
 fn size_mapping(now: f64, stamp: f64, index: usize, total: usize) -> f64 {
     let t = (1.0 - (now - stamp) / DECAY_TIME).max(0.0);
     #[allow(clippy::cast_precision_loss, reason = "point counts are tiny")]
-    let behind = (total - index) as f64;
+    let behind = total.saturating_sub(index) as f64;
     let l = (DECAY_LENGTH - behind.min(DECAY_LENGTH)) / DECAY_LENGTH;
     ease_out(l).min(ease_out(t))
 }
@@ -131,7 +131,8 @@ impl Pointer {
     fn at(&self, i: usize) -> P {
         self.stable
             .get(i)
-            .or_else(|| self.tail.get(i - self.stable.len()))
+            // `get(i)` missed, so `i >= stable.len()` and the subtraction holds.
+            .or_else(|| self.tail.get(i.saturating_sub(self.stable.len())))
             .copied()
             .unwrap_or([0.0; 3])
     }
@@ -196,7 +197,10 @@ impl Pointer {
                     sweep(PI + a, 2.0 * PI + a, PI / 16.0, |t| {
                         out.push(on_circle(xy(n), t, n_size));
                     });
-                    out.push(out[0]);
+                    // `sweep` pushed at least one point, so the ring closes.
+                    if let Some(&start) = out.first() {
+                        out.push(start);
+                    }
                 }
             }
             _ => self.outline_long(now, s, out),
@@ -327,7 +331,9 @@ impl Pointer {
         out.extend_from_slice(&s.forward);
         out.extend(s.end_cap.iter().rev());
         out.extend(s.backward.iter().rev());
-        out.push(s.start_cap[0]);
+        if let Some(&start) = s.start_cap.first() {
+            out.push(start);
+        }
     }
 }
 
@@ -543,6 +549,11 @@ fn trail_path(
     outline: &[[f32; 2]],
     (scale, ox, oy): (f32, f32, f32),
 ) -> bool {
+    // Fewer than three points cannot make a closed ribbon; the indexing below
+    // (and `len - 1`) relies on this check.
+    if outline.len() < 3 {
+        return false;
+    }
     let at = |i: usize| (outline[i][0] * scale - ox, outline[i][1] * scale - oy);
     let (x0, y0) = at(0);
     let (x1, y1) = at(1);

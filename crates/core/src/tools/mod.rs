@@ -163,7 +163,8 @@ impl Tools {
     }
 
     pub fn active_mut(&mut self) -> &mut dyn Tool {
-        // The registry is never empty and `active` only holds valid indices.
+        // Invariant: the registry is never empty (`new` registers four Tools)
+        // and `select*` only store indices below `len`, so this cannot panic.
         &mut *self.list[self.active]
     }
 

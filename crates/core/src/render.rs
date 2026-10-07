@@ -222,7 +222,7 @@ fn render_ink(
         return Some(view);
     }
     let damage = damage_of(dirty.take()?, w, h)?;
-    let rows_per_band = (BAND_BYTES / (damage.width as usize * 4)).max(1);
+    let rows_per_band = (BAND_BYTES / (damage.width as usize * 4).max(1)).max(1);
     let mut y = damage.y;
     while y < damage.y + damage.height {
         let rows = u32::try_from(rows_per_band)
@@ -262,15 +262,20 @@ fn draw_band(
     if scratch.len() < len {
         scratch.resize(len, 0);
     }
-    let Some(mut region) = PixmapMut::from_bytes(&mut scratch[..len], band.width, band.height)
-    else {
+    let Some(bytes) = scratch.get_mut(..len) else {
+        return;
+    };
+    let Some(mut region) = PixmapMut::from_bytes(bytes, band.width, band.height) else {
         return;
     };
     region.fill(backdrop);
     draw_elements(ink, laser, builder, &mut region, band, scale, format);
     let stride = target.width() as usize * 4;
     let data = target.data_mut();
-    for (row, src) in scratch[..len].chunks_exact(row_bytes).enumerate() {
+    let Some(rendered) = scratch.get(..len) else {
+        return;
+    };
+    for (row, src) in rendered.chunks_exact(row_bytes).enumerate() {
         let start = (band.y as usize + row) * stride + band.x as usize * 4;
         if let Some(dst) = data.get_mut(start..start + row_bytes) {
             dst.copy_from_slice(src);
@@ -325,6 +330,8 @@ fn fill_element(
     let (ex, ey) = (element.x(), element.y());
     let absolute = |v: [f32; 2]| ((v[0] + ex) * scale, (v[1] + ey) * scale);
     let mut path = builder.take().unwrap_or_default();
+    // `outline.len() >= 3` was checked above, so both indexings are in range
+    // and the modulo cannot divide by zero.
     let (x0, y0) = absolute(outline[0]);
     path.move_to(x0 - ox, y0 - oy);
     for (i, &v) in outline.iter().enumerate() {

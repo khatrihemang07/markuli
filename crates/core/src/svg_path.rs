@@ -148,7 +148,7 @@ impl Scanner<'_> {
                 self.at += 1;
             }
         }
-        std::str::from_utf8(&self.bytes[begin..self.at])
+        std::str::from_utf8(self.bytes.get(begin..self.at)?)
             .ok()?
             .parse()
             .ok()
@@ -213,7 +213,7 @@ fn arc(
     }
     let segments = (delta.abs() / std::f32::consts::FRAC_PI_2 - 1e-3)
         .ceil()
-        .max(1.0);
+        .clamp(1.0, 4.0);
     let step = delta / segments;
     let t = 4.0 / 3.0 * (step / 4.0).tan();
     let on_ellipse = |a: f32| (rx * a.cos(), ry * a.sin());

@@ -329,7 +329,7 @@ impl Panel {
                 }
             }
         }
-        for (i, &width) in WIDTHS.iter().enumerate() {
+        for (i, (&width, &line_width)) in WIDTHS.iter().zip(&ICON_LINES).enumerate() {
             let control = Control::Width(i);
             let r = self.rect(control);
             let selected = view.width == Some(width);
@@ -352,7 +352,7 @@ impl Panel {
             line.line_to(r.x + 23.0 * s, y);
             if let Some(path) = line.finish() {
                 let stroke = Stroke {
-                    width: ICON_LINES[i] * s,
+                    width: line_width * s,
                     line_cap: LineCap::Round,
                     ..Stroke::default()
                 };

@@ -356,7 +356,7 @@ fn union_of(vertices: impl Iterator<Item = [f32; 2]>) -> Option<Rect> {
 /// The vertices around a changed run, with two neighbours on each side.
 fn span(v: &[[f32; 2]], head: usize, tail: usize) -> impl Iterator<Item = [f32; 2]> + '_ {
     let from = head.saturating_sub(2);
-    let to = (v.len() - tail + 2).min(v.len());
+    let to = (v.len() + 2).saturating_sub(tail).min(v.len());
     v.get(from..to).unwrap_or(&[]).iter().copied()
 }
 
