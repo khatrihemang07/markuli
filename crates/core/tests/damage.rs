@@ -71,7 +71,7 @@ fn run(scale: f32, format: Format, pressure: bool) {
     let mut a = Annotator::new();
     let mut pm = Pixmap::new(W, H).expect("pixmap");
     a.handle(Event::ScaleFactor(scale));
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     render(&mut a, &mut pm, format);
     let mut before = fresh(&mut a, format);
     let mut rng = Lcg(7);

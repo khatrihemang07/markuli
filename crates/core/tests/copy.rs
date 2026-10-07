@@ -16,7 +16,7 @@ fn session() -> Annotator {
         width: 800,
         height: 600,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 
@@ -110,7 +110,7 @@ fn nothing_to_copy_without_ink_or_outside_draw_mode() {
     let mut a = session();
     assert_eq!(copy(&mut a), None);
     stroke(&mut a, &[(100.0, 100.0), (200.0, 150.0)]);
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, 'c', true);
     assert_eq!(a.take_copy(), None);
 }

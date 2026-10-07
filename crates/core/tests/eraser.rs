@@ -19,7 +19,7 @@ fn key(a: &mut Annotator, c: char, command: bool, shift: bool) {
 /// Eraser is selected afterwards.
 fn three_strokes() -> Annotator {
     let mut a = Annotator::new();
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     for y in [50.0, 100.0, 150.0] {
         a.handle(Event::PointerDown(p(100.0, y)));
         a.handle(Event::PointerMove(p(200.0, y)));

@@ -2,8 +2,8 @@
 
 use markuli_core::{Annotator, DisplayId, Event, Key, Point};
 
-const D1: DisplayId = DisplayId(1);
-const D2: DisplayId = DisplayId(2);
+const D1: DisplayId = DisplayId::new(1);
+const D2: DisplayId = DisplayId::new(2);
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }
@@ -236,7 +236,7 @@ fn random_event_sequences_never_panic_and_undo_all_returns_to_empty_ink() {
             let at = p(rng.next(500) as f32, rng.next(500) as f32);
             let flag = |r: &mut Rng| r.next(2) == 0;
             let event = match rng.next(10) {
-                0 => Event::ToggleDrawMode(DisplayId(rng.next(3))),
+                0 => Event::ToggleDrawMode(DisplayId::new(rng.next(3))),
                 1 => Event::SurfaceReset,
                 2 | 3 => Event::PointerDown(at),
                 4 => Event::PointerMove(at),

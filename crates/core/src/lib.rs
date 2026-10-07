@@ -36,7 +36,16 @@ use tools::{Ctx, StyleTarget, Tool, Tools};
 /// Identifies a display. Opaque to the core: it only compares them, so that
 /// moving the Overlay to another display can Clear the Ink (ADR-0002).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DisplayId(pub u64);
+pub struct DisplayId(u64);
+
+impl DisplayId {
+    /// The platform layer derives the value from whatever makes a display
+    /// the same display (position, size, scale).
+    #[must_use]
+    pub const fn new(id: u64) -> Self {
+        Self(id)
+    }
+}
 
 /// Everything the platform layer can tell the core.
 #[derive(Clone, Copy, Debug, PartialEq)]

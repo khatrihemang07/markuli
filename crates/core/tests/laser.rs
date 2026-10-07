@@ -17,7 +17,7 @@ fn laser() -> Annotator {
         width: W,
         height: H,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, 'k');
     a
 }
@@ -114,7 +114,7 @@ fn leaving_draw_mode_drops_the_trail() {
     a.handle(Event::PointerDown(p(50.0, 100.0)));
     a.handle(Event::Clock(1010));
     a.handle(Event::PointerMove(p(90.0, 100.0)));
-    let view = a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    let view = a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert_eq!(view.next_frame, None);
     assert!(!view.overlay_needed);
 }

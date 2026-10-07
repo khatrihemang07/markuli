@@ -12,7 +12,7 @@ fn session() -> Annotator {
         width: 800,
         height: 600,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 
@@ -208,7 +208,7 @@ fn switching_to_another_tool_drops_the_selection() {
 fn leaving_draw_mode_drops_the_selection_but_keeps_the_ink() {
     let (mut a, _, _) = two_strokes();
     command(&mut a, 'a', false);
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert!(a.selection().is_empty());
     assert_eq!(a.ink().len(), 2);
 }

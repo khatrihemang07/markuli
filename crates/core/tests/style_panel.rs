@@ -12,7 +12,7 @@ fn session() -> Annotator {
         width: 800,
         height: 600,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 
@@ -139,7 +139,7 @@ fn the_panel_is_shown_for_the_pen_only_in_draw_mode() {
         height: 600,
     });
     assert_eq!(a.panel_center(Control::Color(0)), None);
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert!(a.panel_center(Control::Color(0)).is_some());
     for hidden in ['e', 'k', 'v'] {
         key(&mut a, hidden);

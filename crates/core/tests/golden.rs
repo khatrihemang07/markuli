@@ -24,7 +24,7 @@ fn scene(theme: Theme, scale: f32) -> Annotator {
         width: W,
         height: H,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 

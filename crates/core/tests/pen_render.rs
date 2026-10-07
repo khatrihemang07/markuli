@@ -28,7 +28,7 @@ fn scene() -> (Annotator, Pixmap) {
     let mut a = Annotator::new();
     let mut pm = Pixmap::new(W, H).expect("pixmap");
     a.handle(Event::ScaleFactor(SCALE));
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a.render(&mut pm.as_mut(), Format::Rgba);
     (a, pm)
 }

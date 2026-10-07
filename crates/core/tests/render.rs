@@ -5,7 +5,7 @@
 use markuli_core::{Annotator, Damage, DisplayId, Event, Format, Point, Theme};
 use tiny_skia::{Pixmap, PixmapMut};
 
-const D1: DisplayId = DisplayId(1);
+const D1: DisplayId = DisplayId::new(1);
 const W: u32 = 100;
 const H: u32 = 100;
 
@@ -153,7 +153,7 @@ fn random_event_sequences_never_panic() {
     for _ in 0..1_500 {
         let at = p((next() % 160) as f32 - 30.0, (next() % 160) as f32 - 30.0);
         let event = match next() % 9 {
-            0 => Event::ToggleDrawMode(DisplayId(u64::from(next() % 2))),
+            0 => Event::ToggleDrawMode(DisplayId::new(u64::from(next() % 2))),
             1 => Event::SurfaceReset,
             2 => Event::PointerDown(at),
             3 | 4 => Event::PointerMove(at),

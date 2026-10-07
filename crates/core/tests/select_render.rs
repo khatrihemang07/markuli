@@ -44,7 +44,7 @@ impl Scene {
             width: W,
             height: H,
         });
-        a.handle(Event::ToggleDrawMode(DisplayId(1)));
+        a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
         let mut shown = Pixmap::new(W, H).expect("pixmap");
         render(&mut a, &mut shown);
         let before = fresh(&mut a);

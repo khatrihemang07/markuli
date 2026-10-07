@@ -282,7 +282,9 @@ fn scale_of(monitor: &MonitorHandle) -> f32 {
 
 fn display_id(monitor: &MonitorHandle) -> DisplayId {
     let position = monitor.position();
-    DisplayId((u64::from(position.x.cast_unsigned()) << 32) | u64::from(position.y.cast_unsigned()))
+    DisplayId::new(
+        (u64::from(position.x.cast_unsigned()) << 32) | u64::from(position.y.cast_unsigned()),
+    )
 }
 
 fn create_overlay(event_loop: &ActiveEventLoop, monitor: &MonitorHandle) -> Overlay {

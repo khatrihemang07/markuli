@@ -54,7 +54,7 @@ fn at(i: u16) -> Point {
 fn pointer_moves_do_not_allocate_and_render_allocates_nothing_that_scales() {
     let mut a = Annotator::new();
     let mut pm = Pixmap::new(1200, 800).expect("pixmap");
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a.render(&mut pm.as_mut(), Format::Rgba);
     a.handle(Event::PointerDown(at(0)));
     // Warm up: outline and scratch buffers reach their working size.

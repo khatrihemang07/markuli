@@ -2,8 +2,8 @@
 
 use markuli_core::{Annotator, DisplayId, Event, Point};
 
-const D1: DisplayId = DisplayId(1);
-const D2: DisplayId = DisplayId(2);
+const D1: DisplayId = DisplayId::new(1);
+const D2: DisplayId = DisplayId::new(2);
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }

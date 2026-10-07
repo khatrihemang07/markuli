@@ -24,7 +24,7 @@ fn drawing() -> Annotator {
         width: W,
         height: H,
     });
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 
@@ -72,7 +72,7 @@ fn the_toolbar_is_drawn_in_draw_mode_and_hidden_outside_it() {
     assert_eq!(alpha(&pixels(&mut a), pen), 255);
 
     stroke(&mut a, 20.0); // Ink keeps the Overlay alive after leaving Draw Mode.
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert_eq!(alpha(&pixels(&mut a), pen), 0);
     assert_eq!(a.button_center(PEN), None);
 }
@@ -160,7 +160,7 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
     key(&mut a, Key::Char('q'), false, false);
     assert_eq!(a.active_tool(), 1);
     // And keys do nothing outside Draw Mode.
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, Key::Char('7'), false, false);
     assert_eq!(a.active_tool(), 1);
 }

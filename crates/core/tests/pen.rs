@@ -8,7 +8,7 @@ fn p(x: f32, y: f32) -> Point {
 
 fn drawing() -> Annotator {
     let mut a = Annotator::new();
-    a.handle(Event::ToggleDrawMode(DisplayId(1)));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }
 
