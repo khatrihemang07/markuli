@@ -15,18 +15,23 @@ use core::ffi::c_void;
 use core::mem::{size_of, zeroed};
 use core::ptr::{null, null_mut};
 use markuli_core::{Damage, Format};
+use std::path::PathBuf;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
-use windows_sys::Win32::Foundation::{HWND, POINT, RECT, SIZE};
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, POINT, RECT, SIZE};
 use windows_sys::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA,
     AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
+};
+use windows_sys::Win32::System::Registry::{
+    RegCloseKey, RegCreateKeyW, RegDeleteValueW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, REG_SZ,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, UpdateLayeredWindowIndirect, GWL_EXSTYLE,
     ULW_ALPHA, UPDATELAYEREDWINDOWINFO, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -34,6 +39,9 @@ use winit::window::{Window, WindowAttributes, WindowLevel};
 
 /// DIB sections are BGRA.
 pub const FORMAT: Format = Format::Bgra;
+
+/// How the Super modifier reads in the UI.
+pub const LOGO_KEY_NAME: &str = "Win";
 
 pub fn configure_event_loop<T>(_builder: &mut EventLoopBuilder<T>) {}
 
@@ -202,3 +210,61 @@ impl Drop for Presenter {
 pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
     builder.with_icon(icon)
 }
+
+pub fn config_dir() -> Option<PathBuf> {
+    Some(PathBuf::from(std::env::var_os("APPDATA")?).join("Markuli"))
+}
+
+/// UTF-16 with a trailing nul, for Win32 wide-string parameters.
+pub fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(Some(0)).collect()
+}
+
+const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const RUN_VALUE: &str = "Markuli";
+
+/// Adds or removes `HKCU\...\Run\Markuli`, which Explorer starts at login.
+pub fn set_launch_at_login(on: bool) -> Result<(), String> {
+    let key = wide(RUN_KEY);
+    let name = wide(RUN_VALUE);
+    let mut hkey: HKEY = null_mut();
+    // SAFETY: all pointers refer to live locals; the key is closed below.
+    unsafe {
+        let status = RegCreateKeyW(HKEY_CURRENT_USER, key.as_ptr(), &mut hkey);
+        if status != 0 {
+            return Err(format!("registry error {status}"));
+        }
+        let status = if on {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            // Quoted, so a path with spaces still launches.
+            let value = wide(&format!("\"{}\"", exe.display()));
+            RegSetValueExW(
+                hkey,
+                name.as_ptr(),
+                0,
+                REG_SZ,
+                value.as_ptr().cast(),
+                (value.len() * 2) as u32,
+            )
+        } else {
+            match RegDeleteValueW(hkey, name.as_ptr()) {
+                ERROR_FILE_NOT_FOUND => 0,
+                other => other,
+            }
+        };
+        RegCloseKey(hkey);
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(format!("registry error {status}"))
+        }
+    }
+}
+
+/// Ctrl is the shortcut modifier on Windows.
+pub fn command_held(modifiers: ModifiersState) -> bool {
+    modifiers.control_key()
+}
+
+/// Nothing to hand back: the DIB section is freed with the window.
+pub fn release_memory() {}

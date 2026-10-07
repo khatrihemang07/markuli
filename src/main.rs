@@ -3,18 +3,22 @@
 //! This file is the event-loop glue: OS events become core events, core
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
+mod hotkeys;
 mod platform;
+mod settings;
 
-use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use markuli_core::{Annotator, DisplayId, Event, Point, View};
-use platform::Presenter;
+use hotkeys::{Binding, Hotkeys, RebindError};
+use markuli_core::{Annotator, Config, DisplayId, Event, Key, Point, View};
+use platform::{Presenter, SettingsWindow};
+use settings::SettingsEvent;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton, TouchPhase, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -22,6 +26,7 @@ use winit::window::{CursorIcon, Window, WindowId};
 enum UserEvent {
     Hotkey(GlobalHotKeyEvent),
     Menu(MenuEvent),
+    Settings(SettingsEvent),
 }
 
 /// The Overlay window and what it draws through.
@@ -35,7 +40,14 @@ struct App {
     core: Annotator,
     overlay: Option<Overlay>,
     cursor: Point,
-    toggle_id: u32,
+    hotkeys: Hotkeys<GlobalHotKeyManager>,
+    config: Config,
+    /// Exists only while the Settings window is open.
+    settings: Option<SettingsWindow>,
+    settings_id: Option<MenuId>,
+    /// Test hook: reopen Settings this many more times after it closes.
+    reopen: u32,
+    modifiers: ModifiersState,
     quit_id: Option<MenuId>,
     tray: Option<TrayIcon>,
 }
@@ -61,7 +73,9 @@ impl App {
     /// Brings the window in line with what the core says.
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
         if !view.overlay_needed {
-            self.overlay = None;
+            if self.overlay.take().is_some() {
+                platform::release_memory();
+            }
             return;
         }
         if self.overlay.is_none() {
@@ -95,6 +109,99 @@ impl App {
         if let Some(damage) = self.core.render(&mut buffer, platform::FORMAT) {
             overlay.presenter.present(damage);
         }
+    }
+
+    fn open_settings(&mut self) {
+        if let Some(window) = &self.settings {
+            window.raise();
+            return;
+        }
+        self.settings = SettingsWindow::open(&self.config);
+    }
+
+    fn on_settings(&mut self, event: SettingsEvent) {
+        match event {
+            SettingsEvent::Record(binding, text) => self.rebind(binding, &text),
+            SettingsEvent::LaunchAtLogin(on) => {
+                let result = platform::set_launch_at_login(on);
+                if result.is_ok() {
+                    self.config.launch_at_login = on;
+                    settings::save(&self.config);
+                }
+                if let Some(window) = &self.settings {
+                    if let Err(error) = result {
+                        window.set_launch_at_login(!on);
+                        window.set_message(&format!("Could not change launch at login: {error}"));
+                    } else {
+                        window.set_message("");
+                    }
+                }
+            }
+            // Dropping the handle is what returns the window's memory.
+            SettingsEvent::Closed => {
+                self.settings = None;
+                if self.reopen > 0 {
+                    self.reopen -= 1;
+                    self.open_settings();
+                }
+            }
+        }
+    }
+
+    fn rebind(&mut self, binding: Binding, text: &str) {
+        let result = self.hotkeys.rebind(binding, text);
+        let current = self.hotkeys.text(binding);
+        if result.is_ok() {
+            match binding {
+                Binding::Toggle => self.config.toggle.clone_from(&current),
+                Binding::Clear => self.config.clear.clone_from(&current),
+            }
+            settings::save(&self.config);
+        }
+        let Some(window) = &self.settings else { return };
+        window.set_hotkey(binding, &current);
+        let shown = platform::label(text);
+        window.set_message(&match result {
+            Ok(()) => String::new(),
+            Err(RebindError::Taken) => format!(
+                "{shown} is already used by another app. Kept {}.",
+                platform::label(&current)
+            ),
+            Err(RebindError::UsedByOther(other)) => format!(
+                "{shown} is already the {} hotkey.",
+                match other {
+                    Binding::Toggle => "Toggle",
+                    Binding::Clear => "Clear",
+                }
+            ),
+            Err(RebindError::Invalid) => "That combination can't be used.".to_owned(),
+        });
+    }
+
+    /// The Clear hotkey: the core drops the Ink, and `sync` destroys the
+    /// Overlay because it reports it is no longer needed.
+    fn on_clear(&mut self, event_loop: &ActiveEventLoop) {
+        let view = self.core.handle(Event::Clear);
+        self.sync(event_loop, view, None);
+    }
+
+    fn key(&mut self, event: &KeyEvent) {
+        if event.state != ElementState::Pressed {
+            return;
+        }
+        let key = match &event.logical_key {
+            WinitKey::Named(NamedKey::Escape) => Key::Escape,
+            WinitKey::Character(text) => match text.to_lowercase().chars().next() {
+                Some(c) => Key::Char(c),
+                None => return,
+            },
+            _ => return,
+        };
+        self.pointer(Event::Key {
+            key,
+            command: platform::command_held(self.modifiers),
+            shift: self.modifiers.shift_key(),
+        });
     }
 
     fn pointer(&mut self, event: Event) {
@@ -143,9 +250,21 @@ impl ApplicationHandler<UserEvent> for App {
             return;
         }
         let menu = Menu::new();
+        let settings = MenuItem::new("Settings\u{2026}", true, None);
         let quit = MenuItem::new("Quit", true, None);
+        self.settings_id = Some(settings.id().clone());
         self.quit_id = Some(quit.id().clone());
-        menu.append(&quit).expect("failed to build the tray menu");
+        menu.append_items(&[&settings, &quit])
+            .expect("failed to build the tray menu");
+        // Test hook: the tray menu cannot be clicked from a script. The value
+        // is how many times Settings opens (again after each close).
+        if let Some(times) = std::env::var("MARKULI_OPEN_SETTINGS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            self.reopen = times.saturating_sub(1);
+            self.open_settings();
+        }
         self.tray = Some(
             platform::tray_icon(TrayIconBuilder::new(), tray_icon_image())
                 .with_menu(Box::new(menu))
@@ -157,11 +276,15 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
-            UserEvent::Hotkey(e)
-                if e.id() == self.toggle_id && e.state() == HotKeyState::Pressed =>
-            {
-                self.on_toggle(event_loop);
+            UserEvent::Hotkey(e) if e.state() == HotKeyState::Pressed => {
+                match self.hotkeys.binding_for(e.id()) {
+                    Some(Binding::Toggle) => self.on_toggle(event_loop),
+                    Some(Binding::Clear) => self.on_clear(event_loop),
+                    None => {}
+                }
             }
+            UserEvent::Menu(e) if Some(&e.id) == self.settings_id.as_ref() => self.open_settings(),
+            UserEvent::Settings(e) => self.on_settings(e),
             UserEvent::Menu(e) if Some(&e.id) == self.quit_id.as_ref() => event_loop.exit(),
             _ => {}
         }
@@ -169,6 +292,8 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
                 self.core.handle(Event::Pressure(platform::pen_pressure()));
@@ -246,15 +371,17 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
     let proxy = event_loop.create_proxy();
 
+    let config = settings::load();
     let manager = GlobalHotKeyManager::new().expect("failed to start the hotkey manager");
-    let toggle = HotKey::new(Some(Modifiers::ALT), Code::Backquote);
-    manager
-        .register(toggle)
-        .expect("Alt+` is taken by another app");
+    let hotkeys = Hotkeys::new(manager, &config);
     let hotkey_proxy = proxy.clone();
     GlobalHotKeyEvent::set_event_handler(Some(move |e| {
         let _ = hotkey_proxy.send_event(UserEvent::Hotkey(e));
     }));
+    let settings_proxy = proxy.clone();
+    settings::set_sink(move |e| {
+        let _ = settings_proxy.send_event(UserEvent::Settings(e));
+    });
     MenuEvent::set_event_handler(Some(move |e| {
         let _ = proxy.send_event(UserEvent::Menu(e));
     }));
@@ -263,10 +390,14 @@ fn main() {
         core: Annotator::new(),
         overlay: None,
         cursor: Point { x: 0.0, y: 0.0 },
-        toggle_id: toggle.id(),
+        hotkeys,
+        config,
+        settings: None,
+        settings_id: None,
+        reopen: 0,
+        modifiers: ModifiersState::empty(),
         quit_id: None,
         tray: None,
     };
     event_loop.run_app(&mut app).expect("the event loop failed");
-    drop(manager); // keeps the hotkey registered until the loop exits
 }

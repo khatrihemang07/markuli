@@ -318,8 +318,18 @@ impl Ink {
         self.elements.push(element);
     }
 
-    pub(crate) fn clear(&mut self) {
-        self.elements.clear();
+    pub(crate) fn pop(&mut self) -> Option<Element> {
+        self.elements.pop()
+    }
+
+    /// Exchanges the whole Element list with `other` (Clear and its undo).
+    pub(crate) fn swap_elements(&mut self, other: &mut Vec<Element>) {
+        std::mem::swap(&mut self.elements, other);
+    }
+
+    /// Removes every Element and hands them back, for the operation log.
+    pub(crate) fn take(&mut self) -> Vec<Element> {
+        std::mem::take(&mut self.elements)
     }
 
     pub(crate) fn last_mut(&mut self) -> Option<&mut Element> {
