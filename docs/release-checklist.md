@@ -18,12 +18,12 @@ Measure the **release** build, not debug.
 
 | Measure | Target | How | Result |
 |---|---|---|---|
-| Artifact size | at most 4 MB | size of the dmg / zip | |
-| RAM idle, no Ink | at most 10 MB | macOS: `footprint <pid>` (phys_footprint, not RSS). Windows: Task Manager, Details tab, "Memory (private working set)" | |
-| RAM while drawing | at most 40 MB | same, during a Stroke on the largest display | |
-| RAM after closing Settings | back to idle (no growth after repeated open/close) | open and close Settings 5 times, compare to the first close | |
-| Idle CPU | 0% | Activity Monitor / Task Manager for 30 s with no Ink | |
-| Hotkey to first Stroke | under 16 ms | screen-record at 60 fps, count frames from key press to first ink | |
+| Artifact size | at most 4 MB | size of the dmg / zip | macOS: **met**. Universal dmg 1,542,833 B (1.47 MiB), universal binary 2,252,960 B, arm64 binary 1,013,536 B (`scripts/package-macos.sh`, final build). Windows: not measured. |
+| RAM idle, no Ink | at most 10 MB | macOS: `footprint <pid>` (phys_footprint, not RSS). Windows: Task Manager, Details tab, "Memory (private working set)" | macOS: **missed**, 11 MB (the bare AppKit baseline, see note below); after Clear 14 MB, stable over repeated cycles. Windows: not measured. |
+| RAM while drawing | at most 40 MB | same, during a Stroke on the largest display | macOS: **met**. Draw Mode with toolbar 21 MB, 23 MB after two Strokes (1920x1080 at 1x, final build, synthesized events). Windows: not measured. |
+| RAM after closing Settings | back to idle (no growth after repeated open/close) | open and close Settings 5 times, compare to the first close | macOS: **missed**. 19-20 MB after close vs 11 MB idle (AppKit text and control caches), flat over 6 open/close cycles, so no leak. Windows: not measured. |
+| Idle CPU | 0% | Activity Monitor / Task Manager for 30 s with no Ink | macOS: **met**, 0.0% (also 0.0% in Draw Mode and with Ink visible). Windows: not measured. |
+| Hotkey to first Stroke | under 16 ms | screen-record at 60 fps, count frames from key press to first ink | macOS: **missed** for the first Overlay after the process has been idle: 49-75 ms cold (NSWindow creation 58 ms, orderFront 11-14 ms; WindowServer and AppKit cost), 7-20 ms warm. Pre-creating the window would cost idle RAM and contradict ADR-0002, so it stays. Measured with stderr traces, not a screen recording. Windows: not measured. |
 
 Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before any window exists. Opening Settings loads AppKit text and control caches that stay resident (measured about +8 MB, flat across repeated opens). Record the numbers; do not hide a regression.
 
