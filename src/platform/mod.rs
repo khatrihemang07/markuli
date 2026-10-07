@@ -21,8 +21,8 @@ use windows as imp;
 compile_error!("Markuli supports macOS and Windows only");
 
 pub use imp::{
-    command_held, configure_event_loop, monitor_under_cursor, tray_icon, window_attributes,
-    Presenter,
+    command_held, configure_event_loop, monitor_under_cursor, release_memory, tray_icon,
+    window_attributes, Presenter,
 };
 
 /// Channel order of the buffer `Presenter::buffer` hands to the core.

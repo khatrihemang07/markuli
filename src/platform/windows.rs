@@ -202,3 +202,6 @@ pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
 pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.control_key()
 }
+
+/// Nothing to hand back: the DIB section is freed with the window.
+pub fn release_memory() {}

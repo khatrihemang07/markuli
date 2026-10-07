@@ -185,3 +185,17 @@ pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
 pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.super_key()
 }
+
+extern "C" {
+    fn malloc_zone_pressure_relief(zone: *mut c_void, goal: usize) -> usize;
+}
+
+/// Hands freed heap pages back to the OS after the Overlay is destroyed, so
+/// they stop counting toward the footprint the idle budget is measured by.
+pub fn release_memory() {
+    // SAFETY: documented libmalloc call; a null zone means all zones and a
+    // goal of 0 means "release as much as possible". No preconditions.
+    unsafe {
+        malloc_zone_pressure_relief(ptr::null_mut(), 0);
+    }
+}

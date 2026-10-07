@@ -64,7 +64,9 @@ impl App {
     /// Brings the window in line with what the core says.
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
         if !view.overlay_needed {
-            self.overlay = None;
+            if self.overlay.take().is_some() {
+                platform::release_memory();
+            }
             return;
         }
         if self.overlay.is_none() {
