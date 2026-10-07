@@ -231,6 +231,7 @@ impl App {
                 key,
                 command: platform::command_held(self.modifiers),
                 shift: self.modifiers.shift_key(),
+                alt: self.modifiers.alt_key(),
             },
         );
         // Cmd/Ctrl+C: the core produced the Excalidraw clipboard JSON.

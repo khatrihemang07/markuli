@@ -131,10 +131,28 @@ fn entering_draw_mode_always_starts_with_the_pen() {
             key: Key::Char(c),
             command: false,
             shift: false,
+            alt: false,
         });
         assert_eq!(a.view().tool, kind);
         a.handle(Event::ToggleDrawMode(D1));
         let v = a.handle(Event::ToggleDrawMode(D1));
         assert_eq!(v.tool, ToolKind::Pen, "re-entered after {kind:?}");
     }
+}
+
+#[test]
+fn tool_keys_do_nothing_while_alt_is_held() {
+    let mut a = Annotator::new();
+    a.handle(Event::ToggleDrawMode(D1));
+    let key = |a: &mut Annotator, c, alt| {
+        a.handle(Event::Key {
+            key: Key::Char(c),
+            command: false,
+            shift: false,
+            alt,
+        })
+        .tool
+    };
+    assert_eq!(key(&mut a, 'e', true), ToolKind::Pen);
+    assert_eq!(key(&mut a, 'e', false), ToolKind::Eraser);
 }

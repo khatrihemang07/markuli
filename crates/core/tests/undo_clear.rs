@@ -20,6 +20,7 @@ fn key(a: &mut Annotator, key: Key, command: bool, shift: bool) {
         key,
         command,
         shift,
+        alt: false,
     });
 }
 
@@ -246,12 +247,14 @@ fn random_event_sequences_never_panic_and_undo_all_returns_to_empty_ink() {
                     key: Key::Escape,
                     command: flag(&mut rng),
                     shift: flag(&mut rng),
+                    alt: false,
                 },
                 _ => Event::Key {
                     #[allow(clippy::cast_possible_truncation)]
                     key: Key::Char(['z', 'y', 'q'][rng.next(3) as usize]),
                     command: flag(&mut rng),
                     shift: flag(&mut rng),
+                    alt: false,
                 },
             };
             a.handle(event);

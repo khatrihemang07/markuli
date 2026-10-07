@@ -81,6 +81,8 @@ pub enum Event {
         key: Key,
         command: bool,
         shift: bool,
+        /// Alt (Option) is held: Tool shortcut keys then do nothing.
+        alt: bool,
     },
     /// The Clear hotkey: removes all Ink and leaves Draw Mode.
     Clear,
@@ -213,7 +215,8 @@ impl Annotator {
                 key,
                 command,
                 shift,
-            } if self.draw_mode => self.key(key, command, shift),
+                alt,
+            } if self.draw_mode => self.key(key, command, shift, alt),
             Event::Clear => self.clear(),
             Event::Clock(ms) => self.laser.set_now(ms, &mut self.paint, self.scale),
             _ => {}
@@ -468,7 +471,7 @@ impl Annotator {
         }
     }
 
-    fn key(&mut self, key: Key, command: bool, shift: bool) {
+    fn key(&mut self, key: Key, command: bool, shift: bool, alt: bool) {
         let (tool, mut ctx) = self.tool();
         if tool.key(&mut ctx, key, command, shift) {
             return;
@@ -487,7 +490,7 @@ impl Annotator {
                 self.selection.select_all(&self.ink);
             }
             (Key::Char('c'), true, false) => self.copy(),
-            (Key::Char(c), false, false) => {
+            (Key::Char(c), false, false) if !alt => {
                 self.switch_tool(|tools| {
                     tools.select_by_key(c);
                 });

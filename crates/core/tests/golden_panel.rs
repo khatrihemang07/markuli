@@ -31,6 +31,7 @@ fn key(a: &mut Annotator, c: char) {
         key: Key::Char(c),
         command: false,
         shift: false,
+        alt: false,
     });
 }
 

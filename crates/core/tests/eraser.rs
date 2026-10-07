@@ -12,6 +12,7 @@ fn key(a: &mut Annotator, c: char, command: bool, shift: bool) {
         key: Key::Char(c),
         command,
         shift,
+        alt: false,
     });
 }
 
@@ -120,6 +121,7 @@ fn escape_cancels_the_erase_and_keeps_everything() {
         key: Key::Escape,
         command: false,
         shift: false,
+        alt: false,
     });
     a.handle(Event::PointerUp(p(250.0, 130.0)));
     assert_eq!(a.ink().len(), 3);

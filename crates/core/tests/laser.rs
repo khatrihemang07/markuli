@@ -27,6 +27,7 @@ fn key(a: &mut Annotator, c: char) {
         key: Key::Char(c),
         command: false,
         shift: false,
+        alt: false,
     });
 }
 
@@ -73,6 +74,7 @@ fn laser_input_never_changes_ink_or_the_undo_history() {
         key: Key::Char('z'),
         command: true,
         shift: false,
+        alt: false,
     });
     assert!(a.ink().is_empty());
 }

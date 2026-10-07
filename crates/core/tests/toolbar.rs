@@ -50,6 +50,7 @@ fn key(a: &mut Annotator, key: Key, command: bool, shift: bool) {
         key,
         command,
         shift,
+        alt: false,
     });
 }
 

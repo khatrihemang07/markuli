@@ -83,6 +83,7 @@ impl Scene {
                 key,
                 command,
                 shift,
+                alt: false,
             },
             what,
         );

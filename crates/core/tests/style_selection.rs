@@ -24,6 +24,7 @@ fn key(a: &mut Annotator, c: char) {
         key: Key::Char(c),
         command: false,
         shift: false,
+        alt: false,
     });
 }
 
@@ -32,6 +33,7 @@ fn command(a: &mut Annotator, c: char, shift: bool) {
         key: Key::Char(c),
         command: true,
         shift,
+        alt: false,
     });
 }
 

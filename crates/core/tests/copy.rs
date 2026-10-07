@@ -25,6 +25,7 @@ fn key(a: &mut Annotator, c: char, command: bool) {
         key: Key::Char(c),
         command,
         shift: false,
+        alt: false,
     });
 }
 
@@ -281,6 +282,7 @@ fn a_deleted_element_is_not_copied() {
         key: Key::Delete,
         command: false,
         shift: false,
+        alt: false,
     });
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     assert_eq!(elements(&doc).len(), 1);
