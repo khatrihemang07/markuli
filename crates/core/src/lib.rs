@@ -3,9 +3,11 @@
 //! One way in: [`Annotator::handle`] takes an [`Event`]. Out come the
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
+mod history;
 mod ink;
 mod render;
 
+use history::History;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
 
@@ -24,6 +26,23 @@ pub enum Event {
     PointerDown(Point),
     PointerMove(Point),
     PointerUp(Point),
+    /// A key press in Draw Mode. The platform layer resolves `command` to
+    /// Cmd on macOS and Ctrl on Windows.
+    Key {
+        key: Key,
+        command: bool,
+        shift: bool,
+    },
+    /// The Clear hotkey: removes all Ink and leaves Draw Mode.
+    Clear,
+}
+
+/// The keys the core reacts to; the platform layer drops the rest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key {
+    Escape,
+    /// A character key, lowercase.
+    Char(char),
 }
 
 /// What the platform layer needs to know after each event.
@@ -52,6 +71,7 @@ pub struct Annotator {
     draw_mode: bool,
     display: Option<DisplayId>,
     stroking: bool,
+    history: History,
     paint: render::Pending,
 }
 
@@ -67,6 +87,8 @@ impl Annotator {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
             Event::PointerDown(at) if self.draw_mode => {
+                // A lost PointerUp must not merge two Strokes into one log entry.
+                self.finish_stroke();
                 self.stroking = true;
                 self.ink.add(ink::Element::start(at));
             }
@@ -75,9 +97,15 @@ impl Annotator {
                     element.push(at);
                 }
                 if matches!(event, Event::PointerUp(_)) {
-                    self.stroking = false;
+                    self.finish_stroke();
                 }
             }
+            Event::Key {
+                key,
+                command,
+                shift,
+            } if self.draw_mode => self.key(key, command, shift),
+            Event::Clear => self.clear(),
             _ => {}
         }
         self.view()
@@ -114,13 +142,62 @@ impl Annotator {
         )
     }
 
+    /// Commits the Stroke in progress to the operation log.
+    fn finish_stroke(&mut self) {
+        if self.stroking {
+            self.stroking = false;
+            self.history.record_add();
+        }
+    }
+
+    fn key(&mut self, key: Key, command: bool, shift: bool) {
+        match (key, command, shift) {
+            // Esc only cancels the Stroke in progress; it never Clears.
+            (Key::Escape, _, _) => {
+                if self.stroking {
+                    self.stroking = false;
+                    self.ink.pop();
+                    self.paint.full();
+                }
+            }
+            // Undo and redo wait for the Stroke to end: it is not logged yet.
+            (Key::Char(_), true, _) if self.stroking => {}
+            (Key::Char('z'), true, false) => self.undo(),
+            (Key::Char('z'), true, true) | (Key::Char('y'), true, false) => self.redo(),
+            _ => {}
+        }
+    }
+
+    fn undo(&mut self) {
+        if self.history.undo(&mut self.ink) {
+            self.paint.full();
+        }
+    }
+
+    fn redo(&mut self) {
+        if self.history.redo(&mut self.ink) {
+            self.paint.full();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.finish_stroke();
+        if !self.ink.is_empty() {
+            self.history.record_clear(self.ink.take());
+        }
+        self.draw_mode = false;
+        self.paint.full();
+    }
+
     fn toggle(&mut self, display: DisplayId) {
-        self.stroking = false;
+        self.finish_stroke();
         if self.draw_mode {
             self.draw_mode = false;
         } else {
             if self.display != Some(display) {
-                self.ink.clear();
+                // ADR-0002: the history belongs to the Ink that was Cleared.
+                self.ink = Ink::default();
+                self.history.reset();
             }
             self.display = Some(display);
             self.draw_mode = true;
