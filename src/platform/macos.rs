@@ -12,6 +12,7 @@ use objc2_core_graphics::{
 };
 use objc2_quartz_core::{CALayer, CATransaction};
 use std::ffi::c_void;
+use std::path::PathBuf;
 use std::ptr;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
@@ -22,6 +23,9 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
 pub const FORMAT: Format = Format::Rgba;
+
+/// How the Super modifier reads in the UI.
+pub const LOGO_KEY_NAME: &str = "Cmd";
 
 /// No Dock icon, no app menu bar, no activation prompts.
 pub fn configure_event_loop<T>(builder: &mut EventLoopBuilder<T>) {
@@ -178,4 +182,71 @@ impl Presenter {
 /// Monochrome icon that macOS tints for light and dark menu bars.
 pub fn tray_icon(builder: TrayIconBuilder, icon: Icon) -> TrayIconBuilder {
     builder.with_icon_templated(icon)
+}
+
+fn home() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+pub fn config_dir() -> Option<PathBuf> {
+    Some(home()?.join("Library/Application Support/Markuli"))
+}
+
+const AGENT_LABEL: &str = "com.markuli.app";
+
+/// `MARKULI_LAUNCH_AGENT_DIR` redirects the plist, so tests never touch the
+/// real `~/Library/LaunchAgents`.
+fn launch_agent_path() -> Option<PathBuf> {
+    let dir = std::env::var_os("MARKULI_LAUNCH_AGENT_DIR")
+        .map(PathBuf::from)
+        .or_else(|| Some(home()?.join("Library/LaunchAgents")))?;
+    Some(dir.join(format!("{AGENT_LABEL}.plist")))
+}
+
+/// A user `LaunchAgent` that starts this executable at login. No `launchctl`
+/// call: launchd reads the folder at the next login.
+fn launch_agent_plist(exe: &str) -> String {
+    let exe = exe
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+<plist version=\"1.0\">\n<dict>\n\
+\t<key>Label</key>\n\t<string>{AGENT_LABEL}</string>\n\
+\t<key>ProgramArguments</key>\n\t<array>\n\t\t<string>{exe}</string>\n\t</array>\n\
+\t<key>RunAtLoad</key>\n\t<true/>\n\
+\t<key>ProcessType</key>\n\t<string>Interactive</string>\n\
+</dict>\n</plist>\n"
+    )
+}
+
+pub fn set_launch_at_login(on: bool) -> Result<(), String> {
+    let path = launch_agent_path().ok_or("no home directory")?;
+    if !on {
+        return match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        };
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = exe.to_str().ok_or("executable path is not UTF-8")?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, launch_agent_plist(exe)).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::launch_agent_plist;
+
+    #[test]
+    fn launch_agent_runs_the_executable_at_load() {
+        let plist = launch_agent_plist("/Applications/Markuli & Co/markuli");
+        assert!(plist.contains("<string>/Applications/Markuli &amp; Co/markuli</string>"));
+        assert!(plist.contains("<key>RunAtLoad</key>\n\t<true/>"));
+        assert!(plist.contains("<string>com.markuli.app</string>"));
+    }
 }

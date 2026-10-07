@@ -52,6 +52,10 @@ const KEYS: &[Key] = keys![
 ];
 
 /// Which modifier keys were held when a key was pressed.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "the four modifier keys are independent flags"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Mods {
     pub ctrl: bool,
@@ -85,7 +89,7 @@ pub fn key_from_vk(vk: u16) -> Option<&'static str> {
 pub fn recorded(mods: Mods, key: &str) -> Option<String> {
     let function_key =
         key.len() >= 2 && key.starts_with('F') && key[1..].bytes().all(|b| b.is_ascii_digit());
-    if !(mods.ctrl || mods.alt || mods.shift || mods.logo) && !function_key {
+    if !(mods.ctrl || mods.alt || mods.shift || mods.logo || function_key) {
         return None;
     }
     let mut flags = Modifiers::empty();
@@ -98,7 +102,7 @@ pub fn recorded(mods: Mods, key: &str) -> Option<String> {
     Some(HotKey::new(Some(flags), code).into_string())
 }
 
-/// Human-readable form, e.g. `alt+Backquote` becomes `Alt+\``.
+/// Human-readable form, e.g. `alt+Backquote` becomes Alt plus the backquote key.
 pub fn label(text: &str, logo_name: &str) -> String {
     let Ok(hotkey) = HotKey::from_str(text) else {
         return text.to_owned();
@@ -123,8 +127,8 @@ pub fn label(text: &str, logo_name: &str) -> String {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Binding {
-    Toggle,
-    Clear,
+    Toggle = 0,
+    Clear = 1,
 }
 
 /// Why a rebind did not happen. The old binding stays in every case.
