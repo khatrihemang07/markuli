@@ -110,7 +110,7 @@ fn kind(v: &Value) -> &'static str {
 fn nothing_to_copy_without_ink_or_outside_draw_mode() {
     let mut a = session();
     assert_eq!(copy(&mut a), None);
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 150.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 150.0)]);
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, 'c', true);
     assert_eq!(a.take_copy(), None);
@@ -119,7 +119,7 @@ fn nothing_to_copy_without_ink_or_outside_draw_mode() {
 #[test]
 fn the_copy_text_is_taken_once() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 150.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 150.0)]);
     assert!(copy(&mut a).is_some());
     assert_eq!(a.take_copy(), None);
 }
@@ -127,7 +127,7 @@ fn the_copy_text_is_taken_once() {
 #[test]
 fn the_wrapper_is_an_excalidraw_clipboard_document() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 150.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 150.0)]);
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let object = doc.as_object().expect("an object");
     let mut keys: Vec<_> = object.keys().map(String::as_str).collect();
@@ -140,7 +140,7 @@ fn the_wrapper_is_an_excalidraw_clipboard_document() {
 #[test]
 fn a_stroke_has_exactly_the_freedraw_field_set_with_the_right_types() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (150.0, 130.0), (210.0, 120.5)]);
+    stroke(&mut a, &[(200.0, 100.0), (250.0, 130.0), (310.0, 120.5)]);
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let element = &elements(&doc)[0];
     let object = element.as_object().expect("an object");
@@ -165,13 +165,13 @@ fn a_stroke_has_exactly_the_freedraw_field_set_with_the_right_types() {
 #[test]
 fn a_stroke_carries_its_geometry_and_style() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (150.0, 130.0), (210.0, 120.5)]);
+    stroke(&mut a, &[(200.0, 100.0), (250.0, 130.0), (310.0, 120.5)]);
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
     assert_eq!(e["type"], "freedraw");
     assert_eq!(
         (e["x"].as_f64(), e["y"].as_f64()),
-        (Some(100.0), Some(100.0))
+        (Some(200.0), Some(100.0))
     );
     assert_eq!(pair(&e["points"][0]), (0.0, 0.0));
     // The pointer-up point is kept even when it repeats the last move.
@@ -196,7 +196,7 @@ fn a_stroke_carries_its_geometry_and_style() {
 #[test]
 fn a_mouse_stroke_simulates_pressure_and_stores_none() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 150.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 150.0)]);
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
     assert_eq!(e["simulatePressure"], true);
@@ -207,7 +207,7 @@ fn a_mouse_stroke_simulates_pressure_and_stores_none() {
 fn a_pen_stroke_stores_one_pressure_per_point() {
     let mut a = session();
     a.handle(Event::Pressure(Some(0.25)));
-    stroke(&mut a, &[(100.0, 100.0), (150.0, 120.0), (200.0, 150.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (250.0, 120.0), (300.0, 150.0)]);
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
     assert_eq!(e["simulatePressure"], false);
@@ -223,7 +223,7 @@ fn a_pen_stroke_stores_one_pressure_per_point() {
 fn ids_are_unique_and_indices_ascend_in_z_order() {
     let mut a = session();
     for y in [100.0, 200.0, 300.0] {
-        stroke(&mut a, &[(100.0, y), (200.0, y + 20.0)]);
+        stroke(&mut a, &[(200.0, y), (300.0, y + 20.0)]);
     }
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let list = elements(&doc);
@@ -243,11 +243,11 @@ fn ids_are_unique_and_indices_ascend_in_z_order() {
 #[test]
 fn with_a_selection_only_the_selected_elements_are_copied() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 100.0)]);
-    stroke(&mut a, &[(100.0, 300.0), (200.0, 300.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 100.0)]);
+    stroke(&mut a, &[(200.0, 300.0), (300.0, 300.0)]);
     key(&mut a, 'v', false);
-    a.handle(Event::PointerDown(p(150.0, 300.0)));
-    a.handle(Event::PointerUp(p(150.0, 300.0)));
+    a.handle(Event::PointerDown(p(250.0, 300.0)));
+    a.handle(Event::PointerUp(p(250.0, 300.0)));
     let doc = parse(&copy(&mut a).expect("a selection to copy"));
     assert_eq!(elements(&doc).len(), 1);
     assert_eq!(elements(&doc)[0]["y"].as_f64(), Some(300.0));
@@ -257,27 +257,27 @@ fn with_a_selection_only_the_selected_elements_are_copied() {
 #[test]
 fn a_moved_element_is_copied_at_its_new_position() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 100.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 100.0)]);
     key(&mut a, 'v', false);
-    a.handle(Event::PointerDown(p(150.0, 100.0)));
-    a.handle(Event::PointerMove(p(170.0, 130.0)));
-    a.handle(Event::PointerUp(p(170.0, 130.0)));
+    a.handle(Event::PointerDown(p(250.0, 100.0)));
+    a.handle(Event::PointerMove(p(270.0, 130.0)));
+    a.handle(Event::PointerUp(p(270.0, 130.0)));
     let doc = parse(&copy(&mut a).expect("ink to copy"));
     let e = &elements(&doc)[0];
     assert_eq!(
         (e["x"].as_f64(), e["y"].as_f64()),
-        (Some(120.0), Some(130.0))
+        (Some(220.0), Some(130.0))
     );
 }
 
 #[test]
 fn a_deleted_element_is_not_copied() {
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (200.0, 100.0)]);
-    stroke(&mut a, &[(100.0, 300.0), (200.0, 300.0)]);
+    stroke(&mut a, &[(200.0, 100.0), (300.0, 100.0)]);
+    stroke(&mut a, &[(200.0, 300.0), (300.0, 300.0)]);
     key(&mut a, 'v', false);
-    a.handle(Event::PointerDown(p(150.0, 100.0)));
-    a.handle(Event::PointerUp(p(150.0, 100.0)));
+    a.handle(Event::PointerDown(p(250.0, 100.0)));
+    a.handle(Event::PointerUp(p(250.0, 100.0)));
     a.handle(Event::Key {
         key: Key::Delete,
         command: false,
@@ -297,7 +297,7 @@ fn dump_a_sample_when_asked() {
         return;
     };
     let mut a = session();
-    stroke(&mut a, &[(100.0, 100.0), (150.0, 130.0), (210.0, 120.5)]);
+    stroke(&mut a, &[(200.0, 100.0), (250.0, 130.0), (310.0, 120.5)]);
     a.handle(Event::Pressure(Some(0.8)));
     stroke(&mut a, &[(300.0, 300.0), (350.0, 340.0), (400.0, 330.0)]);
     let text = copy(&mut a).expect("ink to copy");

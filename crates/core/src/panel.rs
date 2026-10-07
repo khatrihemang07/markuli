@@ -20,8 +20,12 @@ use tiny_skia::{FillRule, LineCap, PathBuilder, PixmapMut, Stroke, Transform};
 
 /// Logical pixel metrics.
 const MARGIN: f32 = 16.0;
-/// Narrowest Overlay (logical) that shows the panel: 696 is where it would
-/// touch the shadow of a four-Tool toolbar.
+/// Narrowest Overlay (logical) that shows the panel. The panel (left edge
+/// `MARGIN`, `WIDTH` wide, shadow 16 px) and the centred four-Tool toolbar
+/// (shadow included) stay clear of each other down to 696; below that their
+/// shadows would overlap, so the panel is hidden rather than drawn over the
+/// toolbar. 720 leaves a little slack. More Tools widen the toolbar and
+/// would need a larger value.
 const MIN_WIDTH: f32 = 720.0;
 const TOP: f32 = 72.0;
 const PAD: f32 = 12.0;
@@ -173,11 +177,11 @@ impl Panel {
         })
     }
 
-    /// Logical x of the panel's left edge: it sits at the right of the
-    /// Overlay, clear of the Strokes people draw in the middle.
+    /// Logical x of the panel's left edge: Excalidraw's properties panel sits
+    /// on the left edge of the canvas, under the toolbar row.
+    #[allow(clippy::unused_self, reason = "kept as a method beside `origin`")]
     fn left(&self) -> f32 {
-        self.size
-            .map_or(0.0, |(w, _)| w / self.scale - MARGIN - WIDTH)
+        MARGIN
     }
 
     /// An area given in logical pixels, `x` from the panel's left edge.

@@ -36,10 +36,10 @@ fn key(a: &mut Annotator, c: char) {
 }
 
 fn stroke(a: &mut Annotator) {
-    a.handle(Event::PointerDown(p(40.0, 200.0)));
-    a.handle(Event::PointerMove(p(150.0, 150.0)));
-    a.handle(Event::PointerMove(p(260.0, 215.0)));
-    a.handle(Event::PointerUp(p(380.0, 170.0)));
+    a.handle(Event::PointerDown(p(220.0, 200.0)));
+    a.handle(Event::PointerMove(p(330.0, 150.0)));
+    a.handle(Event::PointerMove(p(440.0, 215.0)));
+    a.handle(Event::PointerUp(p(560.0, 170.0)));
 }
 
 fn pick(a: &mut Annotator, control: Control) {
@@ -101,8 +101,8 @@ fn style_panel_dark_showing_a_restyled_selection() {
     let mut a = scene(Theme::Dark);
     stroke(&mut a);
     key(&mut a, 'v');
-    a.handle(Event::PointerDown(p(150.0, 150.0)));
-    a.handle(Event::PointerUp(p(150.0, 150.0)));
+    a.handle(Event::PointerDown(p(330.0, 150.0)));
+    a.handle(Event::PointerUp(p(330.0, 150.0)));
     pick(&mut a, Control::Color(3));
     pick(&mut a, Control::Width(2));
     pick(&mut a, Control::Opacity(50));
