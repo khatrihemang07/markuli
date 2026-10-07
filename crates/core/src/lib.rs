@@ -3,9 +3,11 @@
 //! One way in: [`Annotator::handle`] takes an [`Event`]. Out come the
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
+mod config;
 mod ink;
 mod render;
 
+pub use config::Config;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
 
