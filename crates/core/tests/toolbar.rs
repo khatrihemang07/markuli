@@ -23,7 +23,6 @@ fn drawing() -> Annotator {
     a.handle(Event::Resize {
         width: W,
         height: H,
-        scale: 1.0,
     });
     a.handle(Event::ToggleDrawMode(DisplayId(1)));
     a
@@ -215,4 +214,38 @@ fn ink_drawn_under_the_toolbar_does_not_erase_it() {
     let edge = (H as usize - 1) * W as usize * 4;
     assert_eq!(before[edge..edge + 64], after[edge..edge + 64]);
     assert_ne!(before, after);
+}
+
+#[test]
+fn incremental_rendering_with_the_toolbar_matches_a_full_redraw() {
+    let mut a = drawing();
+    let (pen, undo) = (center(&a, PEN), center(&a, Button::Undo));
+    let mut screen = vec![0_u8; (W * H * 4) as usize];
+    let paint = |a: &mut Annotator, screen: &mut Vec<u8>| {
+        let mut target = PixmapMut::from_bytes(screen, W, H).unwrap();
+        a.render(&mut target, Format::Rgba);
+    };
+    paint(&mut a, &mut screen);
+    // A stroke that crosses the toolbar, hover changes, undo and redo.
+    let path = [p(pen.x - 60.0, 150.0), pen, undo, p(undo.x + 70.0, 5.0)];
+    a.handle(Event::PointerDown(path[0]));
+    paint(&mut a, &mut screen);
+    for at in &path[1..] {
+        a.handle(Event::PointerMove(*at));
+        paint(&mut a, &mut screen);
+    }
+    a.handle(Event::PointerUp(path[3]));
+    paint(&mut a, &mut screen);
+    for button in [Button::Undo, Button::Redo, Button::Redo] {
+        let at = center(&a, button);
+        click(&mut a, at);
+        paint(&mut a, &mut screen);
+    }
+    let mut fresh = vec![0_u8; (W * H * 4) as usize];
+    a.handle(Event::SurfaceReset);
+    paint(&mut a, &mut fresh);
+    assert!(
+        screen.iter().zip(&fresh).all(|(x, y)| x.abs_diff(*y) <= 1),
+        "incremental pixels differ from a full redraw"
+    );
 }

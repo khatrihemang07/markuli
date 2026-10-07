@@ -1,11 +1,19 @@
 //! Ink to pixels, incrementally.
 //!
-//! Plain round-capped polylines for now. Only segments added since the last
-//! call are drawn (standards rule 7); a full redraw happens on request.
+//! Each Element's outline is cached on the Element (see `ink.rs`); drawing
+//! only fills it. Between full redraws, only the damaged region is redrawn
+//! (standards rule 7): the region is cleared and every Element touching it is
+//! filled again, in bands drawn into a small reused scratch pixmap and copied
+//! into the caller's buffer. Nothing in here allocates once warm (rule 8).
+//!
+//! Fill follows Excalidraw (renderElement.ts, freedraw): the outline is
+//! `M p0 Q p_i mid(p_i, p_i+1) ... Q p_n mid(p_n, p0) L p0 Z`, filled nonzero
+//! with `strokeColor` at `globalAlpha = opacity / 100`. Deviation: Excalidraw
+//! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
-use crate::ink::{Element, Ink, Point};
-use crate::toolbar::{clear_rect, Chrome, Rect};
-use tiny_skia::{Color, LineCap, LineJoin, Paint, PathBuilder, PixmapMut, Stroke, Transform};
+use crate::ink::{Element, Ink, Rect};
+use crate::toolbar::{Area, Chrome};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
 /// layered-window DIBs are BGRA, so colours are swapped at paint time and
@@ -25,14 +33,21 @@ pub struct Damage {
     pub height: u32,
 }
 
-/// Fixed until the Excalidraw look and width choices arrive.
-const INK_RGB: [u8; 3] = [0xe0, 0x31, 0x31];
-const INK_WIDTH: f32 = 4.0;
+/// The scratch pixmap holds at most this many bytes, so a huge damaged
+/// region is drawn in bands instead of needing a screen-sized second buffer.
+const BAND_BYTES: usize = 1 << 20;
 
-/// What the next `render` must redraw.
+/// Anti-aliasing and curve slack around changed geometry, in pixels.
+const DAMAGE_PAD: f32 = 2.0;
+
+/// What the next `render` must redraw, plus the buffers it reuses.
 #[derive(Debug, Default)]
 pub struct Pending {
     full: bool,
+    /// Union of changed rectangles, physical `[l, t, r, b]`.
+    dirty: Option<Rect>,
+    scratch: Vec<u8>,
+    builder: Option<PathBuilder>,
 }
 
 impl Pending {
@@ -41,194 +56,285 @@ impl Pending {
     }
 
     pub fn is_pending(&self) -> bool {
+        self.full || self.dirty.is_some()
+    }
+
+    /// Whether the pending damage overlaps `rect` (physical `[l, t, r, b]`).
+    pub fn touches(&self, rect: Rect) -> bool {
         self.full
+            || self.dirty.is_some_and(|[l, t, r, b]| {
+                l < rect[2] && rect[0] < r && t < rect[3] && rect[1] < b
+            })
+    }
+
+    /// Marks a physical box as changed.
+    pub fn add_physical(&mut self, rect: Rect) {
+        self.dirty = Some(match self.dirty {
+            None => rect,
+            Some([ol, ot, or, ob]) => [
+                rect[0].min(ol),
+                rect[1].min(ot),
+                rect[2].max(or),
+                rect[3].max(ob),
+            ],
+        });
+    }
+
+    /// Marks an element-local logical box as changed.
+    pub fn damage_local(&mut self, local: Rect, origin: (f32, f32), scale: f32) {
+        let [left, top, right, bottom] = local;
+        let (ox, oy) = origin;
+        let rect = [
+            (left + ox) * scale - DAMAGE_PAD,
+            (top + oy) * scale - DAMAGE_PAD,
+            (right + ox) * scale + DAMAGE_PAD,
+            (bottom + oy) * scale + DAMAGE_PAD,
+        ];
+        if !rect.iter().all(|v| v.is_finite()) {
+            return;
+        }
+        self.dirty = Some(match self.dirty {
+            None => rect,
+            Some([ol, ot, or, ob]) => [
+                rect[0].min(ol),
+                rect[1].min(ot),
+                rect[2].max(or),
+                rect[3].max(ob),
+            ],
+        });
     }
 }
 
+/// Renders the Ink, then the toolbar on top of it.
+///
+/// The toolbar is never drawn incrementally: whenever it changed, or the Ink
+/// redraw touches its region, the whole region is redrawn from the backdrop
+/// and the Ink, then the toolbar is painted over it (so its shadow never
+/// stacks on itself).
 pub fn render(
-    ink: &mut Ink,
+    ink: &Ink,
     pending: &mut Pending,
     draw_mode: bool,
+    scale: f32,
     target: &mut PixmapMut<'_>,
     format: Format,
     mut chrome: Chrome<'_>,
 ) -> Option<Damage> {
-    let (w, h) = (target.width(), target.height());
-    let mut bounds = Bounds::empty();
-    let paint = ink_paint(format);
     let region = chrome.region();
-    let mut full = pending.full;
-    pending.full = false;
-    let toolbar_dirty = chrome.is_dirty();
-    // A toolbar repaint that no Element reaches only touches its own region;
-    // otherwise (or when it just disappeared) the Ink is redrawn in full.
-    if toolbar_dirty && !full {
-        full = region.is_none_or(|r| ink_reaches(ink, &r));
+    let dirty = chrome.is_dirty();
+    match region {
+        // The toolbar vanished (Draw Mode ended): that is always a full redraw.
+        None if dirty => pending.full(),
+        Some(r) if dirty || pending.touches(r.to_bounds()) => {
+            pending.add_physical(r.to_bounds());
+        }
+        _ => {}
     }
-    if full {
-        redraw_all(ink, draw_mode, target, &paint, &mut bounds);
-    } else if let (true, Some(r)) = (toolbar_dirty, region) {
-        clear_rect(target, r);
-        bounds.add_rect(r.to_bounds());
+    let damage = render_ink(ink, pending, draw_mode, scale, target, format);
+    if let (Some(r), Some(d)) = (region, damage) {
+        if r.intersects(&Area::from_bounds(bounds_of(d))) {
+            chrome.paint(target, format);
+        }
     }
-    let mut ink_bounds = Bounds::empty();
-    for element in ink.elements_mut() {
-        draw_new_segments(element, target, &paint, &mut ink_bounds);
-    }
-    // New Ink under the toolbar would overpaint it (and stack its shadow
-    // twice when it is painted again): rebuild everything instead.
-    if !full && region.is_some_and(|r| ink_bounds.hits(&r)) {
-        full = true;
-        redraw_all(ink, draw_mode, target, &paint, &mut bounds);
-    }
-    if let (true, Some(r)) = (full || toolbar_dirty, region) {
-        chrome.paint(target, format);
-        bounds.add_rect(r.to_bounds());
-    }
-    bounds.merge(&ink_bounds);
     chrome.done();
-    bounds.damage(w, h)
+    damage
 }
 
-/// Clears the surface and redraws every Element.
-fn redraw_all(
-    ink: &mut Ink,
+fn render_ink(
+    ink: &Ink,
+    pending: &mut Pending,
     draw_mode: bool,
+    scale: f32,
     target: &mut PixmapMut<'_>,
-    paint: &Paint<'_>,
-    bounds: &mut Bounds,
-) {
+    format: Format,
+) -> Option<Damage> {
+    let (w, h) = (target.width(), target.height());
     // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
     // sends clicks on fully transparent pixels to the apps underneath.
-    target.fill(Color::from_rgba8(0, 0, 0, u8::from(draw_mode)));
-    for element in ink.elements_mut() {
-        element.rendered = 0;
-        draw_new_segments(element, target, paint, bounds);
+    let backdrop = Color::from_rgba8(0, 0, 0, u8::from(draw_mode));
+    let Pending {
+        full,
+        dirty,
+        scratch,
+        builder,
+    } = pending;
+    if *full {
+        *full = false;
+        *dirty = None;
+        target.fill(backdrop);
+        let view = Damage {
+            x: 0,
+            y: 0,
+            width: w,
+            height: h,
+        };
+        draw_elements(ink, builder, target, view, scale, format);
+        return Some(view);
     }
-    bounds.add_rect([0.0, 0.0, to_f32(target.width()), to_f32(target.height())]);
+    let damage = damage_of(dirty.take()?, w, h)?;
+    let rows_per_band = (BAND_BYTES / (damage.width as usize * 4)).max(1);
+    let mut y = damage.y;
+    while y < damage.y + damage.height {
+        let rows = u32::try_from(rows_per_band)
+            .unwrap_or(u32::MAX)
+            .min(damage.y + damage.height - y);
+        let band = Damage {
+            y,
+            height: rows,
+            ..damage
+        };
+        draw_band(ink, builder, scratch, target, band, backdrop, scale, format);
+        y += rows;
+    }
+    Some(damage)
 }
 
-/// Whether any point of any Element is on or near `region`.
-fn ink_reaches(ink: &Ink, region: &Rect) -> bool {
-    ink.elements()
-        .iter()
-        .flat_map(Element::points)
-        .any(|&p| region.is_near(p, INK_WIDTH))
+/// Redraws one band of the damaged region through the scratch pixmap.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "internal helper over disjoint buffers"
+)]
+fn draw_band(
+    ink: &Ink,
+    builder: &mut Option<PathBuilder>,
+    scratch: &mut Vec<u8>,
+    target: &mut PixmapMut<'_>,
+    band: Damage,
+    backdrop: Color,
+    scale: f32,
+    format: Format,
+) {
+    let row_bytes = band.width as usize * 4;
+    let len = row_bytes * band.height as usize;
+    if scratch.len() < len {
+        scratch.resize(len, 0);
+    }
+    let Some(mut region) = PixmapMut::from_bytes(&mut scratch[..len], band.width, band.height)
+    else {
+        return;
+    };
+    region.fill(backdrop);
+    draw_elements(ink, builder, &mut region, band, scale, format);
+    let stride = target.width() as usize * 4;
+    let data = target.data_mut();
+    for (row, src) in scratch[..len].chunks_exact(row_bytes).enumerate() {
+        let start = (band.y as usize + row) * stride + band.x as usize * 4;
+        if let Some(dst) = data.get_mut(start..start + row_bytes) {
+            dst.copy_from_slice(src);
+        }
+    }
 }
 
-fn ink_paint(format: Format) -> Paint<'static> {
-    let [r, g, b] = INK_RGB;
+/// Fills every Element touching `view` (target pixels) into `pm`, whose
+/// top-left pixel is `view`'s top-left.
+fn draw_elements(
+    ink: &Ink,
+    builder: &mut Option<PathBuilder>,
+    pm: &mut PixmapMut<'_>,
+    view: Damage,
+    scale: f32,
+    format: Format,
+) {
+    let (ox, oy) = (to_f32(view.x), to_f32(view.y));
+    let (vr, vb) = (ox + to_f32(view.width), oy + to_f32(view.height));
+    for element in ink.elements() {
+        let Some([l, t, r, b]) = element.bounds() else {
+            continue;
+        };
+        let (ex, ey) = (element.x(), element.y());
+        let touches = (l + ex) * scale - DAMAGE_PAD < vr
+            && (r + ex) * scale + DAMAGE_PAD > ox
+            && (t + ey) * scale - DAMAGE_PAD < vb
+            && (b + ey) * scale + DAMAGE_PAD > oy;
+        if touches {
+            fill_element(element, builder, pm, (scale, ox, oy), format);
+        }
+    }
+}
+
+/// Fills one Element. Vertices are mapped to absolute target pixels first and
+/// the integer view origin is subtracted last: that subtraction is exact, so a
+/// band redraw rasterizes bit-identically to a full redraw (a combined
+/// transform would round differently and flip edge-coverage samples).
+fn fill_element(
+    element: &Element,
+    builder: &mut Option<PathBuilder>,
+    pm: &mut PixmapMut<'_>,
+    (scale, ox, oy): (f32, f32, f32),
+    format: Format,
+) {
+    let outline = element.outline();
+    if outline.len() < 3 {
+        return;
+    }
+    let (ex, ey) = (element.x(), element.y());
+    let absolute = |v: [f32; 2]| ((v[0] + ex) * scale, (v[1] + ey) * scale);
+    let mut path = builder.take().unwrap_or_default();
+    let (x0, y0) = absolute(outline[0]);
+    path.move_to(x0 - ox, y0 - oy);
+    for (i, &v) in outline.iter().enumerate() {
+        let (x, y) = absolute(v);
+        let (nx, ny) = absolute(outline[(i + 1) % outline.len()]);
+        path.quad_to(
+            x - ox,
+            y - oy,
+            f32::midpoint(x, nx) - ox,
+            f32::midpoint(y, ny) - oy,
+        );
+    }
+    path.line_to(x0 - ox, y0 - oy);
+    path.close();
+    if let Some(path) = path.finish() {
+        pm.fill_path(
+            &path,
+            &ink_paint(element, format),
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+        *builder = Some(path.clear());
+    }
+}
+
+fn ink_paint(element: &Element, format: Format) -> Paint<'static> {
+    let [r, g, b] = element.stroke_color();
     let (r, b) = if format == Format::Bgra {
         (b, r)
     } else {
         (r, b)
     };
+    let alpha = u16::from(element.opacity().min(100)) * 255 / 100;
     let mut paint = Paint::default();
-    paint.set_color_rgba8(r, g, b, 0xff);
+    paint.set_color_rgba8(r, g, b, u8::try_from(alpha).unwrap_or(255));
     paint.anti_alias = true;
     paint
 }
 
-fn draw_new_segments(
-    element: &mut Element,
-    target: &mut PixmapMut<'_>,
-    paint: &Paint<'_>,
-    bounds: &mut Bounds,
-) {
-    let len = element.points().len();
-    let from = element.rendered;
-    element.rendered = len;
-    if from >= len {
-        return;
-    }
-    let stroke = Stroke {
-        width: INK_WIDTH,
-        line_cap: LineCap::Round,
-        line_join: LineJoin::Round,
-        ..Stroke::default()
-    };
-    let points = element.points();
-    if len == 1 {
-        let at = points[0];
-        if let Some(dot) = PathBuilder::from_circle(at.x, at.y, INK_WIDTH / 2.0) {
-            target.fill_path(
-                &dot,
-                paint,
-                tiny_skia::FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-            bounds.add_segment(at, at);
-        }
-        return;
-    }
-    for pair in points[from.saturating_sub(1)..].windows(2) {
-        let mut pb = PathBuilder::new();
-        pb.move_to(pair[0].x, pair[0].y);
-        pb.line_to(pair[1].x, pair[1].y);
-        if let Some(path) = pb.finish() {
-            target.stroke_path(&path, paint, &stroke, Transform::identity(), None);
-            bounds.add_segment(pair[0], pair[1]);
-        }
-    }
+/// A damage rectangle as physical `[l, t, r, b]`.
+fn bounds_of(d: Damage) -> Rect {
+    [
+        to_f32(d.x),
+        to_f32(d.y),
+        to_f32(d.x + d.width),
+        to_f32(d.y + d.height),
+    ]
 }
 
-/// Union of changed rectangles, in f32 target coordinates.
-struct Bounds(Option<[f32; 4]>);
-
-impl Bounds {
-    fn empty() -> Self {
-        Self(None)
-    }
-
-    fn add_rect(&mut self, [l, t, r, b]: [f32; 4]) {
-        if ![l, t, r, b].iter().all(|v| v.is_finite()) {
-            return;
-        }
-        self.0 = Some(match self.0 {
-            None => [l, t, r, b],
-            Some([ol, ot, or, ob]) => [l.min(ol), t.min(ot), r.max(or), b.max(ob)],
-        });
-    }
-
-    fn add_segment(&mut self, a: Point, b: Point) {
-        let pad = INK_WIDTH / 2.0 + 1.0;
-        self.add_rect([
-            a.x.min(b.x) - pad,
-            a.y.min(b.y) - pad,
-            a.x.max(b.x) + pad,
-            a.y.max(b.y) + pad,
-        ]);
-    }
-
-    fn merge(&mut self, other: &Bounds) {
-        if let Some(rect) = other.0 {
-            self.add_rect(rect);
-        }
-    }
-
-    fn hits(&self, region: &Rect) -> bool {
-        self.0
-            .is_some_and(|rect| region.intersects(&Rect::from_bounds(rect)))
-    }
-
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "values are clamped to the target size first"
-    )]
-    fn damage(&self, width: u32, height: u32) -> Option<Damage> {
-        let [left, top, right, bottom] = self.0?;
-        let clamp = |v: f32, max: u32| v.clamp(0.0, to_f32(max)) as u32;
-        let (x0, y0) = (clamp(left.floor(), width), clamp(top.floor(), height));
-        let (x1, y1) = (clamp(right.ceil(), width), clamp(bottom.ceil(), height));
-        (x1 > x0 && y1 > y0).then(|| Damage {
-            x: x0,
-            y: y0,
-            width: x1 - x0,
-            height: y1 - y0,
-        })
-    }
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "values are clamped to the target size first"
+)]
+fn damage_of([left, top, right, bottom]: Rect, width: u32, height: u32) -> Option<Damage> {
+    let clamp = |v: f32, max: u32| v.clamp(0.0, to_f32(max)) as u32;
+    let (x0, y0) = (clamp(left.floor(), width), clamp(top.floor(), height));
+    let (x1, y1) = (clamp(right.ceil(), width), clamp(bottom.ceil(), height));
+    (x1 > x0 && y1 > y0).then(|| Damage {
+        x: x0,
+        y: y0,
+        width: x1 - x0,
+        height: y1 - y0,
+    })
 }
 
 #[allow(clippy::cast_precision_loss, reason = "pixel sizes are far below 2^24")]

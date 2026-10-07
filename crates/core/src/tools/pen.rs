@@ -1,8 +1,7 @@
 //! The Pen: one Stroke from pointer down to pointer up.
 //!
-//! The Stroke is an Element at the end of the Ink that grows with each point.
-//! Excalidraw's freehand outline arrives with the freehand ticket; it extends
-//! this Tool, not the others.
+//! The Stroke is the last Element of the Ink. It grows with each pointer
+//! event; the freehand outline and its damage come from `Element`.
 
 use super::{Ctx, Cursor, Tool};
 use crate::icons::{self, Icon};
@@ -31,22 +30,33 @@ impl Tool for Pen {
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {
         // A lost pointer-up must not merge two Strokes into one log entry.
         self.finish(ctx);
-        self.stroking = true;
-        ctx.ink.add(Element::start(at));
+        if let Some(at) = ctx.logical(at) {
+            self.stroking = true;
+            let element = Element::start(*ctx.next_id, at, ctx.pressure);
+            *ctx.next_id += 1;
+            ctx.ink.add(element);
+            ctx.advance(Element::preview);
+        }
     }
 
     fn pointer_move(&mut self, ctx: &mut Ctx<'_>, at: Point) {
         if self.stroking {
-            if let Some(element) = ctx.ink.last_mut() {
-                element.push(at);
+            if let Some(at) = ctx.logical(at) {
+                let pressure = ctx.pressure;
+                ctx.advance(|e, scratch| e.push(at, pressure, scratch));
             }
         }
     }
 
     fn pointer_up(&mut self, ctx: &mut Ctx<'_>, at: Point) {
         if self.stroking {
-            self.pointer_move(ctx, at);
-            self.finish(ctx);
+            let (at, pressure) = (ctx.logical(at), ctx.pressure);
+            ctx.advance(|e, scratch| match at {
+                Some(at) => e.commit(at, pressure, scratch),
+                None => e.finish(scratch),
+            });
+            self.stroking = false;
+            ctx.history.record_add();
         }
     }
 
@@ -67,6 +77,7 @@ impl Tool for Pen {
 
     fn finish(&mut self, ctx: &mut Ctx<'_>) {
         if self.stroking {
+            ctx.advance(Element::finish);
             self.stroking = false;
             ctx.history.record_add();
         }

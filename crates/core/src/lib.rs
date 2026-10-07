@@ -3,6 +3,8 @@
 //! One way in: [`Annotator::handle`] takes an [`Event`]. Out come the
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
+mod config;
+pub mod freehand;
 mod history;
 mod icons;
 mod ink;
@@ -11,6 +13,8 @@ mod svg_path;
 mod toolbar;
 mod tools;
 
+pub use config::Config;
+use freehand::Scratch;
 use history::History;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
@@ -31,18 +35,23 @@ pub enum Event {
     ToggleDrawMode(DisplayId),
     /// The platform's pixel buffer is new or was wiped: redraw everything.
     SurfaceReset,
-    /// The Overlay's size in physical pixels and its scale factor. Send it
-    /// before the first render and whenever either changes.
+    /// The Overlay's size in physical pixels, for laying out the toolbar.
+    /// Send it when the Overlay is created.
     Resize {
         width: u32,
         height: u32,
-        scale: f32,
     },
     /// The OS light or dark theme.
     Theme(Theme),
+    /// Physical pixels.
     PointerDown(Point),
     PointerMove(Point),
     PointerUp(Point),
+    /// Pressure (0..=1) of the pointer events that follow, until changed.
+    /// `None` is a mouse or trackpad: the Stroke simulates pressure.
+    Pressure(Option<f32>),
+    /// Physical pixels per logical pixel of the Overlay (default 1).
+    ScaleFactor(f32),
     /// A key press in Draw Mode. The platform layer resolves `command` to
     /// Cmd on macOS and Ctrl on Windows.
     Key {
@@ -91,28 +100,36 @@ pub struct Annotator {
     display: Option<DisplayId>,
     history: History,
     paint: render::Pending,
+    freehand: Scratch,
+    scale: f32,
+    pressure: Option<f32>,
+    next_id: u64,
     tools: Tools,
     toolbar: Toolbar,
 }
 
 impl Default for Annotator {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Annotator {
-    #[must_use]
-    pub fn new() -> Self {
         Self {
             ink: Ink::default(),
             draw_mode: false,
             display: None,
             history: History::default(),
             paint: render::Pending::default(),
+            freehand: Scratch::default(),
+            scale: 1.0,
+            pressure: None,
+            next_id: 1,
             tools: Tools::new(),
             toolbar: Toolbar::default(),
         }
+    }
+}
+
+impl Annotator {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// The single way into the core.
@@ -120,15 +137,17 @@ impl Annotator {
         match event {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
-            Event::Resize {
-                width,
-                height,
-                scale,
-            } => {
-                self.toolbar.resize(width, height, scale);
+            Event::Resize { width, height } => {
+                self.toolbar.resize(width, height);
                 self.paint.full();
             }
             Event::Theme(theme) => self.toolbar.theme = theme,
+            Event::Pressure(p) => self.pressure = p.filter(|p| p.is_finite()),
+            Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
+                self.scale = scale;
+                self.toolbar.set_scale(scale);
+                self.paint.full();
+            }
             Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
             Event::PointerMove(at) if self.draw_mode => self.pointer_move(at),
             Event::PointerUp(at) if self.draw_mode => self.pointer_up(at),
@@ -151,7 +170,6 @@ impl Annotator {
             overlay_needed: self.draw_mode || !self.ink.is_empty(),
             display: self.display,
             needs_render: self.paint.is_pending()
-                || self.ink.has_unrendered()
                 || self.toolbar.is_dirty(self.draw_mode, self.ui()),
             cursor: match self.tools.get(self.tools.active()) {
                 Some(tool) if !over_toolbar => tool.cursor(),
@@ -195,9 +213,10 @@ impl Annotator {
             tools: &self.tools,
         };
         render::render(
-            &mut self.ink,
+            &self.ink,
             &mut self.paint,
             self.draw_mode,
+            self.scale,
             target,
             format,
             chrome,
@@ -219,6 +238,10 @@ impl Annotator {
             ink: &mut self.ink,
             history: &mut self.history,
             paint: &mut self.paint,
+            freehand: &mut self.freehand,
+            next_id: &mut self.next_id,
+            scale: self.scale,
+            pressure: self.pressure,
         };
         (self.tools.active_mut(), ctx)
     }

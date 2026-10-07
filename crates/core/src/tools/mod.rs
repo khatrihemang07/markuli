@@ -7,9 +7,10 @@
 
 mod pen;
 
+use crate::freehand::Scratch;
 use crate::history::History;
 use crate::icons::Icon;
-use crate::ink::{Ink, Point};
+use crate::ink::{Element, Ink, Point, Rect};
 use crate::render::Pending;
 use crate::Key;
 use std::fmt::Debug;
@@ -27,6 +28,33 @@ pub(crate) struct Ctx<'a> {
     pub ink: &'a mut Ink,
     pub history: &'a mut History,
     pub paint: &'a mut Pending,
+    pub freehand: &'a mut Scratch,
+    pub next_id: &'a mut u64,
+    /// Physical pixels per logical pixel of the Overlay.
+    pub scale: f32,
+    /// Pressure of the pointer events in flight; `None` simulates it.
+    pub pressure: Option<f32>,
+}
+
+impl Ctx<'_> {
+    /// Physical pointer position to logical Element coordinates.
+    pub fn logical(&self, at: Point) -> Option<Point> {
+        (at.x.is_finite() && at.y.is_finite()).then(|| Point {
+            x: at.x / self.scale,
+            y: at.y / self.scale,
+        })
+    }
+
+    /// Runs `step` on the last Element (the Stroke in progress) and marks
+    /// what it changed.
+    pub fn advance(&mut self, step: impl FnOnce(&mut Element, &mut Scratch) -> Option<Rect>) {
+        if let Some(element) = self.ink.last_mut() {
+            let origin = (element.x(), element.y());
+            if let Some(local) = step(element, self.freehand) {
+                self.paint.damage_local(local, origin, self.scale);
+            }
+        }
+    }
 }
 
 pub(crate) trait Tool: Debug {

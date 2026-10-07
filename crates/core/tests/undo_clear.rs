@@ -45,7 +45,8 @@ fn undo_removes_the_last_stroke_and_redo_brings_it_back() {
     let both = a.ink().clone();
     undo(&mut a);
     assert_eq!(a.ink().len(), 1);
-    assert_eq!(a.ink().elements()[0].points()[0], p(10.0, 10.0));
+    let first = &a.ink().elements()[0];
+    assert_eq!((first.x(), first.y()), (10.0, 10.0));
     undo(&mut a);
     assert!(a.ink().is_empty());
     redo(&mut a);
@@ -81,7 +82,8 @@ fn a_new_stroke_discards_the_redo_branch() {
     stroke(&mut a, 70.0);
     redo(&mut a);
     assert_eq!(a.ink().len(), 1);
-    assert_eq!(a.ink().elements()[0].points()[0], p(70.0, 70.0));
+    let first = &a.ink().elements()[0];
+    assert_eq!((first.x(), first.y()), (70.0, 70.0));
 }
 
 #[test]
@@ -183,7 +185,8 @@ fn esc_mid_stroke_discards_only_that_stroke() {
     a.handle(Event::PointerMove(p(95.0, 95.0)));
     a.handle(Event::PointerUp(p(95.0, 95.0)));
     assert_eq!(a.ink().len(), 1);
-    assert_eq!(a.ink().elements()[0].points()[0], p(10.0, 10.0));
+    let first = &a.ink().elements()[0];
+    assert_eq!((first.x(), first.y()), (10.0, 10.0));
     assert!(a.view().draw_mode);
     // The cancelled stroke left nothing to undo.
     undo(&mut a);

@@ -19,10 +19,10 @@ fn p(x: f32, y: f32) -> Point {
 fn scene(theme: Theme, scale: f32) -> Annotator {
     let mut a = Annotator::new();
     a.handle(Event::Theme(theme));
+    a.handle(Event::ScaleFactor(scale));
     a.handle(Event::Resize {
         width: W,
         height: H,
-        scale,
     });
     a.handle(Event::ToggleDrawMode(DisplayId(1)));
     a

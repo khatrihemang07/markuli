@@ -1,0 +1,7 @@
+{
+  "name": "markuli-fixture-gen",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only golden fixture generator for the Rust parity tests. Never shipped.",
+  "devDependencies": { "perfect-freehand": "1.2.0" }
+}

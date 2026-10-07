@@ -11,9 +11,7 @@ use crate::icons::{self, Icon};
 use crate::ink::Point;
 use crate::render::Format;
 use crate::tools::Tools;
-use tiny_skia::{
-    BlendMode, Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Rect as SkRect, Transform,
-};
+use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Transform};
 
 /// The OS light or dark theme, an input to the core.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,32 +100,27 @@ pub(crate) enum Hit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Rect {
+pub(crate) struct Area {
     x: f32,
     y: f32,
     w: f32,
     h: f32,
 }
 
-impl Rect {
+impl Area {
     fn contains(&self, p: Point) -> bool {
         p.x >= self.x && p.y >= self.y && p.x < self.x + self.w && p.y < self.y + self.h
     }
 
-    pub fn intersects(&self, other: &Rect) -> bool {
+    pub fn intersects(&self, other: &Area) -> bool {
         self.x < other.x + other.w
             && other.x < self.x + self.w
             && self.y < other.y + other.h
             && other.y < self.y + self.h
     }
 
-    /// Whether `p` is within `margin` pixels of the rectangle.
-    pub fn is_near(&self, p: Point, margin: f32) -> bool {
-        self.grow([margin; 4]).contains(p)
-    }
-
-    fn grow(&self, [l, t, r, b]: [f32; 4]) -> Rect {
-        Rect {
+    fn grow(&self, [l, t, r, b]: [f32; 4]) -> Area {
+        Area {
             x: self.x - l,
             y: self.y - t,
             w: self.w + l + r,
@@ -135,9 +128,9 @@ impl Rect {
         }
     }
 
-    fn union(&self, o: &Rect) -> Rect {
+    fn union(&self, o: &Area) -> Area {
         let (x, y) = (self.x.min(o.x), self.y.min(o.y));
-        Rect {
+        Area {
             x,
             y,
             w: (self.x + self.w).max(o.x + o.w) - x,
@@ -145,8 +138,8 @@ impl Rect {
         }
     }
 
-    pub fn from_bounds([l, t, r, b]: [f32; 4]) -> Rect {
-        Rect {
+    pub fn from_bounds([l, t, r, b]: [f32; 4]) -> Area {
+        Area {
             x: l,
             y: t,
             w: r - l,
@@ -157,13 +150,9 @@ impl Rect {
     pub fn to_bounds(self) -> [f32; 4] {
         [self.x, self.y, self.x + self.w, self.y + self.h]
     }
-
-    fn sk(&self) -> Option<SkRect> {
-        SkRect::from_xywh(self.x, self.y, self.w, self.h)
-    }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Toolbar {
     pub theme: Theme,
     /// Overlay size in physical pixels, and its scale factor.
@@ -175,6 +164,20 @@ pub(crate) struct Toolbar {
     painted: Option<Look>,
 }
 
+impl Default for Toolbar {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            size: None,
+            scale: 1.0,
+            hover: None,
+            press: None,
+            over: false,
+            painted: None,
+        }
+    }
+}
+
 /// The toolbar's geometry for one Overlay size and Tool count.
 struct Layout {
     x0: f32,
@@ -184,13 +187,11 @@ struct Layout {
 }
 
 impl Toolbar {
-    pub fn resize(&mut self, width: u32, height: u32, scale: f32) {
-        let scale = if scale.is_finite() && scale > 0.0 {
-            scale
-        } else {
-            1.0
-        };
+    pub fn resize(&mut self, width: u32, height: u32) {
         self.size = Some((to_f32(width), to_f32(height)));
+    }
+
+    pub fn set_scale(&mut self, scale: f32) {
         self.scale = scale;
     }
 
@@ -245,14 +246,14 @@ impl Toolbar {
         })
     }
 
-    fn button_rect(l: &Layout, i: usize) -> Rect {
+    fn button_rect(l: &Layout, i: usize) -> Area {
         let (offset, j) = if i < l.tools {
             (PAD, i)
         } else {
             (l.first_width + ISLAND_GAP + PAD, i - l.tools)
         };
         let s = l.scale;
-        Rect {
+        Area {
             x: (l.x0 + offset + to_f32_usize(j) * (BUTTON + GAP)) * s,
             y: (TOP + PAD) * s,
             w: BUTTON * s,
@@ -260,10 +261,10 @@ impl Toolbar {
         }
     }
 
-    fn islands(l: &Layout) -> [Rect; 2] {
+    fn islands(l: &Layout) -> [Area; 2] {
         let s = l.scale;
         let height = (2.0 * PAD + BUTTON) * s;
-        let island = |x: f32, n: usize| Rect {
+        let island = |x: f32, n: usize| Area {
             x: x * s,
             y: TOP * s,
             w: (2.0 * PAD + to_f32_usize(n) * BUTTON + to_f32_usize(n.saturating_sub(1)) * GAP) * s,
@@ -314,7 +315,7 @@ impl Toolbar {
     }
 
     /// Islands plus shadow: the area a repaint covers.
-    fn region(&self, tools: usize) -> Option<Rect> {
+    fn region(&self, tools: usize) -> Option<Area> {
         let l = self.layout(tools)?;
         let [a, b] = Self::islands(&l);
         let s = l.scale;
@@ -349,7 +350,7 @@ pub(crate) struct Chrome<'a> {
 
 impl Chrome<'_> {
     /// Where the toolbar is on screen right now, if it is shown.
-    pub fn region(&self) -> Option<Rect> {
+    pub fn region(&self) -> Option<Area> {
         if self.visible {
             self.toolbar.region(self.tools.len())
         } else {
@@ -440,7 +441,7 @@ impl Chrome<'_> {
 
 /// Stock `--shadow-island`, approximated by stacked translucent rounded
 /// rectangles, outermost first: (grow, offset down, alpha), logical pixels.
-fn shadow(target: &mut PixmapMut<'_>, island: Rect, s: f32, format: Format) {
+fn shadow(target: &mut PixmapMut<'_>, island: Area, s: f32, format: Format) {
     const LAYERS: [(f32, f32, f32); 6] = [
         (13.0, 7.0, 0.010),
         (10.0, 6.0, 0.015),
@@ -450,7 +451,7 @@ fn shadow(target: &mut PixmapMut<'_>, island: Rect, s: f32, format: Format) {
         (0.5, 0.0, 0.090),
     ];
     for (grow, dy, alpha) in LAYERS {
-        let r = Rect {
+        let r = Area {
             x: island.x - grow * s,
             y: island.y - grow * s + dy * s,
             w: island.w + 2.0 * grow * s,
@@ -479,14 +480,14 @@ fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'static> {
     paint
 }
 
-fn fill_rounded(target: &mut PixmapMut<'_>, r: Rect, radius: f32, paint: &Paint<'_>) {
+fn fill_rounded(target: &mut PixmapMut<'_>, r: Area, radius: f32, paint: &Paint<'_>) {
     if let Some(path) = rounded_rect(r, radius) {
         target.fill_path(&path, paint, FillRule::Winding, Transform::identity(), None);
     }
 }
 
 /// A rounded rectangle from four cubic corner arcs.
-fn rounded_rect(r: Rect, radius: f32) -> Option<Path> {
+fn rounded_rect(r: Area, radius: f32) -> Option<Path> {
     let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
     let k = radius * (1.0 - 0.552_284_8);
     let (x0, y0, x1, y1) = (r.x, r.y, r.x + r.w, r.y + r.h);
@@ -502,15 +503,6 @@ fn rounded_rect(r: Rect, radius: f32) -> Option<Path> {
     pb.cubic_to(x0, y0 + k, x0 + k, y0, x0 + radius, y0);
     pb.close();
     pb.finish()
-}
-
-/// Resets a rectangle to the Draw Mode backdrop (alpha 1, see `render`).
-pub(crate) fn clear_rect(target: &mut PixmapMut<'_>, r: Rect) {
-    let Some(rect) = r.sk() else { return };
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(0, 0, 0, 1);
-    paint.blend_mode = BlendMode::Source;
-    target.fill_rect(rect, &paint, Transform::identity(), None);
 }
 
 #[allow(clippy::cast_precision_loss, reason = "pixel sizes are far below 2^24")]

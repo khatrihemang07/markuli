@@ -54,8 +54,10 @@ fn a_stroke_in_draw_mode_adds_one_element_with_its_points() {
     assert_eq!(ink.len(), 1);
     assert_eq!(
         ink.elements()[0].points(),
-        &[p(10.0, 10.0), p(20.0, 15.0), p(30.0, 40.0)]
+        // Pointer up always appends its position, like Excalidraw.
+        &[p(0.0, 0.0), p(10.0, 5.0), p(20.0, 30.0), p(20.0, 30.0)]
     );
+    assert_eq!((ink.elements()[0].x(), ink.elements()[0].y()), (10.0, 10.0));
 }
 
 #[test]
