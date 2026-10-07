@@ -44,6 +44,8 @@ struct App {
     /// Exists only while the Settings window is open.
     settings: Option<SettingsWindow>,
     settings_id: Option<MenuId>,
+    /// Test hook: reopen Settings this many more times after it closes.
+    reopen: u32,
     quit_id: Option<MenuId>,
     tray: Option<TrayIcon>,
 }
@@ -131,7 +133,13 @@ impl App {
                 }
             }
             // Dropping the handle is what returns the window's memory.
-            SettingsEvent::Closed => self.settings = None,
+            SettingsEvent::Closed => {
+                self.settings = None;
+                if self.reopen > 0 {
+                    self.reopen -= 1;
+                    self.open_settings();
+                }
+            }
         }
     }
 
@@ -212,8 +220,13 @@ impl ApplicationHandler<UserEvent> for App {
         self.quit_id = Some(quit.id().clone());
         menu.append_items(&[&settings, &quit])
             .expect("failed to build the tray menu");
-        // Test hook: the tray menu cannot be clicked from a script.
-        if std::env::var_os("MARKULI_OPEN_SETTINGS").is_some() {
+        // Test hook: the tray menu cannot be clicked from a script. The value
+        // is how many times Settings opens (again after each close).
+        if let Some(times) = std::env::var("MARKULI_OPEN_SETTINGS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            self.reopen = times.saturating_sub(1);
             self.open_settings();
         }
         self.tray = Some(
@@ -324,6 +337,7 @@ fn main() {
         config,
         settings: None,
         settings_id: None,
+        reopen: 0,
         quit_id: None,
         tray: None,
     };
