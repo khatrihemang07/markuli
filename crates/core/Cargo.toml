@@ -14,6 +14,9 @@ workspace = true
 test-support = []
 
 [dependencies]
+# sin/cos/atan2/sqrt for the laser-pointer port. std uses the platform libm,
+# which differs from V8's fdlibm by an ulp and changes the corner-arc loop
+# count (fixture `zigzag_corners`), breaking parity. No dependencies.
 libm = { version = "0.2", default-features = false }
 # Rasterizer only; pure Rust, no OS dependencies.
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
