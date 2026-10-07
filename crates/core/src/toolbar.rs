@@ -9,6 +9,7 @@
 
 use crate::icons::{self, Icon};
 use crate::ink::Point;
+use crate::panel::{Panel, PanelView};
 use crate::render::Format;
 use crate::tools::Tools;
 use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Transform};
@@ -41,14 +42,23 @@ const ICON: f32 = 16.0;
 /// How far the shadow reaches around the islands, for damage and clearing.
 const SHADOW: [f32; 4] = [16.0, 16.0, 16.0, 24.0];
 
-struct Palette {
-    island: [u8; 3],
-    icon: [u8; 3],
-    hover: [u8; 3],
-    selected: [u8; 3],
-    selected_icon: [u8; 3],
-    disabled: [u8; 3],
-    hint: [u8; 3],
+/// Excalidraw's theme tokens, shared with the style panel.
+pub(crate) struct Palette {
+    pub island: [u8; 3],
+    pub icon: [u8; 3],
+    pub hover: [u8; 3],
+    pub selected: [u8; 3],
+    pub selected_icon: [u8; 3],
+    pub disabled: [u8; 3],
+    pub hint: [u8; 3],
+    /// Swatch border (`--color-gray-30`) and the active swatch outline
+    /// (`--color-primary-darkest`).
+    pub swatch_border: [u8; 3],
+    pub swatch_active: [u8; 3],
+    /// Range input: filled track, rest of the track, thumb.
+    pub track_fill: [u8; 3],
+    pub track_rest: [u8; 3],
+    pub thumb: [u8; 3],
 }
 
 const LIGHT: Palette = Palette {
@@ -59,6 +69,11 @@ const LIGHT: Palette = Palette {
     selected_icon: [0x03, 0x00, 0x64],
     disabled: [0xb8, 0xb8, 0xb8],
     hint: [0xb8, 0xb8, 0xb8],
+    swatch_border: [0xd6, 0xd6, 0xd6],
+    swatch_active: [0x4a, 0x47, 0xb1],
+    track_fill: [0xcc, 0xcc, 0xff],
+    track_rest: [0xec, 0xec, 0xf4],
+    thumb: [0x3d, 0x3d, 0x3d],
 };
 
 const DARK: Palette = Palette {
@@ -69,7 +84,21 @@ const DARK: Palette = Palette {
     selected_icon: [0xe0, 0xdf, 0xff],
     disabled: [0x5c, 0x5c, 0x5c],
     hint: [0x7a, 0x7a, 0x7a],
+    swatch_border: [0x5c, 0x5c, 0x66],
+    swatch_active: [0xa8, 0xa5, 0xff],
+    track_fill: [0x50, 0x4d, 0x7a],
+    track_rest: [0x32, 0x30, 0x39],
+    thumb: [0xe3, 0xe3, 0xe8],
 };
+
+impl Theme {
+    pub(crate) fn palette(self) -> &'static Palette {
+        match self {
+            Theme::Light => &LIGHT,
+            Theme::Dark => &DARK,
+        }
+    }
+}
 
 /// What decides how the toolbar looks besides the Toolbar's own state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,14 +130,14 @@ pub(crate) enum Hit {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Area {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
 }
 
 impl Area {
-    fn contains(&self, p: Point) -> bool {
+    pub fn contains(&self, p: Point) -> bool {
         p.x >= self.x && p.y >= self.y && p.x < self.x + self.w && p.y < self.y + self.h
     }
 
@@ -119,7 +148,7 @@ impl Area {
             && other.y < self.y + self.h
     }
 
-    fn grow(&self, [l, t, r, b]: [f32; 4]) -> Area {
+    pub fn grow(&self, [l, t, r, b]: [f32; 4]) -> Area {
         Area {
             x: self.x - l,
             y: self.y - t,
@@ -128,7 +157,7 @@ impl Area {
         }
     }
 
-    fn union(&self, o: &Area) -> Area {
+    pub fn union(&self, o: &Area) -> Area {
         let (x, y) = (self.x.min(o.x), self.y.min(o.y));
         Area {
             x,
@@ -346,9 +375,33 @@ pub(crate) struct Chrome<'a> {
     pub tools: &'a Tools,
     pub visible: bool,
     pub ui: UiState,
+    /// The style panel, and what it shows (`None`: hidden).
+    pub panel: &'a mut Panel,
+    pub panel_view: Option<PanelView>,
 }
 
 impl Chrome<'_> {
+    /// Where the style panel is on screen right now, if it is shown.
+    pub fn panel_region(&self) -> Option<Area> {
+        self.panel_view.map(|_| self.panel.region())
+    }
+
+    /// The region the style panel painted last (to clear it when it moves
+    /// away or changes).
+    pub fn panel_shown(&self) -> Option<Area> {
+        self.panel.shown()
+    }
+
+    pub fn panel_dirty(&self) -> bool {
+        self.panel.is_dirty(self.panel_view)
+    }
+
+    pub fn paint_panel(&self, target: &mut PixmapMut<'_>, format: Format) {
+        if let Some(view) = self.panel_view {
+            self.panel.paint(view, target, format);
+        }
+    }
+
     /// Where the toolbar is on screen right now, if it is shown.
     pub fn region(&self) -> Option<Area> {
         if self.visible {
@@ -368,10 +421,7 @@ impl Chrome<'_> {
             return;
         };
         let s = l.scale;
-        let colors = match toolbar.theme {
-            Theme::Light => &LIGHT,
-            Theme::Dark => &DARK,
-        };
+        let colors = toolbar.theme.palette();
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         for island in Toolbar::islands(&l) {
             shadow(target, island, s, format);
@@ -436,12 +486,13 @@ impl Chrome<'_> {
     /// Records what is now on screen.
     pub fn done(&mut self) {
         self.toolbar.painted = self.toolbar.look(self.visible, self.ui);
+        self.panel.done(self.panel_view);
     }
 }
 
 /// Stock `--shadow-island`, approximated by stacked translucent rounded
 /// rectangles, outermost first: (grow, offset down, alpha), logical pixels.
-fn shadow(target: &mut PixmapMut<'_>, island: Area, s: f32, format: Format) {
+pub(crate) fn shadow(target: &mut PixmapMut<'_>, island: Area, s: f32, format: Format) {
     const LAYERS: [(f32, f32, f32); 6] = [
         (13.0, 7.0, 0.010),
         (10.0, 6.0, 0.015),
@@ -466,7 +517,7 @@ fn shadow(target: &mut PixmapMut<'_>, island: Area, s: f32, format: Format) {
     }
 }
 
-fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'static> {
+pub(crate) fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'static> {
     let [r, g, b] = if format == Format::Bgra {
         [rgb[2], rgb[1], rgb[0]]
     } else {
@@ -480,14 +531,14 @@ fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'static> {
     paint
 }
 
-fn fill_rounded(target: &mut PixmapMut<'_>, r: Area, radius: f32, paint: &Paint<'_>) {
+pub(crate) fn fill_rounded(target: &mut PixmapMut<'_>, r: Area, radius: f32, paint: &Paint<'_>) {
     if let Some(path) = rounded_rect(r, radius) {
         target.fill_path(&path, paint, FillRule::Winding, Transform::identity(), None);
     }
 }
 
 /// A rounded rectangle from four cubic corner arcs.
-fn rounded_rect(r: Area, radius: f32) -> Option<Path> {
+pub(crate) fn rounded_rect(r: Area, radius: f32) -> Option<Path> {
     let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
     let k = radius * (1.0 - 0.552_284_8);
     let (x0, y0, x1, y1) = (r.x, r.y, r.x + r.w, r.y + r.h);

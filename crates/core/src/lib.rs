@@ -10,8 +10,10 @@ mod history;
 mod icons;
 mod ink;
 pub mod laser;
+mod panel;
 mod render;
 mod selection;
+mod style;
 mod svg_path;
 mod toolbar;
 mod tools;
@@ -21,12 +23,15 @@ use freehand::Scratch;
 use history::History;
 pub use ink::{Element, Ink, Point};
 use laser::Laser;
+use panel::{Panel, PanelView, Press};
 pub use render::{Damage, Format};
 use selection::Selection;
+pub use style::Control;
+use style::Style;
 pub use toolbar::{Button, Theme};
 use toolbar::{Chrome, Toolbar, UiState};
 pub use tools::Cursor;
-use tools::{Ctx, Tool, Tools};
+use tools::{Ctx, StyleTarget, Tool, Tools};
 
 /// Identifies a display. Opaque to the core: it only compares them, so that
 /// moving the Overlay to another display can Clear the Ink (ADR-0002).
@@ -129,6 +134,11 @@ pub struct Annotator {
     next_id: u64,
     tools: Tools,
     toolbar: Toolbar,
+    /// The style of the next Strokes, set by the style panel.
+    style: Style,
+    panel: Panel,
+    /// Style of the selected Elements before the panel gesture in progress.
+    restyling: Option<Vec<(usize, Style)>>,
 }
 
 impl Default for Annotator {
@@ -149,6 +159,9 @@ impl Default for Annotator {
             next_id: 1,
             tools: Tools::new(),
             toolbar: Toolbar::default(),
+            style: Style::default(),
+            panel: Panel::default(),
+            restyling: None,
         }
     }
 }
@@ -166,10 +179,12 @@ impl Annotator {
             Event::SurfaceReset => self.paint.full(),
             Event::Resize { width, height } => {
                 self.toolbar.resize(width, height);
+                self.panel.resize(width, height);
                 self.paint.full();
             }
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
+                self.panel.theme = theme;
                 self.selection.set_theme(theme);
             }
             Event::Modifiers { shift } => self.shift = shift,
@@ -177,6 +192,7 @@ impl Annotator {
             Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
                 self.scale = scale;
                 self.toolbar.set_scale(scale);
+                self.panel.set_scale(scale);
                 self.paint.full();
             }
             Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
@@ -197,13 +213,14 @@ impl Annotator {
 
     #[must_use]
     pub fn view(&self) -> View {
-        let over_toolbar = self.toolbar.over() && !self.tool_busy();
+        let over_toolbar = (self.toolbar.over() || self.panel.over()) && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
             overlay_needed: self.draw_mode || !self.ink.is_empty(),
             display: self.display,
             needs_render: self.paint.is_pending()
-                || self.toolbar.is_dirty(self.draw_mode, self.ui()),
+                || self.toolbar.is_dirty(self.draw_mode, self.ui())
+                || self.panel.is_dirty(self.panel_view()),
             cursor: match self.tools.get(self.tools.active()) {
                 Some(tool) if !over_toolbar => tool.cursor(),
                 _ => Cursor::Arrow,
@@ -247,6 +264,14 @@ impl Annotator {
         self.toolbar.center_of(button, self.tools.len())
     }
 
+    /// The centre of a style panel control in Overlay pixels (for
+    /// `Opacity`, the thumb at that value); `None` while the panel is hidden.
+    /// It shows for the Pen and, with a Selection, for the Select Tool.
+    #[must_use]
+    pub fn panel_center(&self, control: Control) -> Option<Point> {
+        self.panel_view().map(|_| self.panel.center_of(control))
+    }
+
     /// Draws what changed since the last call into `target` (premultiplied
     /// pixels, `format` channel order) and returns the changed region.
     pub fn render(
@@ -254,11 +279,14 @@ impl Annotator {
         target: &mut tiny_skia::PixmapMut<'_>,
         format: Format,
     ) -> Option<Damage> {
+        let panel_view = self.panel_view();
         let chrome = Chrome {
             visible: self.draw_mode,
             ui: self.ui(),
             toolbar: &mut self.toolbar,
             tools: &self.tools,
+            panel_view,
+            panel: &mut self.panel,
         };
         render::render(
             &self.ink,
@@ -282,6 +310,67 @@ impl Annotator {
         }
     }
 
+    /// What the style panel shows, or `None` while it is hidden: in Draw Mode,
+    /// for the Pen (the style of the next Strokes) and for the Select Tool
+    /// once something is selected (the Selection's style).
+    fn panel_view(&self) -> Option<PanelView> {
+        if !self.draw_mode || !self.panel.fits() {
+            return None;
+        }
+        let target = self.tools.get(self.tools.active()).map(Tool::styles);
+        match target {
+            Some(StyleTarget::NextStrokes) => Some(PanelView {
+                color: Some(self.style.color),
+                width: Some(self.style.width),
+                opacity: self.style.opacity,
+            }),
+            Some(StyleTarget::Selection) if !self.selection.is_empty() => {
+                let chosen = self
+                    .ink
+                    .elements()
+                    .iter()
+                    .filter(|e| self.selection.contains(e.id()));
+                chosen.map(Element::style).fold(None, |view, s| {
+                    Some(match view {
+                        None => PanelView {
+                            color: Some(s.color),
+                            width: Some(s.width),
+                            opacity: s.opacity,
+                        },
+                        Some(v) => PanelView {
+                            color: v.color.filter(|&c| c == s.color),
+                            #[allow(clippy::float_cmp, reason = "widths come from a fixed list")]
+                            width: v.width.filter(|&w| w == s.width),
+                            ..v
+                        },
+                    })
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// A style panel choice: it styles the Selection if there is one, else
+    /// the next Strokes.
+    fn choose(&mut self, control: Control) {
+        if self.selection.is_empty() {
+            self.style = self.style.with(control);
+        } else {
+            style::restyle(
+                &mut self.ink,
+                self.selection.ids(),
+                control,
+                &mut self.restyling,
+                (&mut self.freehand, &mut self.paint, self.scale),
+            );
+        }
+    }
+
+    /// The panel gesture ended: a restyle becomes one operation-log entry.
+    fn finish_restyle(&mut self) {
+        style::finish(self.restyling.take(), &self.ink, &mut self.history);
+    }
+
     /// The active Tool with what it may change.
     fn tool(&mut self) -> (&mut dyn Tool, Ctx<'_>) {
         let ctx = Ctx {
@@ -295,6 +384,7 @@ impl Annotator {
             scale: self.scale,
             pressure: self.pressure,
             shift: self.shift,
+            style: self.style,
         };
         (self.tools.active_mut(), ctx)
     }
@@ -307,6 +397,8 @@ impl Annotator {
     fn finish_gesture(&mut self) {
         let (tool, mut ctx) = self.tool();
         tool.finish(&mut ctx);
+        self.finish_restyle();
+        self.panel.release();
     }
 
     fn pointer_down(&mut self, at: Point) {
@@ -314,20 +406,42 @@ impl Annotator {
         if self.toolbar.press_at(at, self.tools.len()) {
             return;
         }
+        if self.panel_view().is_some() {
+            match self.panel.press_at(at) {
+                Press::Miss => {}
+                Press::Dead => return,
+                Press::Control(control) => {
+                    self.choose(control);
+                    return;
+                }
+            }
+        }
         let (tool, mut ctx) = self.tool();
         tool.pointer_down(&mut ctx, at);
     }
 
     fn pointer_move(&mut self, at: Point) {
         self.toolbar.hover_at(at, self.tools.len());
-        if !self.toolbar.pressing() {
+        if self.panel.pressing() {
+            if let Some(control) = self.panel.drag_to(at) {
+                self.choose(control);
+            }
+        } else if self.panel_view().is_some() {
+            self.panel.hover_at(at);
+        } else {
+            self.panel.forget_pointer();
+        }
+        if !self.toolbar.pressing() && !self.panel.pressing() {
             let (tool, mut ctx) = self.tool();
             tool.pointer_move(&mut ctx, at);
         }
     }
 
     fn pointer_up(&mut self, at: Point) {
-        if self.toolbar.pressing() {
+        if self.panel.pressing() {
+            self.panel.release();
+            self.finish_restyle();
+        } else if self.toolbar.pressing() {
             if let Some(button) = self.toolbar.release_at(at, self.tools.len()) {
                 self.activate(button);
             }
@@ -356,7 +470,7 @@ impl Annotator {
         match (key, command, shift) {
             // Undo, redo and switching wait for the Stroke to end: it is not
             // logged yet.
-            (Key::Char(_), _, _) if self.tool_busy() => {}
+            (Key::Char(_), _, _) if self.tool_busy() || self.panel.pressing() => {}
             (Key::Char('z'), true, false) => self.undo(),
             (Key::Char('z'), true, true) | (Key::Char('y'), true, false) => self.redo(),
             (Key::Char('a'), true, false) => {
@@ -393,13 +507,13 @@ impl Annotator {
     }
 
     fn undo(&mut self) {
-        if self.history.undo(&mut self.ink) {
+        if self.history.undo(&mut self.ink, &mut self.freehand) {
             self.ink_replaced();
         }
     }
 
     fn redo(&mut self) {
-        if self.history.redo(&mut self.ink) {
+        if self.history.redo(&mut self.ink, &mut self.freehand) {
             self.ink_replaced();
         }
     }
@@ -420,12 +534,14 @@ impl Annotator {
         self.selection.clear();
         self.laser.clear();
         self.toolbar.forget_pointer();
+        self.panel.forget_pointer();
         self.paint.full();
     }
 
     fn toggle(&mut self, display: DisplayId) {
         self.finish_gesture();
         self.toolbar.forget_pointer();
+        self.panel.forget_pointer();
         self.selection.clear();
         if self.draw_mode {
             self.draw_mode = false;

@@ -4,7 +4,9 @@
 //! it changed. Applying or reverting an entry swaps its payload with the Ink,
 //! so nothing is cloned and a Stroke's points exist exactly once.
 
+use crate::freehand::Scratch;
 use crate::ink::{Element, Ink};
+use crate::style::Style;
 
 #[derive(Debug)]
 enum Op {
@@ -29,6 +31,10 @@ enum Op {
     /// first). Applied: they are in the payload. Reverted: the payload is
     /// `None` and they are back in the Ink at their old positions.
     Erase(Vec<(usize, Option<Element>)>),
+    /// One style change of the Selection. Each entry is an Ink index and the
+    /// style the Element is *not* at: applying and reverting swap it in, like
+    /// `Move`.
+    Restyle(Vec<(usize, Style)>),
 }
 
 #[derive(Debug, Default)]
@@ -61,6 +67,12 @@ impl History {
         self.push(Op::Delete { indices, removed });
     }
 
+    /// Logs a restyle that already happened; `before` holds each restyled
+    /// Element's Ink index and its style before the change.
+    pub fn record_restyle(&mut self, before: Vec<(usize, Style)>) {
+        self.push(Op::Restyle(before));
+    }
+
     /// Logs an Eraser drag; `removed` is what it took out, with positions.
     pub fn record_erase(&mut self, removed: Vec<(usize, Element)>) {
         if !removed.is_empty() {
@@ -91,21 +103,21 @@ impl History {
     }
 
     /// Returns whether the Ink changed.
-    pub fn undo(&mut self, ink: &mut Ink) -> bool {
+    pub fn undo(&mut self, ink: &mut Ink, scratch: &mut Scratch) -> bool {
         let Some(index) = self.done.checked_sub(1) else {
             return false;
         };
-        let changed = flip(&mut self.ops[index], ink, Direction::Revert);
+        let changed = flip(&mut self.ops[index], ink, scratch, Direction::Revert);
         self.done = index;
         changed
     }
 
     /// Returns whether the Ink changed.
-    pub fn redo(&mut self, ink: &mut Ink) -> bool {
+    pub fn redo(&mut self, ink: &mut Ink, scratch: &mut Scratch) -> bool {
         let Some(op) = self.ops.get_mut(self.done) else {
             return false;
         };
-        let changed = flip(op, ink, Direction::Apply);
+        let changed = flip(op, ink, scratch, Direction::Apply);
         self.done += 1;
         changed
     }
@@ -117,7 +129,7 @@ enum Direction {
     Revert,
 }
 
-fn flip(op: &mut Op, ink: &mut Ink, direction: Direction) -> bool {
+fn flip(op: &mut Op, ink: &mut Ink, scratch: &mut Scratch, direction: Direction) -> bool {
     match (op, direction) {
         (Op::Add(slot), Direction::Revert) => {
             *slot = ink.pop();
@@ -148,6 +160,16 @@ fn flip(op: &mut Op, ink: &mut Ink, direction: Direction) -> bool {
         (Op::Clear(payload), _) => {
             ink.swap_elements(payload);
             true
+        }
+        (Op::Restyle(styles), _) => {
+            for (index, style) in styles.iter_mut() {
+                if let Some(element) = ink.get_mut(*index) {
+                    let current = element.style();
+                    element.set_style(*style, scratch);
+                    *style = current;
+                }
+            }
+            !styles.is_empty()
         }
         (Op::Move(positions), _) => {
             for (index, x, y) in positions.iter_mut() {

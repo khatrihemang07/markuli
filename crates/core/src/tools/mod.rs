@@ -17,6 +17,7 @@ use crate::ink::{Element, Ink, Point, Rect};
 use crate::laser::Laser;
 use crate::render::Pending;
 use crate::selection::Selection;
+use crate::style::Style;
 use crate::Key;
 use std::fmt::Debug;
 
@@ -25,6 +26,17 @@ use std::fmt::Debug;
 pub enum Cursor {
     Arrow,
     Crosshair,
+}
+
+/// What the style panel does while a Tool is active.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StyleTarget {
+    /// No panel: the Tool draws nothing styled.
+    None,
+    /// The panel styles the Strokes the Tool draws next.
+    NextStrokes,
+    /// The panel styles the Selection, and shows only when there is one.
+    Selection,
 }
 
 /// What a Tool may change. A struct of borrows, so a Tool never sees the
@@ -43,6 +55,8 @@ pub(crate) struct Ctx<'a> {
     pub pressure: Option<f32>,
     /// Shift is held.
     pub shift: bool,
+    /// The style of the next Strokes.
+    pub style: Style,
 }
 
 impl Ctx<'_> {
@@ -72,6 +86,10 @@ pub(crate) trait Tool: Debug {
     /// hint printed on its toolbar button.
     fn keys(&self) -> &'static [char];
     fn cursor(&self) -> Cursor;
+    /// What the style panel applies to while this Tool is active.
+    fn styles(&self) -> StyleTarget {
+        StyleTarget::None
+    }
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point);
     fn pointer_move(&mut self, ctx: &mut Ctx<'_>, at: Point);
     fn pointer_up(&mut self, ctx: &mut Ctx<'_>, at: Point);

@@ -9,7 +9,7 @@
 //!
 //! One gesture is one operation-log entry: a move is logged at pointer up.
 
-use super::{Ctx, Cursor, Tool};
+use super::{Ctx, Cursor, StyleTarget, Tool};
 use crate::icons::{self, Icon};
 use crate::ink::{Point, Rect};
 use crate::selection::{encloses, normalized};
@@ -56,6 +56,10 @@ impl Tool for Select {
 
     fn cursor(&self) -> Cursor {
         Cursor::Arrow
+    }
+
+    fn styles(&self) -> StyleTarget {
+        StyleTarget::Selection
     }
 
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {

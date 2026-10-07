@@ -1,6 +1,7 @@
 //! Ink and its Elements.
 
 use crate::freehand::Scratch;
+use crate::style::Style;
 
 /// A position, in pixels, origin top-left. Pointer events carry physical
 /// pixels; an Element's points are logical (physical / scale factor), like
@@ -17,11 +18,6 @@ const LOOP_THRESHOLD: f32 = 8.0;
 
 /// perfect-freehand `size` = strokeWidth * 4.25 (renderElement.ts).
 const SIZE_PER_WIDTH: f64 = 4.25;
-
-/// Defaults: Excalidraw red, medium width (Excalidraw's "bold", 2), opaque.
-pub(crate) const DEFAULT_COLOR: [u8; 3] = [0xe0, 0x31, 0x31];
-pub(crate) const DEFAULT_WIDTH: f32 = 2.0;
-pub(crate) const DEFAULT_OPACITY: u8 = 100;
 
 /// Axis-aligned box `[left, top, right, bottom]`.
 pub(crate) type Rect = [f32; 4];
@@ -57,7 +53,7 @@ pub struct Element {
 impl Element {
     /// A new Element whose first point is `at` (logical). A missing pressure,
     /// or exactly 0.5, means simulated (Excalidraw: `event.pressure === 0.5`).
-    pub(crate) fn start(id: u64, at: Point, pressure: Option<f32>) -> Self {
+    pub(crate) fn start(id: u64, at: Point, pressure: Option<f32>, style: Style) -> Self {
         let simulate_pressure = pressure.is_none_or(|p| (p - 0.5).abs() < f32::EPSILON);
         Self {
             id,
@@ -75,9 +71,9 @@ impl Element {
                 Vec::from([pressure.unwrap_or(0.5)])
             },
             simulate_pressure,
-            stroke_color: DEFAULT_COLOR,
-            stroke_width: DEFAULT_WIDTH,
-            opacity: DEFAULT_OPACITY,
+            stroke_color: style.color,
+            stroke_width: style.width,
+            opacity: style.opacity,
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "a seed only needs to differ"
@@ -249,6 +245,38 @@ impl Element {
     #[must_use]
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    pub(crate) fn style(&self) -> Style {
+        Style {
+            color: self.stroke_color,
+            width: self.stroke_width,
+            opacity: self.opacity,
+        }
+    }
+
+    /// Restyles the Element. A new width changes the geometry, so the cached
+    /// outline is recomputed (a committed Element's, with `last`). Returns the
+    /// element-local box covering the old and the new look.
+    pub(crate) fn set_style(&mut self, style: Style, scratch: &mut Scratch) -> Option<Rect> {
+        let old = self.bounds;
+        #[allow(clippy::float_cmp, reason = "widths are picked from a fixed list")]
+        let resized = style.width != self.stroke_width;
+        (self.stroke_color, self.stroke_width, self.opacity) =
+            (style.color, style.width, style.opacity);
+        self.version = self.version.wrapping_add(1);
+        if resized {
+            self.refresh(scratch, true);
+        }
+        match (old, self.bounds) {
+            (Some(old), Some(new)) => Some([
+                old[0].min(new[0]),
+                old[1].min(new[1]),
+                old[2].max(new[2]),
+                old[3].max(new[3]),
+            ]),
+            (either, other) => either.or(other),
+        }
     }
 
     /// Box around the input points, element-local.

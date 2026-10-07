@@ -3,7 +3,7 @@
 //! The Stroke is the last Element of the Ink. It grows with each pointer
 //! event; the freehand outline and its damage come from `Element`.
 
-use super::{Ctx, Cursor, Tool};
+use super::{Ctx, Cursor, StyleTarget, Tool};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
 use crate::Key;
@@ -27,12 +27,16 @@ impl Tool for Pen {
         Cursor::Crosshair
     }
 
+    fn styles(&self) -> StyleTarget {
+        StyleTarget::NextStrokes
+    }
+
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {
         // A lost pointer-up must not merge two Strokes into one log entry.
         self.finish(ctx);
         if let Some(at) = ctx.logical(at) {
             self.stroking = true;
-            let element = Element::start(*ctx.next_id, at, ctx.pressure);
+            let element = Element::start(*ctx.next_id, at, ctx.pressure, ctx.style);
             *ctx.next_id += 1;
             ctx.ink.add(element);
             ctx.advance(Element::preview);

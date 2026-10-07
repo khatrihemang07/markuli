@@ -142,17 +142,36 @@ pub fn render(
         }
         _ => {}
     }
-    grow_to_overlay(pending, selection);
+    // The style panel is repainted whole too: when it changed, the area it
+    // left and the area it takes are damage.
+    let panel = chrome.panel_region();
+    if chrome.panel_dirty() {
+        for area in [chrome.panel_shown(), panel].into_iter().flatten() {
+            pending.add_physical(area.to_bounds());
+        }
+    }
+    // Regions that overlap one another must be redrawn together, or a shadow
+    // would stack on itself; two passes reach every overlap of two regions.
+    for _ in 0..2 {
+        for r in [region, panel].into_iter().flatten() {
+            if pending.touches(r.to_bounds()) {
+                pending.add_physical(r.to_bounds());
+            }
+        }
+        grow_to_overlay(pending, selection);
+    }
     let damage = render_ink(ink, laser, pending, draw_mode, scale, target, format);
     if let (Some(area), Some(d)) = (selection.shown(), damage) {
         if overlaps(area, bounds_of(d)) {
             selection.paint(ink, target, scale, format);
         }
     }
-    if let (Some(r), Some(d)) = (region, damage) {
-        if r.intersects(&Area::from_bounds(bounds_of(d))) {
-            chrome.paint(target, format);
-        }
+    let hit = |r: Area| damage.is_some_and(|d| r.intersects(&Area::from_bounds(bounds_of(d))));
+    if region.is_some_and(hit) {
+        chrome.paint(target, format);
+    }
+    if panel.is_some_and(hit) {
+        chrome.paint_panel(target, format);
     }
     chrome.done();
     damage
