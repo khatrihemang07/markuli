@@ -281,11 +281,22 @@ fn scale_of(monitor: &MonitorHandle) -> f32 {
     monitor.scale_factor() as f32
 }
 
+/// A display is the same display only if position, size and scale all match:
+/// the Overlay must be rebuilt when the cursor's display changes resolution or
+/// scale at the same position (ADR-0002), and the Ink Clears with it.
 fn display_id(monitor: &MonitorHandle) -> DisplayId {
-    let position = monitor.position();
-    DisplayId::new(
-        (u64::from(position.x.cast_unsigned()) << 32) | u64::from(position.y.cast_unsigned()),
+    use std::hash::{Hash, Hasher};
+    let (position, size) = (monitor.position(), monitor.size());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (
+        position.x,
+        position.y,
+        size.width,
+        size.height,
+        monitor.scale_factor().to_bits(),
     )
+        .hash(&mut hasher);
+    DisplayId::new(hasher.finish())
 }
 
 fn create_overlay(event_loop: &ActiveEventLoop, monitor: &MonitorHandle) -> Overlay {
