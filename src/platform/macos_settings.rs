@@ -168,7 +168,10 @@ impl SettingsWindow {
 
         let add_row = |y: f64, name: &str, action, binding: Binding, text: &str| {
             let label = NSTextField::labelWithString(&NSString::from_str(name), mtm);
-            label.setFrame(NSRect::new(NSPoint::new(20.0, y + 4.0), NSSize::new(160.0, 20.0)));
+            label.setFrame(NSRect::new(
+                NSPoint::new(20.0, y + 4.0),
+                NSSize::new(160.0, 20.0),
+            ));
             content.addSubview(&label);
             // SAFETY: the target is the window, which implements `action`.
             let button = unsafe {
@@ -179,7 +182,10 @@ impl SettingsWindow {
                     mtm,
                 )
             };
-            button.setFrame(NSRect::new(NSPoint::new(190.0, y), NSSize::new(190.0, 28.0)));
+            button.setFrame(NSRect::new(
+                NSPoint::new(190.0, y),
+                NSSize::new(190.0, 28.0),
+            ));
             content.addSubview(&button);
             let cell = match binding {
                 Binding::Toggle => &ivars.toggle,
@@ -188,8 +194,20 @@ impl SettingsWindow {
             let _ = cell.set(button);
             text.clone_into(&mut ivars.shown.borrow_mut()[binding as usize]);
         };
-        add_row(150.0, "Toggle Draw Mode", sel!(recordToggle:), Binding::Toggle, &config.toggle);
-        add_row(110.0, "Clear", sel!(recordClear:), Binding::Clear, &config.clear);
+        add_row(
+            150.0,
+            "Toggle Draw Mode",
+            sel!(recordToggle:),
+            Binding::Toggle,
+            &config.toggle,
+        );
+        add_row(
+            110.0,
+            "Clear",
+            sel!(recordClear:),
+            Binding::Clear,
+            &config.clear,
+        );
 
         // SAFETY: the target is the window, which implements `loginChanged:`.
         let login = unsafe {
@@ -200,7 +218,10 @@ impl SettingsWindow {
                 mtm,
             )
         };
-        login.setFrame(NSRect::new(NSPoint::new(20.0, 70.0), NSSize::new(360.0, 24.0)));
+        login.setFrame(NSRect::new(
+            NSPoint::new(20.0, 70.0),
+            NSSize::new(360.0, 24.0),
+        ));
         login.setState(if config.launch_at_login {
             NSControlStateValueOn
         } else {
@@ -210,7 +231,10 @@ impl SettingsWindow {
         let _ = ivars.login.set(login);
 
         let message = NSTextField::labelWithString(&NSString::from_str(""), mtm);
-        message.setFrame(NSRect::new(NSPoint::new(20.0, 20.0), NSSize::new(360.0, 36.0)));
+        message.setFrame(NSRect::new(
+            NSPoint::new(20.0, 20.0),
+            NSSize::new(360.0, 36.0),
+        ));
         message.setTextColor(Some(&NSColor::systemRedColor()));
         content.addSubview(&message);
         let _ = ivars.message.set(message);
