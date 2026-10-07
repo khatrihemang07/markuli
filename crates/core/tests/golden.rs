@@ -114,3 +114,49 @@ fn toolbar_after_undo_enables_redo_in_dark_theme() {
     a.handle(Event::PointerMove(p(300.0, 100.0)));
     check("toolbar_dark_after_undo", &image(&mut a, dark_page()));
 }
+
+fn press_key(a: &mut Annotator, c: char) {
+    a.handle(Event::Key {
+        key: markuli_core::Key::Char(c),
+        command: false,
+        shift: false,
+    });
+}
+
+/// Two strokes drawn, then one selected with a click.
+fn one_selected(theme: Theme, scale: f32) -> Annotator {
+    let mut a = scene(theme, scale);
+    a.handle(Event::PointerDown(p(30.0, 70.0)));
+    a.handle(Event::PointerMove(p(80.0, 110.0)));
+    a.handle(Event::PointerUp(p(130.0, 80.0)));
+    a.handle(Event::PointerDown(p(200.0, 120.0)));
+    a.handle(Event::PointerMove(p(250.0, 90.0)));
+    a.handle(Event::PointerUp(p(320.0, 130.0)));
+    press_key(&mut a, 'v');
+    a.handle(Event::PointerDown(p(80.0, 110.0)));
+    a.handle(Event::PointerUp(p(80.0, 110.0)));
+    a
+}
+
+#[test]
+fn selection_of_one_element_light() {
+    let a = &mut one_selected(Theme::Light, 1.0);
+    check("selection_one_light", &image(a, WHITE_PAGE));
+}
+
+#[test]
+fn selection_of_two_elements_has_a_dashed_common_box() {
+    let a = &mut one_selected(Theme::Light, 1.0);
+    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::PointerDown(p(250.0, 90.0)));
+    a.handle(Event::PointerUp(p(250.0, 90.0)));
+    check("selection_two_light", &image(a, WHITE_PAGE));
+}
+
+#[test]
+fn selection_box_while_dragging_dark() {
+    let a = &mut one_selected(Theme::Dark, 1.0);
+    a.handle(Event::PointerDown(p(10.0, 50.0)));
+    a.handle(Event::PointerMove(p(150.0, 140.0)));
+    check("selection_box_dark", &image(a, dark_page()));
+}

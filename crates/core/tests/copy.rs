@@ -278,6 +278,21 @@ fn a_deleted_element_is_not_copied() {
     assert_eq!(elements(&doc)[0]["y"].as_f64(), Some(300.0));
 }
 
+/// Writes `$MARKULI_DUMP_DIR/clipboard-sample.json` for checking the text
+/// against Excalidraw's own `restoreElements` (see the implementation log).
+#[test]
+fn dump_a_sample_when_asked() {
+    let Ok(dir) = std::env::var("MARKULI_DUMP_DIR") else {
+        return;
+    };
+    let mut a = session();
+    stroke(&mut a, &[(100.0, 100.0), (150.0, 130.0), (210.0, 120.5)]);
+    a.handle(Event::Pressure(Some(0.8)));
+    stroke(&mut a, &[(300.0, 300.0), (350.0, 340.0), (400.0, 330.0)]);
+    let text = copy(&mut a).expect("ink to copy");
+    std::fs::write(format!("{dir}/clipboard-sample.json"), text).expect("write sample");
+}
+
 #[test]
 fn tiny_and_huge_numbers_stay_valid_json() {
     let mut a = session();
