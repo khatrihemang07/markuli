@@ -7,7 +7,7 @@ mod platform;
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use markuli_core::{Annotator, DisplayId, Event, Key, Point, View};
+use markuli_core::{Annotator, Cursor, DisplayId, Event, Key, Point, Theme, View};
 use platform::Presenter;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
@@ -17,7 +17,7 @@ use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
-use winit::window::{CursorIcon, Window, WindowId};
+use winit::window::{CursorIcon, Theme as OsTheme, Window, WindowId};
 
 /// Wake-ups sent from the hotkey and menu callbacks, so the loop never polls.
 enum UserEvent {
@@ -36,6 +36,7 @@ struct App {
     core: Annotator,
     overlay: Option<Overlay>,
     cursor: Point,
+    cursor_shape: Cursor,
     modifiers: ModifiersState,
     toggle_id: u32,
     clear_id: u32,
@@ -72,6 +73,7 @@ impl App {
         if self.overlay.is_none() {
             let Some(monitor) = monitor else { return };
             self.overlay = Some(create_overlay(event_loop, monitor));
+            self.send_surface();
             self.core.handle(Event::SurfaceReset);
         }
         let Some(overlay) = self.overlay.as_ref() else {
@@ -81,7 +83,7 @@ impl App {
             .presenter
             .set_click_through(&overlay.window, view.click_through());
         if view.draw_mode {
-            overlay.window.set_cursor(CursorIcon::Crosshair);
+            overlay.window.set_cursor(cursor_icon(view.cursor));
             overlay.window.focus_window();
         }
         // First frame is painted before the window shows: no flash.
@@ -89,6 +91,25 @@ impl App {
         if let Some(overlay) = self.overlay.as_ref() {
             overlay.window.set_visible(true);
         }
+    }
+
+    /// Tells the core the new Overlay's size, scale and the OS theme. winit
+    /// reads the theme from `effectiveAppearance` on macOS and the
+    /// `AppsUseLightTheme` registry value on Windows.
+    fn send_surface(&mut self) {
+        let Some(overlay) = self.overlay.as_ref() else {
+            return;
+        };
+        let size = overlay.window.inner_size();
+        let scale = overlay.window.scale_factor();
+        let theme = overlay.window.theme();
+        #[allow(clippy::cast_possible_truncation, reason = "scale factors are small")]
+        self.core.handle(Event::Resize {
+            width: size.width,
+            height: size.height,
+            scale: scale as f32,
+        });
+        self.core.handle(Event::Theme(theme_of(theme)));
     }
 
     fn redraw(&mut self) {
@@ -108,7 +129,7 @@ impl App {
         self.sync(event_loop, view, None);
     }
 
-    fn key(&mut self, event: &KeyEvent) {
+    fn key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
         if event.state != ElementState::Pressed {
             return;
         }
@@ -120,15 +141,32 @@ impl App {
             },
             _ => return,
         };
-        self.pointer(Event::Key {
-            key,
-            command: platform::command_held(self.modifiers),
-            shift: self.modifiers.shift_key(),
-        });
+        self.input(
+            event_loop,
+            Event::Key {
+                key,
+                command: platform::command_held(self.modifiers),
+                shift: self.modifiers.shift_key(),
+            },
+        );
     }
 
-    fn pointer(&mut self, event: Event) {
+    /// Feeds an input event to the core and applies what changed: a toolbar
+    /// Clear leaves Draw Mode (`sync`), anything else only repaints and
+    /// updates the cursor shape.
+    fn input(&mut self, event_loop: &ActiveEventLoop, event: Event) {
+        let was_drawing = self.core.view().draw_mode;
         let view = self.core.handle(event);
+        if view.draw_mode != was_drawing || !view.overlay_needed {
+            self.sync(event_loop, view, None);
+            return;
+        }
+        if view.cursor != self.cursor_shape {
+            self.cursor_shape = view.cursor;
+            if let Some(overlay) = self.overlay.as_ref() {
+                overlay.window.set_cursor(cursor_icon(view.cursor));
+            }
+        }
         if view.needs_render {
             self.redraw();
         }
@@ -197,24 +235,44 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
-    fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
-            WindowEvent::KeyboardInput { event, .. } => self.key(&event),
+            WindowEvent::KeyboardInput { event, .. } => self.key(event_loop, &event),
+            WindowEvent::ThemeChanged(theme) => {
+                self.input(event_loop, Event::Theme(theme_of(Some(theme))));
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
-                self.pointer(Event::PointerMove(self.cursor));
+                self.input(event_loop, Event::PointerMove(self.cursor));
             }
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state,
                 ..
-            } => self.pointer(match state {
-                ElementState::Pressed => Event::PointerDown(self.cursor),
-                ElementState::Released => Event::PointerUp(self.cursor),
-            }),
+            } => self.input(
+                event_loop,
+                match state {
+                    ElementState::Pressed => Event::PointerDown(self.cursor),
+                    ElementState::Released => Event::PointerUp(self.cursor),
+                },
+            ),
             _ => {}
         }
+    }
+}
+
+fn theme_of(theme: Option<OsTheme>) -> Theme {
+    match theme {
+        Some(OsTheme::Dark) => Theme::Dark,
+        _ => Theme::Light,
+    }
+}
+
+fn cursor_icon(cursor: Cursor) -> CursorIcon {
+    match cursor {
+        Cursor::Arrow => CursorIcon::Default,
+        Cursor::Crosshair => CursorIcon::Crosshair,
     }
 }
 
@@ -280,6 +338,7 @@ fn main() {
         core: Annotator::new(),
         overlay: None,
         cursor: Point { x: 0.0, y: 0.0 },
+        cursor_shape: Cursor::Crosshair,
         modifiers: ModifiersState::empty(),
         toggle_id: toggle.id(),
         clear_id: clear.id(),
