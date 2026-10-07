@@ -13,7 +13,7 @@ use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::monitor::MonitorHandle;
 use winit::window::{CursorIcon, Window, WindowId};
@@ -67,6 +67,7 @@ impl App {
         if self.overlay.is_none() {
             let Some(monitor) = monitor else { return };
             self.overlay = Some(create_overlay(event_loop, monitor));
+            self.core.handle(Event::ScaleFactor(scale_of(monitor)));
             self.core.handle(Event::SurfaceReset);
         }
         let Some(overlay) = self.overlay.as_ref() else {
@@ -102,6 +103,11 @@ impl App {
             self.redraw();
         }
     }
+}
+
+#[allow(clippy::cast_possible_truncation, reason = "scale factors are small")]
+fn scale_of(monitor: &MonitorHandle) -> f32 {
+    monitor.scale_factor() as f32
 }
 
 fn display_id(monitor: &MonitorHandle) -> DisplayId {
@@ -165,16 +171,35 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
+                self.core.handle(Event::Pressure(platform::pen_pressure()));
                 self.pointer(Event::PointerMove(self.cursor));
             }
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state,
                 ..
-            } => self.pointer(match state {
-                ElementState::Pressed => Event::PointerDown(self.cursor),
-                ElementState::Released => Event::PointerUp(self.cursor),
-            }),
+            } => {
+                self.core.handle(Event::Pressure(platform::pen_pressure()));
+                self.pointer(match state {
+                    ElementState::Pressed => Event::PointerDown(self.cursor),
+                    ElementState::Released => Event::PointerUp(self.cursor),
+                });
+            }
+            // Windows pens (and touch) arrive here, with the pen's force.
+            WindowEvent::Touch(touch) => {
+                self.cursor = point(touch.location);
+                let pressure = touch.force.map(|f| {
+                    #[allow(clippy::cast_possible_truncation, reason = "0..=1")]
+                    let p = f.normalized() as f32;
+                    p
+                });
+                self.core.handle(Event::Pressure(pressure));
+                self.pointer(match touch.phase {
+                    TouchPhase::Started => Event::PointerDown(self.cursor),
+                    TouchPhase::Moved => Event::PointerMove(self.cursor),
+                    TouchPhase::Ended | TouchPhase::Cancelled => Event::PointerUp(self.cursor),
+                });
+            }
             _ => {}
         }
     }

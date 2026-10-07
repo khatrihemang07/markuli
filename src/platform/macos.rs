@@ -5,7 +5,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, MainThreadMarker};
 use objc2_app_kit::{
-    NSEvent, NSScreen, NSScreenSaverWindowLevel, NSView, NSWindowCollectionBehavior,
+    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSScreen, NSScreenSaverWindowLevel, NSView,
+    NSWindowCollectionBehavior,
 };
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
@@ -55,6 +56,21 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
         );
         x >= left && y >= top && x < left + width && y < top + height
     })
+}
+
+/// Pressure (0..=1) of the stylus behind the mouse event being dispatched, or
+/// `None` for a mouse or trackpad. winit does not expose this, so read the
+/// current `NSEvent`. Only the subtype `TabletPoint` counts: a Force Touch
+/// trackpad also reports `pressure`, and must keep simulating it. Own-app
+/// events only: no permission needed. Unverified on real tablet hardware.
+pub fn pen_pressure() -> Option<f32> {
+    let event = NSApplication::sharedApplication(MainThreadMarker::new()?).currentEvent()?;
+    // `subtype` raises on event types that have none, so check the type first.
+    let is_mouse = matches!(
+        event.r#type(),
+        NSEventType::LeftMouseDown | NSEventType::LeftMouseDragged | NSEventType::LeftMouseUp
+    );
+    (is_mouse && event.subtype() == NSEventSubtype::TabletPoint).then(|| event.pressure())
 }
 
 pub struct Presenter {

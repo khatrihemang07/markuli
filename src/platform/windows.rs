@@ -61,6 +61,12 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
     })
 }
 
+/// Windows pens arrive as touch events with a force (see `main.rs`), so
+/// mouse events carry no pressure.
+pub fn pen_pressure() -> Option<f32> {
+    None
+}
+
 pub struct Presenter {
     hwnd: HWND,
     dc: HDC,
