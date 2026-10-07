@@ -12,5 +12,8 @@ workspace = true
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
 
 [dev-dependencies]
+# Independent JSON parser to check the hand-written clipboard JSON; tests only,
+# never linked into the app (the app itself uses no serde).
+serde_json = { version = "1.0.151", default-features = false, features = ["std"] }
 # PNG read/write for the golden-image tests only; never linked into the app.
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
