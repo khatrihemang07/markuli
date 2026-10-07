@@ -5,12 +5,15 @@
 //! shortcut keys, the cursor and the key-binding hint all come from the trait,
 //! so no other Tool and no other module is edited.
 
+mod eraser;
+mod laser;
 mod pen;
 
 use crate::freehand::Scratch;
 use crate::history::History;
 use crate::icons::Icon;
 use crate::ink::{Element, Ink, Point, Rect};
+use crate::laser::Laser;
 use crate::render::Pending;
 use crate::Key;
 use std::fmt::Debug;
@@ -29,6 +32,7 @@ pub(crate) struct Ctx<'a> {
     pub history: &'a mut History,
     pub paint: &'a mut Pending,
     pub freehand: &'a mut Scratch,
+    pub laser: &'a mut Laser,
     pub next_id: &'a mut u64,
     /// Physical pixels per logical pixel of the Overlay.
     pub scale: f32,
@@ -87,7 +91,11 @@ pub(crate) struct Tools {
 impl Tools {
     pub fn new() -> Self {
         // Registration: one line per Tool. The first one is the default.
-        Self::with(vec![Box::new(pen::Pen::default())])
+        Self::with(vec![
+            Box::new(pen::Pen::default()),
+            Box::new(eraser::Eraser::default()),
+            Box::new(laser::LaserTool::default()),
+        ])
     }
 
     fn with(list: Vec<Box<dyn Tool>>) -> Self {

@@ -47,6 +47,8 @@ pub struct Element {
     /// The previous outline, kept to find what a change touched.
     previous: Vec<[f32; 2]>,
     bounds: Option<Rect>,
+    /// Marked by the Eraser, removed when its drag ends; drawn faded.
+    erasing: bool,
 }
 
 impl Element {
@@ -82,6 +84,7 @@ impl Element {
             outline: Vec::new(),
             previous: Vec::new(),
             bounds: None,
+            erasing: false,
         }
     }
 
@@ -238,6 +241,24 @@ impl Element {
         self.version
     }
 
+    pub(crate) fn is_erasing(&self) -> bool {
+        self.erasing
+    }
+
+    /// Whether `at` (logical, absolute) is within `threshold` of the input
+    /// polyline. Like Excalidraw's hit test (`getFreedrawShape`), this is the
+    /// centreline of the points, not the filled outline.
+    pub(crate) fn is_near(&self, at: Point, threshold: f32) -> bool {
+        let (x, y) = (at.x - self.x, at.y - self.y);
+        let limit = threshold * threshold;
+        match self.points.as_slice() {
+            [only] => distance_squared((x, y), *only, *only) <= limit,
+            points => points
+                .windows(2)
+                .any(|w| distance_squared((x, y), w[0], w[1]) <= limit),
+        }
+    }
+
     pub(crate) fn outline(&self) -> &[[f32; 2]] {
         &self.outline
     }
@@ -246,6 +267,20 @@ impl Element {
     pub(crate) fn bounds(&self) -> Option<Rect> {
         self.bounds
     }
+}
+
+/// Squared distance from `(x, y)` to the segment `a`-`b`.
+#[allow(clippy::many_single_char_names, reason = "plain geometry")]
+fn distance_squared((x, y): (f32, f32), a: Point, b: Point) -> f32 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let length = dx * dx + dy * dy;
+    let t = if length > 0.0 {
+        (((x - a.x) * dx + (y - a.y) * dy) / length).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (px, py) = (a.x + t * dx - x, a.y + t * dy - y);
+    px * px + py * py
 }
 
 fn bounds_of(vertices: &[[f32; 2]]) -> Option<Rect> {
@@ -330,6 +365,54 @@ impl Ink {
     /// Removes every Element and hands them back, for the operation log.
     pub(crate) fn take(&mut self) -> Vec<Element> {
         std::mem::take(&mut self.elements)
+    }
+
+    pub(crate) fn insert_at(&mut self, index: usize, element: Element) {
+        self.elements
+            .insert(index.min(self.elements.len()), element);
+    }
+
+    pub(crate) fn remove_at(&mut self, index: usize) -> Option<Element> {
+        (index < self.elements.len()).then(|| self.elements.remove(index))
+    }
+
+    /// Marks every unmarked Element within `threshold` of `at` for erasure,
+    /// calling `changed` with each one so its pixels can be redrawn faded.
+    pub(crate) fn mark_near(
+        &mut self,
+        at: Point,
+        threshold: f32,
+        mut changed: impl FnMut(&Element),
+    ) {
+        for e in self.elements.iter_mut().filter(|e| !e.erasing) {
+            if e.is_near(at, threshold) {
+                e.erasing = true;
+                changed(e);
+            }
+        }
+    }
+
+    /// Clears the erasure marks without removing anything.
+    pub(crate) fn unmark(&mut self, mut changed: impl FnMut(&Element)) {
+        for e in self.elements.iter_mut().filter(|e| e.erasing) {
+            e.erasing = false;
+            changed(e);
+        }
+    }
+
+    /// Removes the marked Elements and returns them with their positions.
+    pub(crate) fn take_marked(&mut self) -> Vec<(usize, Element)> {
+        let mut removed = Vec::new();
+        let all = std::mem::take(&mut self.elements);
+        for (index, mut e) in all.into_iter().enumerate() {
+            if e.erasing {
+                e.erasing = false;
+                removed.push((index, e));
+            } else {
+                self.elements.push(e);
+            }
+        }
+        removed
     }
 
     pub(crate) fn last_mut(&mut self) -> Option<&mut Element> {

@@ -190,7 +190,9 @@ impl Pointer {
                 let (c_size, n_size) = (size_at(c, 0), size_at(n, 0));
                 if c_size >= 0.5 && n_size >= 0.5 {
                     let a = angle(xy(c), [c[0], c[1] - 100.0], xy(n));
-                    sweep(a, PI + a, PI / 16.0, |t| out.push(on_circle(xy(c), t, c_size)));
+                    sweep(a, PI + a, PI / 16.0, |t| {
+                        out.push(on_circle(xy(c), t, c_size));
+                    });
                     sweep(PI + a, 2.0 * PI + a, PI / 16.0, |t| {
                         out.push(on_circle(xy(n), t, n_size));
                     });
@@ -205,19 +207,23 @@ impl Pointer {
     }
 
     /// The `len >= 3` branch: a corner-aware ribbon with round caps.
+    #[allow(
+        clippy::too_many_lines,
+        clippy::similar_names,
+        clippy::many_single_char_names,
+        reason = "1:1 port, kept linear and with the library's names to diff against the source"
+    )]
     fn outline_long(&self, now: f64, s: &mut Scratch, out: &mut Vec<V>) {
         let len = self.len();
         let size_at = |p: P, index: usize| SIZE * size_mapping(now, p[2], index, len);
         s.forward.clear();
         s.backward.clear();
-        let (mut speed, mut prev_speed) = (0.0, 0.0);
+        let mut prev_speed = 0.0;
         let mut visible_start = 0;
-        let mut running = 0.0;
         for i in 1..len - 1 {
             let (p, c, n) = (self.at(i - 1), self.at(i), self.at(i + 1));
             let d = dist(p, c);
-            running += d;
-            speed = prev_speed + (d - prev_speed) * 0.2;
+            let speed = prev_speed + (d - prev_speed) * 0.2;
             let c_size = size_at(c, i);
             if c_size == 0.0 {
                 visible_start = i + 1;
@@ -236,8 +242,28 @@ impl Pointer {
             let p2_nc = add(cv, smul(p2_dir_nc, c_size));
             let ftdir = add(p1_dir_pc, p2_dir_nc);
             let btdir = add(p2_dir_pc, p1_dir_nc);
-            let pa_pc = add(cv, smul(if mag(ftdir) == 0.0 { dir_pc } else { norm(ftdir) }, c_size));
-            let pa_nc = add(cv, smul(if mag(btdir) == 0.0 { dir_nc } else { norm(btdir) }, c_size));
+            let pa_pc = add(
+                cv,
+                smul(
+                    if mag(ftdir) == 0.0 {
+                        dir_pc
+                    } else {
+                        norm(ftdir)
+                    },
+                    c_size,
+                ),
+            );
+            let pa_nc = add(
+                cv,
+                smul(
+                    if mag(btdir) == 0.0 {
+                        dir_nc
+                    } else {
+                        norm(btdir)
+                    },
+                    c_size,
+                ),
+            );
             let c_angle = norm_angle(angle(cv, pv, nv));
             let variance = if speed > 35.0 { 0.5 } else { 1.0 };
             let d_angle = CORNER_MAX_ANGLE / 180.0 * PI * variance;
@@ -257,7 +283,9 @@ impl Pointer {
                 } else {
                     s.forward.extend([p1_pc, pa_pc]);
                     let arm = smul(p1_dir_pc, -c_size);
-                    sweep(0.0, t_angle, step, |t| s.backward.push(add(cv, rot(arm, -t))));
+                    sweep(0.0, t_angle, step, |t| {
+                        s.backward.push(add(cv, rot(arm, -t)));
+                    });
                     descend(t_angle, step, |t| s.forward.push(add(cv, rot(arm, -t))));
                     s.forward.extend([pa_pc, p2_nc]);
                 }
@@ -283,7 +311,8 @@ impl Pointer {
         if start_size > 1.0 {
             // JS unshifts each point: the cap comes out reversed.
             sweep(0.0, PI, PI / 16.0, |t| {
-                s.start_cap.push(add(xy(first), rot(smul(pp_fs, start_size), -t)));
+                s.start_cap
+                    .push(add(xy(first), rot(smul(pp_fs, start_size), -t)));
             });
             s.start_cap.push(add(xy(first), smul(pp_fs, -start_size)));
             s.start_cap.reverse();
@@ -291,7 +320,8 @@ impl Pointer {
             s.start_cap.push(xy(first));
         }
         sweep(0.0, 3.0 * PI, PI / 16.0, |t| {
-            s.end_cap.push(add(xy(ultimate), rot(smul(pp_pu, -end_size), -t)));
+            s.end_cap
+                .push(add(xy(ultimate), rot(smul(pp_pu, -end_size), -t)));
         });
         out.extend_from_slice(&s.start_cap);
         out.extend_from_slice(&s.forward);
@@ -355,7 +385,9 @@ impl Laser {
             live: true,
             ..Trail::default()
         };
-        trail.pointer.add_point([f64::from(at.x), f64::from(at.y), self.now]);
+        trail
+            .pointer
+            .add_point([f64::from(at.x), f64::from(at.y), self.now]);
         self.trails.push(trail);
         self.refresh(paint, scale);
     }
@@ -363,7 +395,9 @@ impl Laser {
     pub fn extend(&mut self, at: crate::Point, paint: &mut Pending, scale: f32) {
         let now = self.now;
         if let Some(trail) = self.trails.iter_mut().find(|t| t.live) {
-            trail.pointer.add_point([f64::from(at.x), f64::from(at.y), now]);
+            trail
+                .pointer
+                .add_point([f64::from(at.x), f64::from(at.y), now]);
             self.refresh(paint, scale);
         }
     }
@@ -375,10 +409,6 @@ impl Laser {
             trail.pointer.stabilize_tail();
             self.refresh(paint, scale);
         }
-    }
-
-    pub fn is_live(&self) -> bool {
-        self.trails.iter().any(|t| t.live)
     }
 
     /// Time moved on (milliseconds, any origin, never backwards).
@@ -402,7 +432,11 @@ impl Laser {
     /// loop sleeps once the last one faded.
     pub fn next_frame(&self) -> Option<u64> {
         let alive = self.trails.iter().any(|t| !t.outline.is_empty());
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "now >= 0")]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "now >= 0"
+        )]
         alive.then(|| self.now as u64 + FRAME_MS)
     }
 
@@ -419,7 +453,10 @@ impl Laser {
             trail.pointer.outline(*now, scratch, work);
             let old = trail.bounds;
             trail.outline.clear();
-            #[allow(clippy::cast_possible_truncation, reason = "the cache is f32 by design")]
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "the cache is f32 by design"
+            )]
             trail
                 .outline
                 .extend(work.iter().map(|v| [v[0] as f32, v[1] as f32]));
@@ -462,7 +499,9 @@ impl Laser {
         let mut path = builder.take().unwrap_or_default();
         let mut any = false;
         for trail in &self.trails {
-            let Some([l, t, r, b]) = trail.bounds else { continue };
+            let Some([l, t, r, b]) = trail.bounds else {
+                continue;
+            };
             let inside = l * scale - DAMAGE_PAD < vr
                 && r * scale + DAMAGE_PAD > ox
                 && t * scale - DAMAGE_PAD < vb
@@ -481,7 +520,13 @@ impl Laser {
             let (r, b) = if bgra { (0, 255) } else { (255, 0) };
             paint.set_color_rgba8(r, 0, b, 255);
             paint.anti_alias = true;
-            pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+            pm.fill_path(
+                &path,
+                &paint,
+                FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
             *builder = Some(path.clear());
         }
     }
@@ -493,7 +538,11 @@ fn pixels(v: u32) -> f32 {
 }
 
 /// Appends one closed trail to `path`; false if it has too few points.
-fn trail_path(path: &mut PathBuilder, outline: &[[f32; 2]], (scale, ox, oy): (f32, f32, f32)) -> bool {
+fn trail_path(
+    path: &mut PathBuilder,
+    outline: &[[f32; 2]],
+    (scale, ox, oy): (f32, f32, f32),
+) -> bool {
     let at = |i: usize| (outline[i][0] * scale - ox, outline[i][1] * scale - oy);
     let (x0, y0) = at(0);
     let (x1, y1) = at(1);

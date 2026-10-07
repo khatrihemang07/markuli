@@ -6,9 +6,9 @@
 mod config;
 pub mod freehand;
 mod history;
-pub mod laser;
 mod icons;
 mod ink;
+pub mod laser;
 mod render;
 mod svg_path;
 mod toolbar;
@@ -18,6 +18,7 @@ pub use config::Config;
 use freehand::Scratch;
 use history::History;
 pub use ink::{Element, Ink, Point};
+use laser::Laser;
 pub use render::{Damage, Format};
 pub use toolbar::{Button, Theme};
 use toolbar::{Chrome, Toolbar, UiState};
@@ -62,6 +63,10 @@ pub enum Event {
     },
     /// The Clear hotkey: removes all Ink and leaves Draw Mode.
     Clear,
+    /// The time, in milliseconds from any fixed origin. Send it before
+    /// pointer events and whenever [`View::next_frame`] is due. It is how the
+    /// Laser fades without the core owning a clock.
+    Clock(u64),
 }
 
 /// The keys the core reacts to; the platform layer drops the rest.
@@ -84,6 +89,10 @@ pub struct View {
     pub needs_render: bool,
     /// The cursor shape for the pointer's current position.
     pub cursor: Cursor,
+    /// The time (same clock as [`Event::Clock`]) the next frame is due. Set
+    /// only while something animates (a visible Laser trail): wait for it,
+    /// then send `Clock`. `None` means sleep until the next input.
+    pub next_frame: Option<u64>,
 }
 
 impl View {
@@ -102,6 +111,7 @@ pub struct Annotator {
     history: History,
     paint: render::Pending,
     freehand: Scratch,
+    laser: Laser,
     scale: f32,
     pressure: Option<f32>,
     next_id: u64,
@@ -118,6 +128,7 @@ impl Default for Annotator {
             history: History::default(),
             paint: render::Pending::default(),
             freehand: Scratch::default(),
+            laser: Laser::default(),
             scale: 1.0,
             pressure: None,
             next_id: 1,
@@ -158,6 +169,7 @@ impl Annotator {
                 shift,
             } if self.draw_mode => self.key(key, command, shift),
             Event::Clear => self.clear(),
+            Event::Clock(ms) => self.laser.set_now(ms, &mut self.paint, self.scale),
             _ => {}
         }
         self.view()
@@ -176,6 +188,7 @@ impl Annotator {
                 Some(tool) if !over_toolbar => tool.cursor(),
                 _ => Cursor::Arrow,
             },
+            next_frame: self.laser.next_frame(),
         }
     }
 
@@ -215,6 +228,7 @@ impl Annotator {
         };
         render::render(
             &self.ink,
+            &self.laser,
             &mut self.paint,
             self.draw_mode,
             self.scale,
@@ -240,6 +254,7 @@ impl Annotator {
             history: &mut self.history,
             paint: &mut self.paint,
             freehand: &mut self.freehand,
+            laser: &mut self.laser,
             next_id: &mut self.next_id,
             scale: self.scale,
             pressure: self.pressure,
@@ -332,6 +347,7 @@ impl Annotator {
             self.history.record_clear(self.ink.take());
         }
         self.draw_mode = false;
+        self.laser.clear();
         self.toolbar.forget_pointer();
         self.paint.full();
     }
@@ -341,6 +357,7 @@ impl Annotator {
         self.toolbar.forget_pointer();
         if self.draw_mode {
             self.draw_mode = false;
+            self.laser.clear();
         } else {
             if self.display != Some(display) {
                 // ADR-0002: the history belongs to the Ink that was Cleared.
