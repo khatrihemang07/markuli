@@ -63,7 +63,7 @@ fn stroke_radius(size: f64, pressure: f64) -> f64 {
     size * easing(0.5 - THINNING * (0.5 - pressure))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct StrokePoint {
     point: V,
     pressure: f64,
@@ -73,7 +73,7 @@ struct StrokePoint {
 }
 
 /// Reusable working memory for [`Scratch::outline`].
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct Scratch {
     /// Input as `[x, y, pressure]`; NaN pressure stands for JS `undefined`.
     input: Vec<[f64; 3]>,

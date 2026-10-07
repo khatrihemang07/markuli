@@ -7,6 +7,7 @@ pub mod freehand;
 mod ink;
 mod render;
 
+use freehand::Scratch;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
 
@@ -22,9 +23,15 @@ pub enum Event {
     ToggleDrawMode(DisplayId),
     /// The platform's pixel buffer is new or was wiped: redraw everything.
     SurfaceReset,
+    /// Physical pixels.
     PointerDown(Point),
     PointerMove(Point),
     PointerUp(Point),
+    /// Pressure (0..=1) of the pointer events that follow, until changed.
+    /// `None` is a mouse or trackpad: the Stroke simulates pressure.
+    Pressure(Option<f32>),
+    /// Physical pixels per logical pixel of the Overlay (default 1).
+    ScaleFactor(f32),
 }
 
 /// What the platform layer needs to know after each event.
@@ -47,13 +54,33 @@ impl View {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Annotator {
     ink: Ink,
     draw_mode: bool,
     display: Option<DisplayId>,
     stroking: bool,
     paint: render::Pending,
+    freehand: Scratch,
+    scale: f32,
+    pressure: Option<f32>,
+    next_id: u64,
+}
+
+impl Default for Annotator {
+    fn default() -> Self {
+        Self {
+            ink: Ink::default(),
+            draw_mode: false,
+            display: None,
+            stroking: false,
+            paint: render::Pending::default(),
+            freehand: Scratch::default(),
+            scale: 1.0,
+            pressure: None,
+            next_id: 1,
+        }
+    }
 }
 
 impl Annotator {
@@ -67,17 +94,34 @@ impl Annotator {
         match event {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
-            Event::PointerDown(at) if self.draw_mode => {
-                self.stroking = true;
-                self.ink.add(ink::Element::start(at));
+            Event::Pressure(p) => self.pressure = p.filter(|p| p.is_finite()),
+            Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
+                self.scale = scale;
+                self.paint.full();
             }
-            Event::PointerMove(at) | Event::PointerUp(at) if self.stroking => {
-                if let Some(element) = self.ink.last_mut() {
-                    element.push(at);
+            Event::PointerDown(at) if self.draw_mode => {
+                if let Some(at) = self.logical(at) {
+                    self.stroking = true;
+                    let element = Element::start(self.next_id, at, self.pressure);
+                    self.next_id += 1;
+                    self.ink.add(element);
+                    self.advance(Element::preview);
                 }
-                if matches!(event, Event::PointerUp(_)) {
-                    self.stroking = false;
+            }
+            Event::PointerMove(at) if self.stroking => {
+                if let Some(at) = self.logical(at) {
+                    let pressure = self.pressure;
+                    self.advance(|e, scratch| e.push(at, pressure, scratch));
                 }
+            }
+            Event::PointerUp(at) if self.stroking => {
+                self.stroking = false;
+                let at = self.logical(at);
+                let pressure = self.pressure;
+                self.advance(|e, scratch| match at {
+                    Some(at) => e.commit(at, pressure, scratch),
+                    None => e.finish(scratch),
+                });
             }
             _ => {}
         }
@@ -90,7 +134,7 @@ impl Annotator {
             draw_mode: self.draw_mode,
             overlay_needed: self.draw_mode || !self.ink.is_empty(),
             display: self.display,
-            needs_render: self.paint.is_pending() || self.ink.has_unrendered(),
+            needs_render: self.paint.is_pending(),
         }
     }
 
@@ -107,16 +151,39 @@ impl Annotator {
         format: Format,
     ) -> Option<Damage> {
         render::render(
-            &mut self.ink,
+            &self.ink,
             &mut self.paint,
             self.draw_mode,
+            self.scale,
             target,
             format,
         )
     }
 
+    /// Physical pointer position to logical Element coordinates.
+    fn logical(&self, at: Point) -> Option<Point> {
+        (at.x.is_finite() && at.y.is_finite()).then(|| Point {
+            x: at.x / self.scale,
+            y: at.y / self.scale,
+        })
+    }
+
+    /// Runs `step` on the Stroke in progress and marks what it changed.
+    fn advance(&mut self, step: impl FnOnce(&mut Element, &mut Scratch) -> Option<ink::Rect>) {
+        let scale = self.scale;
+        if let Some(element) = self.ink.last_mut() {
+            let (x, y) = (element.x(), element.y());
+            if let Some(local) = step(element, &mut self.freehand) {
+                self.paint.damage_local(local, (x, y), scale);
+            }
+        }
+    }
+
     fn toggle(&mut self, display: DisplayId) {
-        self.stroking = false;
+        if self.stroking {
+            self.stroking = false;
+            self.advance(Element::finish);
+        }
         if self.draw_mode {
             self.draw_mode = false;
         } else {

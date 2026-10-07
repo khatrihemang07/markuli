@@ -85,7 +85,7 @@ fn render_with_nothing_changed_does_no_work() {
 }
 
 #[test]
-fn damage_after_a_new_segment_covers_that_segment_and_not_the_whole_screen() {
+fn damage_after_a_new_segment_is_local_not_the_whole_screen() {
     let (mut a, mut pm) = drawing();
     render(&mut a, &mut pm, Format::Rgba);
     a.handle(Event::PointerDown(p(10.0, 50.0)));
@@ -93,11 +93,9 @@ fn damage_after_a_new_segment_covers_that_segment_and_not_the_whole_screen() {
     render(&mut a, &mut pm, Format::Rgba);
     a.handle(Event::PointerMove(p(40.0, 60.0)));
     let d = render(&mut a, &mut pm, Format::Rgba).expect("damage");
-    assert!(d.x <= 20 && d.x + d.width >= 40, "{d:?}");
-    assert!(d.y <= 50 && d.y + d.height >= 60, "{d:?}");
+    // Only the changed part of the live outline, not the whole screen. That the
+    // damage covers every changed pixel is checked in `tests/damage.rs`.
     assert!(d.width < W / 2 + 10 && d.height < H / 2, "{d:?}");
-    // The new segment's pixels are inside the damage.
-    assert_eq!(px(&pm, 30, 55)[3], 0xff);
 }
 
 #[test]
