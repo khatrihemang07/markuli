@@ -47,6 +47,14 @@ impl History {
         self.done = 0;
     }
 
+    pub fn can_undo(&self) -> bool {
+        self.done > 0
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.done < self.ops.len()
+    }
+
     /// Returns whether the Ink changed.
     pub fn undo(&mut self, ink: &mut Ink) -> bool {
         let Some(index) = self.done.checked_sub(1) else {

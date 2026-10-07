@@ -4,6 +4,7 @@
 //! call are drawn (standards rule 7); a full redraw happens on request.
 
 use crate::ink::{Element, Ink, Point};
+use crate::toolbar::{clear_rect, Chrome, Rect};
 use tiny_skia::{Color, LineCap, LineJoin, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
@@ -50,24 +51,69 @@ pub fn render(
     draw_mode: bool,
     target: &mut PixmapMut<'_>,
     format: Format,
+    mut chrome: Chrome<'_>,
 ) -> Option<Damage> {
     let (w, h) = (target.width(), target.height());
     let mut bounds = Bounds::empty();
-    if pending.full {
-        pending.full = false;
-        // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
-        // sends clicks on fully transparent pixels to the apps underneath.
-        target.fill(Color::from_rgba8(0, 0, 0, u8::from(draw_mode)));
-        for element in ink.elements_mut() {
-            element.rendered = 0;
-        }
-        bounds.add_rect(0.0, 0.0, to_f32(w), to_f32(h));
-    }
     let paint = ink_paint(format);
-    for element in ink.elements_mut() {
-        draw_new_segments(element, target, &paint, &mut bounds);
+    let region = chrome.region();
+    let mut full = pending.full;
+    pending.full = false;
+    let toolbar_dirty = chrome.is_dirty();
+    // A toolbar repaint that no Element reaches only touches its own region;
+    // otherwise (or when it just disappeared) the Ink is redrawn in full.
+    if toolbar_dirty && !full {
+        full = region.is_none_or(|r| ink_reaches(ink, &r));
     }
+    if full {
+        redraw_all(ink, draw_mode, target, &paint, &mut bounds);
+    } else if let (true, Some(r)) = (toolbar_dirty, region) {
+        clear_rect(target, r);
+        bounds.add_rect(r.to_bounds());
+    }
+    let mut ink_bounds = Bounds::empty();
+    for element in ink.elements_mut() {
+        draw_new_segments(element, target, &paint, &mut ink_bounds);
+    }
+    // New Ink under the toolbar would overpaint it (and stack its shadow
+    // twice when it is painted again): rebuild everything instead.
+    if !full && region.is_some_and(|r| ink_bounds.hits(&r)) {
+        full = true;
+        redraw_all(ink, draw_mode, target, &paint, &mut bounds);
+    }
+    if let (true, Some(r)) = (full || toolbar_dirty, region) {
+        chrome.paint(target, format);
+        bounds.add_rect(r.to_bounds());
+    }
+    bounds.merge(&ink_bounds);
+    chrome.done();
     bounds.damage(w, h)
+}
+
+/// Clears the surface and redraws every Element.
+fn redraw_all(
+    ink: &mut Ink,
+    draw_mode: bool,
+    target: &mut PixmapMut<'_>,
+    paint: &Paint<'_>,
+    bounds: &mut Bounds,
+) {
+    // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
+    // sends clicks on fully transparent pixels to the apps underneath.
+    target.fill(Color::from_rgba8(0, 0, 0, u8::from(draw_mode)));
+    for element in ink.elements_mut() {
+        element.rendered = 0;
+        draw_new_segments(element, target, paint, bounds);
+    }
+    bounds.add_rect([0.0, 0.0, to_f32(target.width()), to_f32(target.height())]);
+}
+
+/// Whether any point of any Element is on or near `region`.
+fn ink_reaches(ink: &Ink, region: &Rect) -> bool {
+    ink.elements()
+        .iter()
+        .flat_map(Element::points)
+        .any(|&p| region.is_near(p, INK_WIDTH))
 }
 
 fn ink_paint(format: Format) -> Paint<'static> {
@@ -135,7 +181,7 @@ impl Bounds {
         Self(None)
     }
 
-    fn add_rect(&mut self, l: f32, t: f32, r: f32, b: f32) {
+    fn add_rect(&mut self, [l, t, r, b]: [f32; 4]) {
         if ![l, t, r, b].iter().all(|v| v.is_finite()) {
             return;
         }
@@ -147,12 +193,23 @@ impl Bounds {
 
     fn add_segment(&mut self, a: Point, b: Point) {
         let pad = INK_WIDTH / 2.0 + 1.0;
-        self.add_rect(
+        self.add_rect([
             a.x.min(b.x) - pad,
             a.y.min(b.y) - pad,
             a.x.max(b.x) + pad,
             a.y.max(b.y) + pad,
-        );
+        ]);
+    }
+
+    fn merge(&mut self, other: &Bounds) {
+        if let Some(rect) = other.0 {
+            self.add_rect(rect);
+        }
+    }
+
+    fn hits(&self, region: &Rect) -> bool {
+        self.0
+            .is_some_and(|rect| region.intersects(&Rect::from_bounds(rect)))
     }
 
     #[allow(

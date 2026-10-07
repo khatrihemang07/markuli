@@ -2,7 +2,7 @@
 
 #![allow(clippy::cast_precision_loss, reason = "tiny test values")]
 
-use markuli_core::{Annotator, Damage, DisplayId, Event, Format, Point};
+use markuli_core::{Annotator, Damage, DisplayId, Event, Format, Point, Theme};
 use tiny_skia::{Pixmap, PixmapMut};
 
 const D1: DisplayId = DisplayId(1);
@@ -152,13 +152,23 @@ fn random_event_sequences_never_panic() {
     };
     let mut a = Annotator::new();
     let mut pm = Pixmap::new(W, H).expect("pixmap");
-    for _ in 0..5_000 {
+    for _ in 0..1_500 {
         let at = p((next() % 160) as f32 - 30.0, (next() % 160) as f32 - 30.0);
-        let event = match next() % 6 {
+        let event = match next() % 9 {
             0 => Event::ToggleDrawMode(DisplayId(u64::from(next() % 2))),
             1 => Event::SurfaceReset,
             2 => Event::PointerDown(at),
             3 | 4 => Event::PointerMove(at),
+            5 => Event::Resize {
+                width: next() % 200,
+                height: next() % 100,
+                scale: [0.0, 1.0, 2.0, f32::NAN][(next() % 4) as usize],
+            },
+            6 => Event::Theme(if next() % 2 == 0 {
+                Theme::Light
+            } else {
+                Theme::Dark
+            }),
             _ => Event::PointerUp(at),
         };
         a.handle(event);

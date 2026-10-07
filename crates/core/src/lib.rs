@@ -4,12 +4,20 @@
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
 mod history;
+mod icons;
 mod ink;
 mod render;
+mod svg_path;
+mod toolbar;
+mod tools;
 
 use history::History;
 pub use ink::{Element, Ink, Point};
 pub use render::{Damage, Format};
+pub use toolbar::{Button, Theme};
+use toolbar::{Chrome, Toolbar, UiState};
+pub use tools::Cursor;
+use tools::{Ctx, Tool, Tools};
 
 /// Identifies a display. Opaque to the core: it only compares them, so that
 /// moving the Overlay to another display can Clear the Ink (ADR-0002).
@@ -23,6 +31,15 @@ pub enum Event {
     ToggleDrawMode(DisplayId),
     /// The platform's pixel buffer is new or was wiped: redraw everything.
     SurfaceReset,
+    /// The Overlay's size in physical pixels and its scale factor. Send it
+    /// before the first render and whenever either changes.
+    Resize {
+        width: u32,
+        height: u32,
+        scale: f32,
+    },
+    /// The OS light or dark theme.
+    Theme(Theme),
     PointerDown(Point),
     PointerMove(Point),
     PointerUp(Point),
@@ -55,6 +72,8 @@ pub struct View {
     pub display: Option<DisplayId>,
     /// `render` has pixels to produce.
     pub needs_render: bool,
+    /// The cursor shape for the pointer's current position.
+    pub cursor: Cursor,
 }
 
 impl View {
@@ -65,20 +84,35 @@ impl View {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Annotator {
     ink: Ink,
     draw_mode: bool,
     display: Option<DisplayId>,
-    stroking: bool,
     history: History,
     paint: render::Pending,
+    tools: Tools,
+    toolbar: Toolbar,
+}
+
+impl Default for Annotator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Annotator {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            ink: Ink::default(),
+            draw_mode: false,
+            display: None,
+            history: History::default(),
+            paint: render::Pending::default(),
+            tools: Tools::new(),
+            toolbar: Toolbar::default(),
+        }
     }
 
     /// The single way into the core.
@@ -86,20 +120,18 @@ impl Annotator {
         match event {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
-            Event::PointerDown(at) if self.draw_mode => {
-                // A lost PointerUp must not merge two Strokes into one log entry.
-                self.finish_stroke();
-                self.stroking = true;
-                self.ink.add(ink::Element::start(at));
+            Event::Resize {
+                width,
+                height,
+                scale,
+            } => {
+                self.toolbar.resize(width, height, scale);
+                self.paint.full();
             }
-            Event::PointerMove(at) | Event::PointerUp(at) if self.stroking => {
-                if let Some(element) = self.ink.last_mut() {
-                    element.push(at);
-                }
-                if matches!(event, Event::PointerUp(_)) {
-                    self.finish_stroke();
-                }
-            }
+            Event::Theme(theme) => self.toolbar.theme = theme,
+            Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
+            Event::PointerMove(at) if self.draw_mode => self.pointer_move(at),
+            Event::PointerUp(at) if self.draw_mode => self.pointer_up(at),
             Event::Key {
                 key,
                 command,
@@ -113,17 +145,40 @@ impl Annotator {
 
     #[must_use]
     pub fn view(&self) -> View {
+        let over_toolbar = self.toolbar.over() && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
             overlay_needed: self.draw_mode || !self.ink.is_empty(),
             display: self.display,
-            needs_render: self.paint.is_pending() || self.ink.has_unrendered(),
+            needs_render: self.paint.is_pending()
+                || self.ink.has_unrendered()
+                || self.toolbar.is_dirty(self.draw_mode, self.ui()),
+            cursor: match self.tools.get(self.tools.active()) {
+                Some(tool) if !over_toolbar => tool.cursor(),
+                _ => Cursor::Arrow,
+            },
         }
     }
 
     #[must_use]
     pub fn ink(&self) -> &Ink {
         &self.ink
+    }
+
+    /// The index of the active Tool, in registration order.
+    #[must_use]
+    pub fn active_tool(&self) -> usize {
+        self.tools.active()
+    }
+
+    /// The centre of a toolbar button in Overlay pixels; `None` while the
+    /// toolbar is hidden (outside Draw Mode, or before the first `Resize`).
+    #[must_use]
+    pub fn button_center(&self, button: Button) -> Option<Point> {
+        if !self.draw_mode {
+            return None;
+        }
+        self.toolbar.center_of(button, self.tools.len())
     }
 
     /// Draws what changed since the last call into `target` (premultiplied
@@ -133,37 +188,104 @@ impl Annotator {
         target: &mut tiny_skia::PixmapMut<'_>,
         format: Format,
     ) -> Option<Damage> {
+        let chrome = Chrome {
+            visible: self.draw_mode,
+            ui: self.ui(),
+            toolbar: &mut self.toolbar,
+            tools: &self.tools,
+        };
         render::render(
             &mut self.ink,
             &mut self.paint,
             self.draw_mode,
             target,
             format,
+            chrome,
         )
     }
 
-    /// Commits the Stroke in progress to the operation log.
-    fn finish_stroke(&mut self) {
-        if self.stroking {
-            self.stroking = false;
-            self.history.record_add();
+    fn ui(&self) -> UiState {
+        UiState {
+            active: self.tools.active(),
+            can_undo: self.history.can_undo(),
+            can_redo: self.history.can_redo(),
+            has_ink: !self.ink.is_empty(),
+        }
+    }
+
+    /// The active Tool with what it may change.
+    fn tool(&mut self) -> (&mut dyn Tool, Ctx<'_>) {
+        let ctx = Ctx {
+            ink: &mut self.ink,
+            history: &mut self.history,
+            paint: &mut self.paint,
+        };
+        (self.tools.active_mut(), ctx)
+    }
+
+    fn tool_busy(&self) -> bool {
+        self.tools.get(self.tools.active()).is_some_and(Tool::busy)
+    }
+
+    /// Commits the gesture in progress to the operation log.
+    fn finish_gesture(&mut self) {
+        let (tool, mut ctx) = self.tool();
+        tool.finish(&mut ctx);
+    }
+
+    fn pointer_down(&mut self, at: Point) {
+        self.finish_gesture();
+        if self.toolbar.press_at(at, self.tools.len()) {
+            return;
+        }
+        let (tool, mut ctx) = self.tool();
+        tool.pointer_down(&mut ctx, at);
+    }
+
+    fn pointer_move(&mut self, at: Point) {
+        self.toolbar.hover_at(at, self.tools.len());
+        if !self.toolbar.pressing() {
+            let (tool, mut ctx) = self.tool();
+            tool.pointer_move(&mut ctx, at);
+        }
+    }
+
+    fn pointer_up(&mut self, at: Point) {
+        if self.toolbar.pressing() {
+            if let Some(button) = self.toolbar.release_at(at, self.tools.len()) {
+                self.activate(button);
+            }
+        } else {
+            self.toolbar.hover_at(at, self.tools.len());
+            let (tool, mut ctx) = self.tool();
+            tool.pointer_up(&mut ctx, at);
+        }
+    }
+
+    /// A toolbar click does exactly what the matching key does.
+    fn activate(&mut self, button: Button) {
+        match button {
+            Button::Tool(index) => self.tools.select(index),
+            Button::Undo => self.undo(),
+            Button::Redo => self.redo(),
+            Button::Clear => self.clear(),
         }
     }
 
     fn key(&mut self, key: Key, command: bool, shift: bool) {
+        let (tool, mut ctx) = self.tool();
+        if tool.key(&mut ctx, key, command, shift) {
+            return;
+        }
         match (key, command, shift) {
-            // Esc only cancels the Stroke in progress; it never Clears.
-            (Key::Escape, _, _) => {
-                if self.stroking {
-                    self.stroking = false;
-                    self.ink.pop();
-                    self.paint.full();
-                }
-            }
-            // Undo and redo wait for the Stroke to end: it is not logged yet.
-            (Key::Char(_), true, _) if self.stroking => {}
+            // Undo, redo and switching wait for the Stroke to end: it is not
+            // logged yet.
+            (Key::Char(_), _, _) if self.tool_busy() => {}
             (Key::Char('z'), true, false) => self.undo(),
             (Key::Char('z'), true, true) | (Key::Char('y'), true, false) => self.redo(),
+            (Key::Char(c), false, false) => {
+                self.tools.select_by_key(c);
+            }
             _ => {}
         }
     }
@@ -181,16 +303,18 @@ impl Annotator {
     }
 
     fn clear(&mut self) {
-        self.finish_stroke();
+        self.finish_gesture();
         if !self.ink.is_empty() {
             self.history.record_clear(self.ink.take());
         }
         self.draw_mode = false;
+        self.toolbar.forget_pointer();
         self.paint.full();
     }
 
     fn toggle(&mut self, display: DisplayId) {
-        self.finish_stroke();
+        self.finish_gesture();
+        self.toolbar.forget_pointer();
         if self.draw_mode {
             self.draw_mode = false;
         } else {
