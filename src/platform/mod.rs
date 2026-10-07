@@ -30,8 +30,8 @@ pub use windows_settings::SettingsWindow;
 compile_error!("Markuli supports macOS and Windows only");
 
 pub use imp::{
-    config_dir, configure_event_loop, monitor_under_cursor, set_launch_at_login, tray_icon,
-    window_attributes, Presenter,
+    command_held, config_dir, configure_event_loop, monitor_under_cursor, release_memory,
+    set_launch_at_login, tray_icon, window_attributes, Presenter,
 };
 
 /// A hotkey as the Settings window shows it.

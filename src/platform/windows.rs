@@ -31,6 +31,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     ULW_ALPHA, UPDATELAYEREDWINDOWINFO, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -253,3 +254,11 @@ pub fn set_launch_at_login(on: bool) -> Result<(), String> {
         }
     }
 }
+
+/// Ctrl is the shortcut modifier on Windows.
+pub fn command_held(modifiers: ModifiersState) -> bool {
+    modifiers.control_key()
+}
+
+/// Nothing to hand back: the DIB section is freed with the window.
+pub fn release_memory() {}

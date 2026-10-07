@@ -9,15 +9,16 @@ mod settings;
 
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use hotkeys::{Binding, Hotkeys, RebindError};
-use markuli_core::{Annotator, Config, DisplayId, Event, Point, View};
+use markuli_core::{Annotator, Config, DisplayId, Event, Key, Point, View};
 use platform::{Presenter, SettingsWindow};
 use settings::SettingsEvent;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -46,6 +47,7 @@ struct App {
     settings_id: Option<MenuId>,
     /// Test hook: reopen Settings this many more times after it closes.
     reopen: u32,
+    modifiers: ModifiersState,
     quit_id: Option<MenuId>,
     tray: Option<TrayIcon>,
 }
@@ -71,7 +73,9 @@ impl App {
     /// Brings the window in line with what the core says.
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
         if !view.overlay_needed {
-            self.overlay = None;
+            if self.overlay.take().is_some() {
+                platform::release_memory();
+            }
             return;
         }
         if self.overlay.is_none() {
@@ -173,6 +177,32 @@ impl App {
         });
     }
 
+    /// The Clear hotkey: the core drops the Ink, and `sync` destroys the
+    /// Overlay because it reports it is no longer needed.
+    fn on_clear(&mut self, event_loop: &ActiveEventLoop) {
+        let view = self.core.handle(Event::Clear);
+        self.sync(event_loop, view, None);
+    }
+
+    fn key(&mut self, event: &KeyEvent) {
+        if event.state != ElementState::Pressed {
+            return;
+        }
+        let key = match &event.logical_key {
+            WinitKey::Named(NamedKey::Escape) => Key::Escape,
+            WinitKey::Character(text) => match text.to_lowercase().chars().next() {
+                Some(c) => Key::Char(c),
+                None => return,
+            },
+            _ => return,
+        };
+        self.pointer(Event::Key {
+            key,
+            command: platform::command_held(self.modifiers),
+            shift: self.modifiers.shift_key(),
+        });
+    }
+
     fn pointer(&mut self, event: Event) {
         let view = self.core.handle(event);
         if view.needs_render {
@@ -243,8 +273,8 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::Hotkey(e) if e.state() == HotKeyState::Pressed => {
                 match self.hotkeys.binding_for(e.id()) {
                     Some(Binding::Toggle) => self.on_toggle(event_loop),
-                    // Clear is wired by the Clear/undo ticket (#4).
-                    Some(Binding::Clear) | None => {}
+                    Some(Binding::Clear) => self.on_clear(event_loop),
+                    None => {}
                 }
             }
             UserEvent::Menu(e) if Some(&e.id) == self.settings_id.as_ref() => self.open_settings(),
@@ -256,6 +286,8 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
                 self.pointer(Event::PointerMove(self.cursor));
@@ -338,6 +370,7 @@ fn main() {
         settings: None,
         settings_id: None,
         reopen: 0,
+        modifiers: ModifiersState::empty(),
         quit_id: None,
         tray: None,
     };

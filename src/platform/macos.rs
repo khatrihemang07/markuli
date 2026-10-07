@@ -17,6 +17,7 @@ use std::ptr;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -236,6 +237,25 @@ pub fn set_launch_at_login(on: bool) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, launch_agent_plist(exe)).map_err(|e| e.to_string())
+}
+
+/// Cmd is the shortcut modifier on macOS.
+pub fn command_held(modifiers: ModifiersState) -> bool {
+    modifiers.super_key()
+}
+
+extern "C" {
+    fn malloc_zone_pressure_relief(zone: *mut c_void, goal: usize) -> usize;
+}
+
+/// Hands freed heap pages back to the OS after the Overlay is destroyed, so
+/// they stop counting toward the footprint the idle budget is measured by.
+pub fn release_memory() {
+    // SAFETY: documented libmalloc call; a null zone means all zones and a
+    // goal of 0 means "release as much as possible". No preconditions.
+    unsafe {
+        malloc_zone_pressure_relief(ptr::null_mut(), 0);
+    }
 }
 
 #[cfg(test)]
