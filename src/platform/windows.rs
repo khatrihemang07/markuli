@@ -48,6 +48,22 @@ pub const FORMAT: Format = Format::Bgra;
 /// How the Super modifier reads in the UI.
 pub const LOGO_KEY_NAME: &str = "Win";
 
+/// Windows gives the focus back to the previous window by itself when the
+/// Overlay (never active, see `window_attributes`) goes away.
+pub struct Previous;
+
+pub fn frontmost_other() -> Option<Previous> {
+    None
+}
+
+impl Previous {
+    #[allow(
+        clippy::unused_self,
+        reason = "same interface as macOS, where it activates the app"
+    )]
+    pub fn restore(self) {}
+}
+
 pub fn configure_event_loop<T>(_builder: &mut EventLoopBuilder<T>) {}
 
 pub fn window_attributes(attributes: WindowAttributes) -> WindowAttributes {

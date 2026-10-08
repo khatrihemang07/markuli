@@ -38,7 +38,7 @@ tray-icon = { version = "0.26", default-features = false }
 # crates below are the typed bindings, each limited to the classes used, with
 # default features off. Replacing them means hand-written msg_send FFI.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSEvent", "NSScreen", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSApplication", "NSButton", "NSControl", "NSTextField", "NSColor", "NSCell", "NSText", "NSPasteboard"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSEvent", "NSScreen", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSApplication", "NSButton", "NSControl", "NSTextField", "NSColor", "NSCell", "NSText", "NSPasteboard", "NSRunningApplication", "NSWorkspace"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSArray", "NSString", "NSObject", "NSDictionary", "NSValue"] }
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "CALayer", "CATransaction"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }

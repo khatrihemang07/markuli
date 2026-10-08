@@ -41,6 +41,9 @@ struct App {
     /// The origin of the core's clock (`Event::Clock` milliseconds).
     started: Instant,
     overlay: Option<Overlay>,
+    /// The app that had the focus before Draw Mode began; gets it back when
+    /// Draw Mode ends.
+    previous: Option<platform::Previous>,
     cursor: Point,
     cursor_shape: Cursor,
     hotkeys: Hotkeys<GlobalHotKeyManager>,
@@ -82,12 +85,19 @@ impl App {
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
         if !view.draw_mode {
             if self.overlay.take().is_some() {
+                // The Overlay's key events are gone with it, and so is the
+                // chance to see a modifier being released.
+                self.forget_modifiers();
+                if let Some(previous) = self.previous.take() {
+                    previous.restore();
+                }
                 platform::release_memory();
             }
             return;
         }
         if self.overlay.is_none() {
             let Some(monitor) = monitor else { return };
+            self.previous = platform::frontmost_other();
             self.overlay = Some(create_overlay(event_loop, monitor));
             self.core.handle(Event::ScaleFactor(scale_of(monitor)));
             self.send_surface(platform::top_inset(monitor));
@@ -97,11 +107,14 @@ impl App {
             return;
         };
         overlay.window.set_cursor(cursor_icon(view.cursor));
-        overlay.window.focus_window();
         // First frame is painted before the window shows: no flash.
         self.redraw();
         if let Some(overlay) = self.overlay.as_ref() {
             overlay.window.set_visible(true);
+            // After showing: winit's `focus_window` does nothing for a hidden
+            // window, and the app (an Accessory one) must be activated for the
+            // Overlay to be the key window, or no key reaches it.
+            overlay.window.focus_window();
         }
     }
 
@@ -141,6 +154,12 @@ impl App {
                 overlay.window.focus_window();
             }
         }
+    }
+
+    /// No modifier is held as far as Markuli knows (see `Focused(false)`).
+    fn forget_modifiers(&mut self) {
+        self.modifiers = ModifiersState::empty();
+        self.core.handle(Event::Modifiers { shift: false });
     }
 
     fn open_settings(&mut self) {
@@ -214,11 +233,13 @@ impl App {
         });
     }
 
-    /// The Clear hotkey: the core drops the Ink and leaves Draw Mode, and
-    /// `sync` destroys the Overlay (a no-op if none exists).
-    fn on_clear(&mut self, event_loop: &ActiveEventLoop) {
+    /// The Clear hotkey: the core drops the Ink and Draw Mode stays as it
+    /// is, so there is only a repaint, and none outside Draw Mode.
+    fn on_clear(&mut self) {
         let view = self.core.handle(Event::Clear);
-        self.sync(event_loop, view, None);
+        if view.needs_render {
+            self.redraw();
+        }
     }
 
     fn key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
@@ -249,9 +270,8 @@ impl App {
         }
     }
 
-    /// Feeds an input event to the core and applies what changed: a toolbar
-    /// Clear leaves Draw Mode (`sync`), anything else only repaints and
-    /// updates the cursor shape.
+    /// Feeds an input event to the core and applies what changed: Draw Mode
+    /// ending (`sync`), or a repaint and the cursor shape.
     fn input(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         let was_drawing = self.core.view().draw_mode;
         let view = self.core.handle(event);
@@ -367,7 +387,7 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::Hotkey(e) if e.state() == HotKeyState::Pressed => {
                 match self.hotkeys.binding_for(e.id()) {
                     Some(Binding::Toggle) => self.on_toggle(event_loop),
-                    Some(Binding::Clear) => self.on_clear(event_loop),
+                    Some(Binding::Clear) => self.on_clear(),
                     None => {}
                 }
             }
@@ -395,6 +415,10 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
+            // A window that is not key never sees a modifier being released,
+            // so what it remembers would be stale (Alt left "held" made every
+            // Tool key do nothing).
+            WindowEvent::Focused(false) => self.forget_modifiers(),
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
                 self.core.handle(Event::Modifiers {
@@ -516,6 +540,7 @@ fn main() {
         core: Annotator::new(),
         started: Instant::now(),
         overlay: None,
+        previous: None,
         cursor: Point { x: 0.0, y: 0.0 },
         cursor_shape: Cursor::Crosshair,
         hotkeys,
