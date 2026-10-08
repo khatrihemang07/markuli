@@ -39,13 +39,17 @@ The Elements currently chosen with the Select Tool, for moving, deleting or copy
 
 **Toolbar**:
 One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing. It is part of the Overlay, not Ink.
-_Avoid_: panel, palette, style panel
+_Avoid_: panel, style panel
 
 **Toolbar Position**:
 Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. It stays clear of the menu bar, notch, Dock and taskbar. A Setting; the default is top.
 
+**Palette**:
+The 5 color slots and 3 width slots on the Toolbar. The user can edit them (a secondary click on a slot), and they are remembered across launches. Editing a slot also chooses it. Elements already drawn keep their own color and width. Widths are 0.5 to 20 in steps of 0.5. Defaults are Excalidraw's colors and widths 1, 2 and 4.
+_Avoid_: swatches, presets
+
 **Style**:
-The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color index into the 5-color palette and a width index into the 3 presets. It is remembered across launches, but it is not a Setting, and it is not reset when Draw Mode is entered.
+The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color slot and a width slot of the Palette. It is remembered across launches, but it is not a Setting, and it is not reset when Draw Mode is entered.
 _Avoid_: pen settings, brush
 
 **Settings**:

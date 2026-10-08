@@ -381,3 +381,35 @@ fn toolbar_at_scale_two_is_crisp_with_a_hovered_button_and_a_chosen_style() {
         &image_sized(&mut a, WHITE_PAGE, RETINA),
     );
 }
+
+#[test]
+fn toolbar_shows_a_custom_palette_with_a_capped_width_icon() {
+    let mut a = scene_sized(Theme::Light, 2.0, RETINA);
+    let palette = markuli_core::Palette {
+        colors: [
+            [0x12, 0xb8, 0xa6],
+            [0xff, 0x66, 0xcc],
+            [0x7c, 0x3a, 0xed],
+            [0xff, 0xff, 0xff],
+            [0x00, 0x00, 0x00],
+        ],
+        widths: [0.5, 8.0, 20.0],
+    };
+    a.handle(Event::Palette(palette));
+    a.handle(Event::EditColor {
+        slot: 2,
+        rgb: [0x7c, 0x3a, 0xed],
+    });
+    a.handle(Event::EditWidth {
+        slot: 2,
+        width: 20.0,
+    });
+    a.handle(Event::PointerDown(p(100.0, 220.0)));
+    a.handle(Event::PointerMove(p(300.0, 180.0)));
+    a.handle(Event::PointerUp(p(500.0, 230.0)));
+    check(
+        "toolbar_light_custom_palette",
+        RETINA,
+        &image_sized(&mut a, WHITE_PAGE, RETINA),
+    );
+}

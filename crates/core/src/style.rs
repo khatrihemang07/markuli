@@ -1,31 +1,15 @@
-//! How an Element looks: stroke color and width.
-//!
-//! The choices are Excalidraw's: the quick stroke palette
-//! (`DEFAULT_ELEMENT_STROKE_PICKS`, colors.ts, open-color shade 4 of the
-//! 0/2/4/6/8 picks) and its stroke widths 1, 2 and 4 (constants.ts
-//! `STROKE_WIDTH`: thin, bold, extra bold; Markuli calls them thin, medium
-//! and bold). Excalidraw 0.18, MIT.
+//! How an Element looks: stroke color and width, and the choices that set
+//! them. The values come from the [`Palette`].
 
 use crate::freehand::Scratch;
 use crate::history::History;
 use crate::ink::{Ink, Rect};
+use crate::palette::{Palette, COLORS, WIDTHS};
 use crate::render::Pending;
 
-/// Black, red (the default), green, blue, yellow.
-pub(crate) const PALETTE: [[u8; 3]; 5] = [
-    [0x1e, 0x1e, 0x1e],
-    [0xe0, 0x31, 0x31],
-    [0x2f, 0x9e, 0x44],
-    [0x19, 0x71, 0xc2],
-    [0xf0, 0x8c, 0x00],
-];
-
-/// Thin, medium, bold.
-pub(crate) const WIDTHS: [f32; 3] = [1.0, 2.0, 4.0];
-
-/// The Style a user chooses: a color index into the 5-color palette and a
-/// width index into the 3 presets (thin, medium, bold). Out-of-range indices
-/// are ignored by whoever applies them.
+/// The Style a user chooses: a color slot and a width slot of the
+/// [`Palette`] (thin, medium, bold by default). Out-of-range indices are
+/// ignored by whoever applies them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Style {
     pub color: usize,
@@ -39,13 +23,19 @@ impl Default for Style {
     }
 }
 
+impl Style {
+    /// Whether both indices name a color slot and a width slot.
+    pub(crate) fn is_valid(self) -> bool {
+        self.color < COLORS && self.width < WIDTHS
+    }
+}
+
 /// What one Element looks like: its stroke rgb and px width.
 ///
-/// This is the [`Style`] resolved against the palette and presets, so the
-/// stroke color and width can be applied to an Element (and compared with an
-/// Element's own) without looking indices up again. Both are always the same
-/// choice: the default Appearance is the default Style. It is an
-/// implementation detail, not a glossary term.
+/// This is a [`Style`] resolved against the Palette, so the stroke color and
+/// width can be applied to an Element (and compared with an Element's own)
+/// without looking slots up again. It is an implementation detail, not a
+/// glossary term.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Appearance {
     pub color: [u8; 3],
@@ -55,90 +45,95 @@ pub(crate) struct Appearance {
 impl Default for Appearance {
     /// Excalidraw red, medium width.
     fn default() -> Self {
-        Self {
-            color: PALETTE[1],
-            width: WIDTHS[1],
-        }
+        Self::of(Style::default(), &Palette::DEFAULT)
     }
 }
 
-/// One color or width choice of the Toolbar.
+/// One color or width choice: a key, a Toolbar click or a Palette edit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Control {
-    /// The i-th color of the palette.
+pub(crate) enum Choice {
+    /// The i-th color slot.
     Color(usize),
-    /// The i-th width: thin, medium, bold.
+    /// The i-th width slot.
     Width(usize),
+    /// The previous width slot (`[`).
+    Thinner,
+    /// The next width slot (`]`).
+    Bolder,
 }
 
-impl Style {
-    /// Whether both indices name a palette color and a width preset.
-    pub(crate) fn is_valid(self) -> bool {
-        self.color < PALETTE.len() && self.width < WIDTHS.len()
+impl Choice {
+    /// The choice as slot indices: `Thinner` and `Bolder` step from the
+    /// chosen `slots`, so they follow slot order whatever the widths are.
+    pub fn pinned(self, slots: Style) -> Self {
+        match self {
+            Self::Thinner => Self::Width(slots.width.saturating_sub(1)),
+            Self::Bolder => Self::Width((slots.width + 1).min(WIDTHS - 1)),
+            other => other,
+        }
+    }
+
+    /// `slots` after this choice; unchanged when it names no slot.
+    pub fn slots(self, slots: Style) -> Style {
+        let next = match self {
+            Self::Color(color) => Style { color, ..slots },
+            Self::Width(width) => Style { width, ..slots },
+            Self::Thinner | Self::Bolder => slots,
+        };
+        if next.is_valid() {
+            next
+        } else {
+            slots
+        }
     }
 }
 
 impl Appearance {
-    /// The Appearance of the next Strokes, or `self` if `style` is out of
-    /// range.
-    pub fn with_style(self, style: Style) -> Self {
-        if !style.is_valid() {
-            return self;
-        }
+    /// The Appearance of `style`'s slots; out-of-range slots give the default
+    /// slot's value.
+    pub fn of(style: Style, palette: &Palette) -> Self {
+        let style = if style.is_valid() {
+            style
+        } else {
+            Style::default()
+        };
         Self {
-            color: PALETTE[style.color],
-            width: WIDTHS[style.width],
+            color: palette.colors[style.color],
+            width: palette.widths[style.width],
         }
     }
 
-    /// This Appearance as palette and width indices (the nearest width preset; the
-    /// default color for one that is not in the palette).
-    pub fn as_style(self) -> Style {
-        let default = Style::default();
-        Style {
-            color: PALETTE
-                .iter()
-                .position(|c| *c == self.color)
-                .unwrap_or(default.color),
-            width: self.width_index(),
-        }
-    }
-
-    /// The style after `control` was chosen; an unknown choice changes nothing.
-    pub fn with(self, control: Control) -> Self {
-        match control {
-            Control::Color(i) => Self {
-                color: PALETTE.get(i).copied().unwrap_or(self.color),
+    /// This Appearance after `choice`, relative to its own width for
+    /// `Thinner` and `Bolder` (a Selection has no slot of its own); an
+    /// unknown slot changes nothing.
+    pub fn with(self, choice: Choice, palette: &Palette) -> Self {
+        match choice {
+            Choice::Color(i) => Self {
+                color: palette.colors.get(i).copied().unwrap_or(self.color),
                 ..self
             },
-            Control::Width(i) => Self {
-                width: WIDTHS.get(i).copied().unwrap_or(self.width),
+            Choice::Width(i) => Self {
+                width: palette.widths.get(i).copied().unwrap_or(self.width),
                 ..self
             },
+            Choice::Thinner => self.with(
+                Choice::Width(self.width_index(palette).saturating_sub(1)),
+                palette,
+            ),
+            Choice::Bolder => self.with(Choice::Width(self.width_index(palette) + 1), palette),
         }
     }
-}
 
-impl Appearance {
-    /// One width preset thinner, from this Appearance's own width; stops at thin.
-    pub fn thinner(self) -> Self {
-        self.with(Control::Width(self.width_index().saturating_sub(1)))
+    /// The slot of this Appearance's color, if some slot holds it.
+    pub fn color_index(self, palette: &Palette) -> Option<usize> {
+        palette.colors.iter().position(|c| *c == self.color)
     }
 
-    /// One width preset bolder, from this Appearance's own width; stops at bold.
-    pub fn bolder(self) -> Self {
-        self.with(Control::Width(self.width_index() + 1))
-    }
-
-    /// The palette index of this Appearance's color, if it is in the palette.
-    pub fn color_index(self) -> Option<usize> {
-        PALETTE.iter().position(|c| *c == self.color)
-    }
-
-    /// The nearest preset, so an imported odd width still steps sensibly.
-    pub fn width_index(self) -> usize {
+    /// The nearest width slot, so an imported odd width still steps sensibly.
+    pub fn width_index(self, palette: &Palette) -> usize {
         let distance = |w: &f32| (w - self.width).abs();
-        WIDTHS
+        palette
+            .widths
             .iter()
             .enumerate()
             .min_by(|a, b| distance(a.1).total_cmp(&distance(b.1)))

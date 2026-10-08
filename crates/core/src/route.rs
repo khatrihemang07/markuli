@@ -1,16 +1,19 @@
 //! Event routing: how each [`Event`] changes the Annotator's state, and the
 //! gestures behind pointer, key and toolbar input.
 
+use crate::palette::{Palette, COLORS, WIDTHS};
 use crate::style;
 use crate::style::Appearance;
 use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
 use crate::{
-    excalidraw, Annotator, Button, Control, DisplayId, Element, Event, Ink, Key, Point, View,
+    excalidraw, Annotator, Button, Choice, DisplayId, EditRequest, Element, Event, Ink, Key, Point,
+    SlotKind, SlotValue, View,
 };
 
 impl Annotator {
     /// The single way into the core.
     pub fn handle(&mut self, event: Event) -> View {
+        self.edit = None;
         match event {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
@@ -26,7 +29,26 @@ impl Annotator {
                 self.toolbar.set_position(position);
                 self.paint.full();
             }
-            Event::Style(style) => self.style = self.style.with_style(style),
+            Event::Style(style) if style.is_valid() => {
+                self.slots = style;
+                self.resolve_style();
+            }
+            Event::Palette(palette) => {
+                self.palette = palette.sanitized();
+                self.resolve_style();
+            }
+            Event::EditColor { slot, rgb } if slot < COLORS => {
+                self.palette.colors[slot] = rgb;
+                self.edit_slot(SlotKind::Color, slot, Choice::Color(slot));
+            }
+            Event::EditWidth { slot, width } if slot < WIDTHS => {
+                if let Some(width) = Palette::snap_width(width) {
+                    self.palette.widths[slot] = width;
+                    self.edit_slot(SlotKind::Width, slot, Choice::Width(slot));
+                }
+            }
+            Event::EditEnd => self.finish_restyle(),
+            Event::SecondaryClick(at) if self.draw_mode => self.secondary_click(at),
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
                 self.selection.set_theme(theme);
@@ -55,37 +77,86 @@ impl Annotator {
         self.view()
     }
 
-    /// A style choice, from a key or a Toolbar click. The active Tool's
-    /// [`StyleTarget`] decides, never its kind: a Selection is restyled, the
-    /// next Strokes take the Style, and a Tool with neither hands over to the
-    /// Pen first.
-    fn choose(&mut self, change: impl Fn(Appearance) -> Appearance) {
+    /// A style choice, from a key, a Toolbar click or a Palette edit. The
+    /// active Tool's [`StyleTarget`] decides, never its kind: a Selection is
+    /// restyled, the next Strokes take the Style, and a Tool with neither
+    /// hands over to the Pen first.
+    fn choose(&mut self, choice: Choice) {
         let target = self.tools.get(self.tools.active()).map(Tool::styles);
+        let palette = self.palette;
         match target {
             Some(StyleTarget::Selection) if !self.selection.is_empty() => style::restyle(
                 &mut self.ink,
                 self.selection.ids(),
-                change,
+                |appearance| appearance.with(choice, &palette),
                 &mut self.restyling,
                 (&mut self.freehand, &mut self.paint, self.scale),
             ),
-            Some(StyleTarget::NextStrokes) => self.style = change(self.style),
+            Some(StyleTarget::NextStrokes) => self.choose_for_pen(choice),
             _ => {
                 self.switch_tool(|tools| tools.select_by_kind(ToolKind::Pen));
-                self.style = change(self.style);
+                self.choose_for_pen(choice);
             }
         }
     }
 
+    fn choose_for_pen(&mut self, choice: Choice) {
+        self.slots = choice.pinned(self.slots).slots(self.slots);
+        self.resolve_style();
+    }
+
+    /// The Pen's look from its slots and the Palette.
+    fn resolve_style(&mut self) {
+        self.style = Appearance::of(self.slots, &self.palette);
+    }
+
     /// A key or click is a single action: the restyle is logged right away.
-    fn choose_by_key(&mut self, change: impl Fn(Appearance) -> Appearance) {
-        self.choose(change);
+    fn choose_by_key(&mut self, choice: Choice) {
+        self.choose(choice);
         self.finish_restyle();
+    }
+
+    /// One edit of a Palette slot: it also chooses the slot. Edits of one
+    /// slot in a row are one restyle until [`Self::finish_restyle`].
+    fn edit_slot(&mut self, kind: SlotKind, index: usize, choice: Choice) {
+        if self.editing != Some((kind, index)) {
+            self.finish_restyle();
+        }
+        self.resolve_style();
+        self.choose(choice);
+        self.editing = Some((kind, index));
     }
 
     /// A choice is a single action: a restyle becomes one operation-log entry.
     fn finish_restyle(&mut self) {
+        self.editing = None;
         style::finish(self.restyling.take(), &self.ink, &mut self.history);
+    }
+
+    /// A secondary click: on a color or width button, ask for its editor.
+    fn secondary_click(&mut self, at: Point) {
+        let Some((button, anchor)) = self.toolbar.palette_button_at(at, self.tools.len()) else {
+            return;
+        };
+        let (kind, index, value) = match button {
+            Button::Color(i) => (
+                SlotKind::Color,
+                i,
+                self.palette.colors.get(i).copied().map(SlotValue::Color),
+            ),
+            Button::Width(i) => (
+                SlotKind::Width,
+                i,
+                self.palette.widths.get(i).copied().map(SlotValue::Width),
+            ),
+            _ => return,
+        };
+        self.edit = value.map(|value| EditRequest {
+            kind,
+            index,
+            anchor,
+            value,
+        });
     }
 
     /// The active Tool with what it may change.
@@ -150,8 +221,8 @@ impl Annotator {
     fn activate(&mut self, button: Button) {
         match button {
             Button::Tool(index) => self.switch_tool(|tools| tools.select(index)),
-            Button::Color(i) => self.choose_by_key(|appearance| appearance.with(Control::Color(i))),
-            Button::Width(i) => self.choose_by_key(|appearance| appearance.with(Control::Width(i))),
+            Button::Color(i) => self.choose_by_key(Choice::Color(i)),
+            Button::Width(i) => self.choose_by_key(Choice::Width(i)),
             Button::Undo => self.undo(),
             Button::Redo => self.redo(),
             Button::Clear => self.clear(),
@@ -159,6 +230,7 @@ impl Annotator {
     }
 
     fn key(&mut self, key: Key, command: bool, shift: bool, alt: bool) {
+        self.finish_restyle();
         let (tool, mut ctx) = self.tool();
         if tool.key(&mut ctx, key, command, shift) {
             return;
@@ -185,10 +257,10 @@ impl Annotator {
                     .to_digit(10)
                     .and_then(|d| usize::try_from(d.checked_sub(1)?).ok())
                     .unwrap_or(0);
-                self.choose_by_key(|appearance| appearance.with(Control::Color(index)));
+                self.choose_by_key(Choice::Color(index));
             }
-            (Key::Char('['), false, _) => self.choose_by_key(Appearance::thinner),
-            (Key::Char(']'), false, _) => self.choose_by_key(Appearance::bolder),
+            (Key::Char('['), false, _) => self.choose_by_key(Choice::Thinner),
+            (Key::Char(']'), false, _) => self.choose_by_key(Choice::Bolder),
             (Key::Char(c), false, false) if !alt => {
                 self.switch_tool(|tools| tools.press(c));
             }

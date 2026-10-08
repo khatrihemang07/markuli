@@ -363,5 +363,10 @@ pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.control_key()
 }
 
+/// Windows has a right button: no modifier turns a left click into one.
+pub fn secondary_click_modifier(_modifiers: ModifiersState) -> bool {
+    false
+}
+
 /// Nothing to hand back: the DIB section is freed with the window.
 pub fn release_memory() {}

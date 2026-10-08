@@ -572,6 +572,11 @@ pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.super_key()
 }
 
+/// Control+click is the secondary click on a one-button trackpad.
+pub fn secondary_click_modifier(modifiers: ModifiersState) -> bool {
+    modifiers.control_key()
+}
+
 /// Replaces the clipboard with plain text (what Excalidraw pastes from).
 pub fn set_clipboard_text(text: &str) {
     let pasteboard = NSPasteboard::generalPasteboard();

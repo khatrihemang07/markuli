@@ -59,6 +59,9 @@ struct App {
     #[cfg(feature = "dev-hooks")]
     reopen: u32,
     modifiers: ModifiersState,
+    /// The left press in flight was turned into a secondary click, so its
+    /// release is not a pointer event.
+    secondary_press: bool,
     quit_id: Option<MenuId>,
     tray: Option<TrayIcon>,
 }
@@ -296,12 +299,20 @@ impl App {
         }
     }
 
-    /// Saves the config when the Pen's Style changed, and only then.
+    /// Saves the config when the Pen's Style or the Palette changed, and
+    /// only then.
     fn remember_style(&mut self, view: View) {
-        if view.style != self.config.style {
+        if view.style != self.config.style || view.palette != self.config.palette {
             self.config.style = view.style;
+            self.config.palette = view.palette;
             settings::save(&self.config);
         }
+    }
+
+    /// A right click, or Control+click on macOS. The pickers that answer
+    /// `View::edit` come later; for now the core only reports the request.
+    fn secondary_click(&mut self, event_loop: &ActiveEventLoop) {
+        self.input(event_loop, Event::SecondaryClick(self.cursor));
     }
 
     /// Feeds an input event to the core and applies what changed: Draw Mode
@@ -469,10 +480,24 @@ impl ApplicationHandler<UserEvent> for App {
                 self.input(event_loop, Event::PointerMove(self.cursor));
             }
             WindowEvent::MouseInput {
+                button: MouseButton::Right,
+                state: ElementState::Pressed,
+                ..
+            } => self.secondary_click(event_loop),
+            WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state,
                 ..
             } => {
+                let control_click = platform::secondary_click_modifier(self.modifiers);
+                if state == ElementState::Pressed && control_click {
+                    self.secondary_press = true;
+                    self.secondary_click(event_loop);
+                    return;
+                }
+                if state == ElementState::Released && std::mem::take(&mut self.secondary_press) {
+                    return;
+                }
                 if state == ElementState::Pressed {
                     self.reclaim_focus();
                 }
@@ -570,6 +595,7 @@ fn main() {
     }));
 
     let mut core = Annotator::new();
+    core.handle(Event::Palette(config.palette));
     core.handle(Event::Style(config.style));
     core.handle(Event::ToolbarPosition(config.toolbar));
 
@@ -587,6 +613,7 @@ fn main() {
         #[cfg(feature = "dev-hooks")]
         reopen: 0,
         modifiers: ModifiersState::empty(),
+        secondary_press: false,
         quit_id: None,
         tray: None,
     };

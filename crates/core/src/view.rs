@@ -21,7 +21,9 @@ impl Annotator {
                 _ => Cursor::Arrow,
             },
             tool: self.tools.active_kind(),
-            style: self.style.as_style(),
+            style: self.slots,
+            palette: self.palette,
+            edit: self.edit,
             next_frame: self.laser.next_frame(),
         }
     }
@@ -92,6 +94,7 @@ impl Annotator {
             can_undo: self.history.can_undo(),
             can_redo: self.history.can_redo(),
             has_ink: !self.ink.is_empty(),
+            palette: self.palette,
         }
     }
 
@@ -102,8 +105,8 @@ impl Annotator {
     fn chosen_style(&self) -> Chosen {
         let target = self.tools.get(self.tools.active()).map(Tool::styles);
         let own = Chosen {
-            color: self.style.color_index(),
-            width: Some(self.style.width_index()),
+            color: Some(self.slots.color),
+            width: Some(self.slots.width),
             dimmed: false,
         };
         match target {
@@ -118,11 +121,12 @@ impl Annotator {
                 let Some(first) = appearances.next() else {
                     return own;
                 };
-                let first = (first.color_index(), Some(first.width_index()));
+                let p = &self.palette;
+                let first = (first.color_index(p), Some(first.width_index(p)));
                 let (color, width) = appearances.fold(first, |(c, w), s| {
                     (
-                        c.filter(|&c| s.color_index() == Some(c)),
-                        w.filter(|&w| s.width_index() == w),
+                        c.filter(|&c| s.color_index(p) == Some(c)),
+                        w.filter(|&w| s.width_index(p) == w),
                     )
                 });
                 Chosen {

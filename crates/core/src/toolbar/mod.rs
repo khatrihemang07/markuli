@@ -16,6 +16,7 @@ mod paint;
 mod theme;
 
 use crate::ink::Point;
+use crate::palette::{Anchor, Palette};
 use crate::tools::Tools;
 use layout::Layout;
 
@@ -37,7 +38,7 @@ pub enum Button {
 }
 
 /// What decides how the toolbar looks besides the Toolbar's own state.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(
     clippy::struct_excessive_bools,
     reason = "a plain snapshot of independent button states, compared whole"
@@ -54,6 +55,8 @@ pub(crate) struct UiState {
     /// The active Tool styles nothing: colors and widths are shown dimmed
     /// (a click still works: it hands over to the Pen).
     pub dimmed: bool,
+    /// What the color swatches and width icons show.
+    pub palette: Palette,
 }
 
 /// Everything painted last time; a difference means a repaint is due.
@@ -182,6 +185,23 @@ impl Toolbar {
             .iter()
             .any(|r| r.contains(at))
             .then_some(Hit::Dead)
+    }
+
+    /// The color or width button at `at` and where it is, for an edit request.
+    pub fn palette_button_at(&self, at: Point, tools: usize) -> Option<(Button, Anchor)> {
+        let l = self.layout(tools)?;
+        let i = (0..layout::count(tools)).find(|&i| l.button_rect(i).contains(at))?;
+        let button = layout::button(i, tools);
+        let r = l.button_rect(i);
+        matches!(button, Button::Color(_) | Button::Width(_)).then_some((
+            button,
+            Anchor {
+                x: r.x,
+                y: r.y,
+                w: r.w,
+                h: r.h,
+            },
+        ))
     }
 
     #[cfg(feature = "test-support")]

@@ -6,7 +6,6 @@ use super::theme::{fill_rounded, rounded_rect, shadow, solid_paint, Tokens, RADI
 use super::{Button, Chrome, Toolbar, UiState};
 use crate::icons::{self, Icon};
 use crate::render::{Canvas, Format};
-use crate::style::PALETTE;
 use crate::tools::Tools;
 use tiny_skia::{LineCap, PathBuilder, Stroke, Transform};
 
@@ -14,8 +13,13 @@ use tiny_skia::{LineCap, PathBuilder, Stroke, Transform};
 const ICON: f32 = 16.0;
 /// Swatch edge (Excalidraw's 1.35 rem swatch is about 22 px).
 const SWATCH: f32 = 22.0;
-/// Line thickness of the three width buttons' icons.
-const ICON_LINES: [f32; 3] = [1.5, 3.0, 4.5];
+/// A width button's line is 1.5 times the width it chooses up to 2 px, then
+/// grows by 0.75 per px (the defaults 1, 2 and 4 give 1.5, 3 and 4.5)...
+const ICON_LINE: f32 = 1.5;
+const ICON_KNEE: f32 = 2.0;
+const ICON_LINE_SLOPE: f32 = 0.75;
+/// ...up to this thickness, so a round-capped line still fits the button.
+const ICON_LINE_MAX: f32 = 14.0;
 /// How much of its color a dimmed swatch keeps.
 const DIMMED: f32 = 0.35;
 
@@ -130,7 +134,7 @@ impl Brush<'_> {
         chosen: bool,
         enabled: bool,
     ) {
-        let Some(&color) = PALETTE.get(index) else {
+        let Some(&color) = self.ui.palette.colors.get(index) else {
             return;
         };
         let s = self.scale;
@@ -160,9 +164,12 @@ impl Brush<'_> {
 
     /// A horizontal round-capped line as thick as the width it chooses.
     fn width_line(&self, target: &mut Canvas<'_, '_>, rect: Area, index: usize, ink: [u8; 3]) {
-        let Some(&thickness) = ICON_LINES.get(index) else {
+        let Some(&width) = self.ui.palette.widths.get(index) else {
             return;
         };
+        let thickness = (width.min(ICON_KNEE) * ICON_LINE
+            + (width - ICON_KNEE).max(0.0) * ICON_LINE_SLOPE)
+            .min(ICON_LINE_MAX);
         let s = self.scale;
         let mut line = PathBuilder::new();
         let y = rect.y + rect.h / 2.0;

@@ -3,6 +3,7 @@
 
 use super::Button;
 use crate::ink::Point;
+use crate::palette::{COLORS, WIDTHS};
 
 /// Logical pixel metrics from Excalidraw's CSS.
 const PAD: f32 = 4.0;
@@ -69,9 +70,6 @@ impl Area {
     }
 }
 
-/// Colors and widths in the row: the palette and the width presets.
-pub(super) const COLORS: usize = 5;
-pub(super) const WIDTHS: usize = 3;
 /// The buttons after the widths, in row order.
 const ACTION_BUTTONS: [Button; 3] = [Button::Undo, Button::Redo, Button::Clear];
 const ACTIONS: usize = ACTION_BUTTONS.len();

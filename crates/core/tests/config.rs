@@ -1,6 +1,6 @@
 //! Settings file behaviour, through the public interface only.
 
-use markuli_core::{Config, Style};
+use markuli_core::{Config, Palette, Style};
 
 #[test]
 fn defaults_match_the_spec() {
@@ -18,6 +18,16 @@ fn saved_settings_load_back_unchanged() {
         launch_at_login: true,
         style: Style { color: 4, width: 0 },
         toolbar: markuli_core::ToolbarPosition::Left,
+        palette: Palette {
+            colors: [
+                [1, 2, 3],
+                [255, 0, 128],
+                [0, 0, 0],
+                [16, 32, 48],
+                [250, 250, 250],
+            ],
+            widths: [0.5, 7.5, 20.0],
+        },
     };
     assert_eq!(Config::parse(&config.to_text()), config);
 }
@@ -110,4 +120,56 @@ fn the_toolbar_position_is_read_tolerantly() {
         ..Config::default()
     };
     assert_eq!(Config::parse(&c.to_text()), c);
+}
+
+#[test]
+fn the_default_palette_is_excalidraws() {
+    assert_eq!(Config::default().palette, Palette::DEFAULT);
+    let text = Config::default().to_text();
+    assert!(
+        text.contains("colors=#1e1e1e,#e03131,#2f9e44,#1971c2,#f08c00\n"),
+        "{text}"
+    );
+    assert!(text.contains("widths=1,2,4\n"), "{text}");
+}
+
+#[test]
+fn palette_values_are_read_slot_by_slot() {
+    let c = Config::parse("colors=#112233,#445566,#778899,#aabbcc,#ddeeff\nwidths=0.5,3.5,20\n");
+    assert_eq!(c.palette.colors[0], [0x11, 0x22, 0x33]);
+    assert_eq!(c.palette.colors[4], [0xdd, 0xee, 0xff]);
+    assert_eq!(c.palette.widths, [0.5, 3.5, 20.0]);
+}
+
+#[test]
+fn invalid_palette_slots_fall_back_to_their_default_alone() {
+    let d = Palette::DEFAULT;
+    let c = Config::parse("colors=#112233,red,#12345,#GGGGGG,#AABBCC\nwidths=abc,5,NaN\n");
+    assert_eq!(c.palette.colors[0], [0x11, 0x22, 0x33]);
+    assert_eq!(c.palette.colors[1], d.colors[1]);
+    assert_eq!(c.palette.colors[2], d.colors[2]);
+    assert_eq!(c.palette.colors[3], d.colors[3]);
+    assert_eq!(c.palette.colors[4], [0xaa, 0xbb, 0xcc]);
+    assert_eq!(c.palette.widths, [d.widths[0], 5.0, d.widths[2]]);
+}
+
+#[test]
+fn short_long_and_odd_palette_lists_are_tolerated() {
+    let d = Palette::DEFAULT;
+    let c = Config::parse("colors=#010203\nwidths=9,,\n");
+    assert_eq!(c.palette.colors[0], [1, 2, 3]);
+    assert_eq!(c.palette.colors[1..], d.colors[1..]);
+    assert!((c.palette.widths[0] - 9.0).abs() < f32::EPSILON);
+    assert_eq!(c.palette.widths[1..], d.widths[1..]);
+    let c = Config::parse(
+        "colors=#010203,#010203,#010203,#010203,#010203,#ffffff,#ffffff\nwidths=1,1,1,1,1\n",
+    );
+    assert_eq!(c.palette.colors[4], [1, 2, 3]);
+    assert_eq!(Config::parse("colors=\nwidths=").palette, d);
+}
+
+#[test]
+fn out_of_range_widths_are_clamped_and_snapped() {
+    let c = Config::parse("widths=0.1,2.3,500\n");
+    assert_eq!(c.palette.widths, [0.5, 2.5, 20.0]);
 }
