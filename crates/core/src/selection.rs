@@ -13,11 +13,9 @@
 //! then this, then the toolbar), so a repaint never stacks on itself.
 
 use crate::ink::{Ink, Rect};
-use crate::render::{Format, Pending};
+use crate::render::{Canvas, Format, Pending};
 use crate::toolbar::Theme;
-use tiny_skia::{
-    Color, Paint, PathBuilder, PixmapMut, Rect as SkiaRect, Stroke, StrokeDash, Transform,
-};
+use tiny_skia::{Color, Paint, PathBuilder, Rect as SkiaRect, Stroke, StrokeDash, Transform};
 
 /// Excalidraw's `DEFAULT_TRANSFORM_HANDLE_SPACING * 2`: the gap between an
 /// Element and its selection rectangle, in logical pixels.
@@ -182,7 +180,7 @@ impl Selection {
 
     /// Paints the overlay. The caller has already redrawn the whole of
     /// [`Selection::shown`] from the Ink.
-    pub fn paint(&self, ink: &Ink, target: &mut PixmapMut<'_>, scale: f32, format: Format) {
+    pub fn paint(&self, ink: &Ink, target: &mut Canvas<'_, '_>, scale: f32, format: Format) {
         let colour = match self.theme {
             Theme::Light => LIGHT,
             Theme::Dark => DARK,
@@ -206,7 +204,7 @@ impl Selection {
             let [l, t, r, b] = snap(rect, scale);
             if let Some(fill) = SkiaRect::from_ltrb(l, t, r, b) {
                 let tint = stroke_paint([0, 0, 200], 0.04, format);
-                target.fill_rect(fill, &tint, Transform::identity(), None);
+                target.fill_rect(fill, &tint);
             }
             outline(target, rect, scale, &line, &solid);
         }
@@ -223,13 +221,19 @@ fn dashed_stroke(scale: f32) -> Stroke {
 }
 
 /// Strokes `rect` (logical) with a line that sits exactly on pixel centres.
-fn outline(target: &mut PixmapMut<'_>, rect: Rect, scale: f32, paint: &Paint<'_>, stroke: &Stroke) {
+fn outline(
+    target: &mut Canvas<'_, '_>,
+    rect: Rect,
+    scale: f32,
+    paint: &Paint<'_>,
+    stroke: &Stroke,
+) {
     let [l, t, r, b] = snap(rect, scale);
     let half = stroke.width / 2.0;
     if let Some(path) =
         SkiaRect::from_ltrb(l + half, t + half, r + half, b + half).map(PathBuilder::from_rect)
     {
-        target.stroke_path(&path, paint, stroke, Transform::identity(), None);
+        target.stroke_path(&path, paint, stroke, Transform::identity());
     }
 }
 

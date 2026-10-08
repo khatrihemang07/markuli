@@ -284,3 +284,24 @@ fn incremental_rendering_with_the_toolbar_matches_a_full_redraw() {
         "incremental pixels differ from a full redraw"
     );
 }
+
+#[test]
+fn a_tool_key_pressed_again_keeps_its_tool() {
+    // Unlike Excalidraw, pressing the key of the active Tool does not toggle
+    // back to the previous one.
+    for (keys, tool) in [
+        (['v', '1'], ToolKind::Select),
+        (['p', '2'], ToolKind::Pen),
+        (['e', '3'], ToolKind::Eraser),
+        (['k', '4'], ToolKind::Laser),
+    ] {
+        for k in keys {
+            let mut a = drawing();
+            key(&mut a, Key::Char('v'), false, false);
+            for _ in 0..3 {
+                key(&mut a, Key::Char(k), false, false);
+                assert_eq!(a.view().tool, tool, "key {k}");
+            }
+        }
+    }
+}

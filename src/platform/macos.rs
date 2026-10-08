@@ -181,12 +181,14 @@ const LOCK_READ_ONLY: u32 = 1;
 
 pub struct Presenter {
     layer: Retained<CALayer>,
-    /// Two surfaces: the core renders into the one that is not on screen
-    /// (see `present`).
+    /// The second surface exists only without the `setContentsChanged` SPI
+    /// (see `present`); it is null otherwise.
     surfaces: [IOSurfaceRef; 2],
     /// The surface the layer shows (the last presented one).
     shown: usize,
-    /// The part of `shown` the other surface lacks.
+    /// `CALayer.setContentsChanged` exists: one surface is enough.
+    notify: bool,
+    /// Double-buffered only: the part of `shown` the other surface lacks.
     stale: Option<Damage>,
     /// Surface width in pixels: the window width rounded up to a whole
     /// 64-byte row, because a `Pixmap` needs tightly packed rows. The layer
@@ -240,25 +242,22 @@ impl Presenter {
         let size = window.inner_size();
         let (width, height) = (size.width.max(1), size.height.max(1));
         let padded_width = width.div_ceil(16) * 16;
+        let notify = can_notify_contents_changed(&layer);
         let surfaces = [
             create_surface(padded_width, height),
-            create_surface(padded_width, height),
+            if notify {
+                ptr::null_mut()
+            } else {
+                create_surface(padded_width, height)
+            },
         ];
-        #[cfg(feature = "dev-hooks")]
-        eprintln!("present: two IOSurfaces, rendering into the one not shown");
-        // Swapping `contents` must never cross-fade (0.25 s) or animate.
-        // SAFETY: a plain property message with a one-entry dictionary.
-        unsafe {
-            let null = objc2_foundation::NSNull::null();
-            let actions = NSDictionary::from_retained_objects(&[ns_string!("contents")], &[null]);
-            let _: () = msg_send![&*layer, setActions: &*actions];
-        }
         let crop = f64::from(width) / f64::from(padded_width);
         layer.setContentsRect(CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(crop, 1.0)));
         Self {
             layer,
             surfaces,
             shown: 0,
+            notify,
             stale: None,
             padded_width,
             height,
@@ -268,7 +267,11 @@ impl Presenter {
 
     /// The surface the core renders into next.
     fn back(&self) -> usize {
-        1 - self.shown
+        if self.notify {
+            0
+        } else {
+            1 - self.shown
+        }
     }
 
     /// The surface's pixels, locked for CPU writes until `present`. Without
@@ -322,33 +325,55 @@ impl Presenter {
         }
     }
 
-    /// Unlocks the back surface and puts it on screen, then swaps the two.
+    /// Unlocks the surface and puts it on screen.
     ///
-    /// Never render into the surface being displayed: the core paints a
-    /// frame in several passes (backdrop, Ink, toolbar, style panel), and the
-    /// compositor reads the surface whenever it likes, so it caught frames
-    /// with the panel not yet painted (a flicker while hovering it). Two
-    /// surfaces also make `contents` a different object on every frame, which
-    /// Core Animation needs to notice a change at all (ADR-0003).
+    /// Assigning the SAME `IOSurface` to `contents` again is a no-op to Core
+    /// Animation: it compares objects, not the surface's seed, so the
+    /// compositor keeps the old frame (ADR-0003). `setContentsChanged` (the
+    /// SPI `WebKit` and Chromium use for `IOSurface` layers) says the pixels
+    /// changed. Where it is missing, two surfaces alternate, so `contents`
+    /// really changes every frame.
+    ///
+    /// The surface may be read by the compositor at any time, so the core
+    /// writes each damaged band once, already composed (see `render.rs`): no
+    /// half-painted frame is ever visible, and one surface is enough.
     pub fn present(&mut self, damage: Damage) {
         if self.locked {
             // SAFETY: locked by `buffer`, same surface.
             unsafe { IOSurfaceUnlock(self.surfaces[self.back()], 0, ptr::null_mut()) };
             self.locked = false;
         }
-        self.shown = 1 - self.shown;
-        self.stale = Some(damage);
+        if !self.notify {
+            self.shown = 1 - self.shown;
+            self.stale = Some(damage);
+        }
         CATransaction::begin();
-        // Belt and braces next to the layer's own `contents` action.
+        // Without this, every contents change cross-fades for 0.25 s.
         CATransaction::setDisableActions(true);
         // SAFETY: an `IOSurfaceRef` is an Objective-C object that `contents`
-        // accepts.
+        // accepts; `setContentsChanged` was checked with `respondsToSelector:`.
         unsafe {
             let object: &AnyObject = &*self.surfaces[self.shown].cast::<AnyObject>();
             self.layer.setContents(Some(object));
+            if self.notify {
+                let _: () = msg_send![&*self.layer, setContentsChanged];
+            }
         }
         CATransaction::commit();
     }
+}
+
+/// Whether `CALayer` has the private `setContentsChanged`. With the
+/// `dev-hooks` feature, `MARKULI_PRESENT_FALLBACK` forces the answer to no,
+/// so the double-buffered path can be tested on a machine that has the SPI.
+fn can_notify_contents_changed(layer: &CALayer) -> bool {
+    #[cfg(feature = "dev-hooks")]
+    if std::env::var_os("MARKULI_PRESENT_FALLBACK").is_some() {
+        return false;
+    }
+    // SAFETY: `respondsToSelector:` is declared on NSObject.
+    let responds: Bool = unsafe { msg_send![layer, respondsToSelector: sel!(setContentsChanged)] };
+    responds.as_bool()
 }
 
 impl Drop for Presenter {
@@ -361,7 +386,9 @@ impl Drop for Presenter {
             }
             self.layer.setContents(None);
             CFRelease(self.surfaces[0]);
-            CFRelease(self.surfaces[1]);
+            if !self.surfaces[1].is_null() {
+                CFRelease(self.surfaces[1]);
+            }
         }
     }
 }

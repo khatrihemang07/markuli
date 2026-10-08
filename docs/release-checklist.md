@@ -22,7 +22,7 @@ Measure the **release** build, not debug.
 | RAM idle, no Ink | at most 10 MB | macOS: `footprint <pid>` (phys_footprint, not RSS). Windows: Task Manager, Details tab, "Memory (private working set)" | macOS: **missed**, 11 MB (the bare AppKit baseline, see note below); after Clear 14 MB, stable over repeated cycles. Windows: not measured. |
 | RAM while drawing | at most 40 MB | same, during a Stroke on the largest display | macOS: **met**. Draw Mode with toolbar 21 MB, 23 MB after two Strokes (1920x1080 at 1x, final build, synthesized events). Windows: not measured. |
 | RAM after closing Settings | back to idle (no growth after repeated open/close) | open and close Settings 5 times, compare to the first close | macOS: **missed**. 19-20 MB after close vs 11 MB idle (AppKit text and control caches), flat over 6 open/close cycles, so no leak. Windows: not measured. |
-| RAM after leaving Draw Mode with Ink | near idle (the Overlay is destroyed) | leave Draw Mode after drawing, `footprint <pid>` | macOS: 14 MB (idle 11 MB, Draw Mode 29-30 MB before double buffering, 45 MB after (second 17 MB IOSurface; over the 40 MB drawing budget on a 2560x1664 display, see ADR-0003), 2 Strokes), the same floor as after Clear. Windows: not measured. |
+| RAM after leaving Draw Mode with Ink | near idle (the Overlay is destroyed) | leave Draw Mode after drawing, `footprint <pid>` | macOS: 14 MB (idle 11 MB, Draw Mode 29-30 MB on a 2560x1664 Retina display; a short-lived always-double-buffered build used 45-47 MB, see ADR-0003), the same floor as after Clear. Windows: not measured. |
 | Idle CPU | 0% | Activity Monitor / Task Manager for 30 s with no Ink | macOS: **met**, 0.0% (also 0.0% in Draw Mode and with Ink visible). Windows: not measured. |
 | Hotkey to first Stroke | under 16 ms | screen-record at 60 fps, count frames from key press to first ink | macOS: **missed** for the first Overlay after the process has been idle: 49-75 ms cold (NSWindow creation 58 ms, orderFront 11-14 ms; WindowServer and AppKit cost), 7-20 ms warm. Pre-creating the window would cost idle RAM and contradict ADR-0002, so it stays. Measured with stderr traces, not a screen recording. Windows: not measured. |
 
@@ -37,7 +37,7 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 - [ ] With a real mouse, every Stroke appears while it is drawn, not only the first one (ADR-0003). Screenshots read the surface memory and can look right while the screen is stale: check with your eyes.
 - [ ] The Clear hotkey (`Alt+1`) and the toolbar Clear button remove all Ink and stay in Draw Mode; Cmd/Ctrl+Z brings the Ink back. Outside Draw Mode `Alt+1` clears the hidden Ink and no Overlay appears (7).
 - [ ] Leaving Draw Mode gives the focus back to the app and window that had it: type at once, without a click (B1). Tool keys work right after entering, with no click: `V`/`1` Select, `P`/`2` Pen, `E`/`3` Eraser, `K`/`4` Laser (`7` Pen and `0` Eraser still work); after another app took focus, one click on the Overlay brings them back. The toolbar shows no number hints.
-- [ ] Hovering the style panel and toolbar in Draw Mode never makes them blink (ADR-0003, double buffering).
+- [ ] Hovering the style panel and toolbar in Draw Mode never makes them blink (ADR-0003: each damaged region is composed off-screen and copied once).
 - [ ] Toggling on a second display moves the Overlay there and starts with no Ink (8).
 - [ ] The Overlay is absent from the Dock/taskbar, Alt-Tab / Cmd-Tab and Mission Control (9).
 - [ ] macOS: toggling over a full-screen app does not create or switch Spaces (10).
@@ -71,5 +71,5 @@ These exist only in a build made with `cargo build --release --features dev-hook
 
 - `MARKULI_CONFIG_DIR` points the config file at another folder.
 - `MARKULI_LAUNCH_AGENT_DIR` (macOS) redirects the LaunchAgent plist.
-- macOS: a dev-hooks build prints `present: two IOSurfaces...` on stderr when an Overlay is created (ADR-0003).
+- `MARKULI_PRESENT_FALLBACK=1` (macOS) forces the double-buffered presenter used when `CALayer.setContentsChanged` is missing (ADR-0003).
 - `MARKULI_OPEN_SETTINGS=N` opens Settings at start and again after each close, N times. Use it to script the open/close footprint check, since a tray menu cannot be clicked from a script.

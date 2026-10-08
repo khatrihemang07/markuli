@@ -10,9 +10,9 @@
 use crate::icons::{self, Icon};
 use crate::ink::Point;
 use crate::panel::{Panel, PanelView};
-use crate::render::Format;
+use crate::render::{Canvas, Format};
 use crate::tools::Tools;
-use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Transform};
+use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder};
 
 /// The OS light or dark theme, an input to the core.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -405,7 +405,7 @@ impl Chrome<'_> {
         self.panel.is_dirty(self.panel_view)
     }
 
-    pub fn paint_panel(&self, target: &mut PixmapMut<'_>, format: Format) {
+    pub fn paint_panel(&self, target: &mut Canvas<'_, '_>, format: Format) {
         if let Some(view) = self.panel_view {
             self.panel.paint(view, target, format);
         }
@@ -424,7 +424,7 @@ impl Chrome<'_> {
         self.toolbar.is_dirty(self.visible, self.ui)
     }
 
-    pub fn paint(&self, target: &mut PixmapMut<'_>, format: Format) {
+    pub fn paint(&self, target: &mut Canvas<'_, '_>, format: Format) {
         let (toolbar, tools) = (&*self.toolbar, self.tools);
         let Some(l) = toolbar.layout(tools.len()) else {
             return;
@@ -488,7 +488,7 @@ impl Chrome<'_> {
 
 /// Stock `--shadow-island`, approximated by stacked translucent rounded
 /// rectangles, outermost first: (grow, offset down, alpha), logical pixels.
-pub(crate) fn shadow(target: &mut PixmapMut<'_>, island: Area, s: f32, format: Format) {
+pub(crate) fn shadow(target: &mut Canvas<'_, '_>, island: Area, s: f32, format: Format) {
     const LAYERS: [(f32, f32, f32); 6] = [
         (13.0, 7.0, 0.010),
         (10.0, 6.0, 0.015),
@@ -527,9 +527,9 @@ pub(crate) fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'st
     paint
 }
 
-pub(crate) fn fill_rounded(target: &mut PixmapMut<'_>, r: Area, radius: f32, paint: &Paint<'_>) {
+pub(crate) fn fill_rounded(target: &mut Canvas<'_, '_>, r: Area, radius: f32, paint: &Paint<'_>) {
     if let Some(path) = rounded_rect(r, radius) {
-        target.fill_path(&path, paint, FillRule::Winding, Transform::identity(), None);
+        target.fill_path(&path, paint, FillRule::Winding);
     }
 }
 

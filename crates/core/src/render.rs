@@ -3,8 +3,11 @@
 //! Each Element's outline is cached on the Element (see `ink.rs`); drawing
 //! only fills it. Between full redraws, only the damaged region is redrawn
 //! (standards rule 7): the region is cleared and every Element touching it is
-//! filled again, in bands drawn into a small reused scratch pixmap and copied
-//! into the caller's buffer. Nothing in here allocates once warm (rule 8).
+//! filled again. Every layer of the frame (backdrop, Ink, Laser, Selection,
+//! toolbar, style panel) is composed in a small reused scratch pixmap, one band
+//! at a time, and each finished band is copied into the caller's buffer in one
+//! pass, so the buffer never holds a half-painted frame (ADR-0003). Nothing in
+//! here allocates once warm (rule 8).
 //!
 //! Fill follows Excalidraw (renderElement.ts, freedraw): the outline is
 //! `M p0 Q p_i mid(p_i, p_i+1) ... Q p_n mid(p_n, p0) L p0 Z`, filled nonzero
@@ -15,7 +18,9 @@ use crate::ink::{Element, Ink, Rect};
 use crate::laser::Laser;
 use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
+use tiny_skia::{
+    Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Rect as SkiaRect, Stroke, Transform,
+};
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
 /// layered-window DIBs are BGRA, so colours are swapped at paint time and
@@ -38,6 +43,37 @@ pub struct Damage {
 /// The scratch pixmap holds at most this many bytes, so a huge damaged
 /// region is drawn in bands instead of needing a screen-sized second buffer.
 const BAND_BYTES: usize = 1 << 20;
+
+/// A target seen from a band: drawing code works in target pixel coordinates,
+/// the canvas shifts them into the band's own pixmap.
+pub(crate) struct Canvas<'a, 'b> {
+    pm: &'a mut PixmapMut<'b>,
+    shift: Transform,
+}
+
+impl<'a, 'b> Canvas<'a, 'b> {
+    /// `pm`'s top-left pixel is the target pixel `(x, y)`.
+    fn new(pm: &'a mut PixmapMut<'b>, x: u32, y: u32) -> Self {
+        Self {
+            pm,
+            shift: Transform::from_translate(-to_f32(x), -to_f32(y)),
+        }
+    }
+
+    pub fn fill_path(&mut self, path: &Path, paint: &Paint<'_>, rule: FillRule) {
+        self.pm.fill_path(path, paint, rule, self.shift, None);
+    }
+
+    /// `at` maps the path into target pixels first.
+    pub fn stroke_path(&mut self, path: &Path, paint: &Paint<'_>, stroke: &Stroke, at: Transform) {
+        let to_band = at.post_concat(self.shift);
+        self.pm.stroke_path(path, paint, stroke, to_band, None);
+    }
+
+    pub fn fill_rect(&mut self, rect: SkiaRect, paint: &Paint<'_>) {
+        self.pm.fill_rect(rect, paint, self.shift, None);
+    }
+}
 
 /// Anti-aliasing and curve slack around changed geometry, in pixels.
 const DAMAGE_PAD: f32 = 2.0;
@@ -67,6 +103,22 @@ impl Pending {
             || self.dirty.is_some_and(|[l, t, r, b]| {
                 l < rect[2] && rect[0] < r && t < rect[3] && rect[1] < b
             })
+    }
+
+    /// The region the next frame redraws (all of the target after a reset),
+    /// clamped to the target; the pending state is cleared.
+    fn take_damage(&mut self, width: u32, height: u32) -> Option<Damage> {
+        if self.full {
+            self.full = false;
+            self.dirty = None;
+            return Some(Damage {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            });
+        }
+        damage_of(self.dirty.take()?, width, height)
     }
 
     /// Marks a physical box as changed.
@@ -160,21 +212,33 @@ pub fn render(
         }
         grow_to_overlay(pending, selection);
     }
-    let damage = render_ink(ink, laser, pending, draw_mode, scale, target, format);
-    if let (Some(area), Some(d)) = (selection.shown(), damage) {
-        if overlaps(area, bounds_of(d)) {
-            selection.paint(ink, target, scale, format);
-        }
-    }
-    let hit = |r: Area| damage.is_some_and(|d| r.intersects(&Area::from_bounds(bounds_of(d))));
-    if region.is_some_and(hit) {
-        chrome.paint(target, format);
-    }
-    if panel.is_some_and(hit) {
-        chrome.paint_panel(target, format);
+    let Some(damage) = pending.take_damage(target.width(), target.height()) else {
+        chrome.done();
+        return None;
+    };
+    let layers = Layers {
+        ink,
+        laser,
+        selection,
+        draw_mode,
+        scale,
+        format,
+    };
+    let rows_per_band = (BAND_BYTES / (damage.width as usize * 4).max(1)).max(1);
+    let rows_per_band = u32::try_from(rows_per_band).unwrap_or(u32::MAX);
+    let mut y = damage.y;
+    while y < damage.y + damage.height {
+        let rows = rows_per_band.min(damage.y + damage.height - y);
+        let band = Damage {
+            y,
+            height: rows,
+            ..damage
+        };
+        compose_band(&layers, pending, &mut chrome, target, band);
+        y += rows;
     }
     chrome.done();
-    damage
+    Some(damage)
 }
 
 fn grow_to_overlay(pending: &mut Pending, selection: &Selection) {
@@ -189,76 +253,46 @@ fn overlaps(a: Rect, b: Rect) -> bool {
     a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
-fn render_ink(
-    ink: &Ink,
-    laser: &Laser,
-    pending: &mut Pending,
+/// What a frame is made of, bottom to top: backdrop, Ink and Laser, Selection
+/// overlay, then (chrome, below) the toolbar and the style panel.
+struct Layers<'a> {
+    ink: &'a Ink,
+    laser: &'a Laser,
+    selection: &'a Selection,
     draw_mode: bool,
     scale: f32,
-    target: &mut PixmapMut<'_>,
     format: Format,
-) -> Option<Damage> {
-    let (w, h) = (target.width(), target.height());
-    // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
-    // sends clicks on fully transparent pixels to the apps underneath.
-    let backdrop = Color::from_rgba8(0, 0, 0, u8::from(draw_mode));
-    let Pending {
-        full,
-        dirty,
-        scratch,
-        builder,
-    } = pending;
-    if *full {
-        *full = false;
-        *dirty = None;
-        target.fill(backdrop);
-        let view = Damage {
-            x: 0,
-            y: 0,
-            width: w,
-            height: h,
-        };
-        draw_elements(ink, laser, builder, target, view, scale, format);
-        return Some(view);
-    }
-    let damage = damage_of(dirty.take()?, w, h)?;
-    let rows_per_band = (BAND_BYTES / (damage.width as usize * 4).max(1)).max(1);
-    let mut y = damage.y;
-    while y < damage.y + damage.height {
-        let rows = u32::try_from(rows_per_band)
-            .unwrap_or(u32::MAX)
-            .min(damage.y + damage.height - y);
-        let band = Damage {
-            y,
-            height: rows,
-            ..damage
-        };
-        draw_band(
-            ink, laser, builder, scratch, target, band, backdrop, scale, format,
-        );
-        y += rows;
-    }
-    Some(damage)
 }
 
-/// Redraws one band of the damaged region through the scratch pixmap.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "internal helper over disjoint buffers"
-)]
-fn draw_band(
-    ink: &Ink,
-    laser: &Laser,
-    builder: &mut Option<PathBuilder>,
-    scratch: &mut Vec<u8>,
+/// Composes every layer of one band of the damaged region in the scratch
+/// pixmap, then copies the finished band into the target in one pass.
+///
+/// The target is what the screen shows (on macOS the displayed `IOSurface`), and
+/// the compositor reads it at any moment. Painting layer after layer into it
+/// let a sample catch the band cleared and the toolbar or style panel not yet
+/// painted: a flicker while hovering them (ADR-0003). Here each target pixel
+/// is written once, with its final value, so no partial layer state is ever
+/// visible.
+fn compose_band(
+    layers: &Layers<'_>,
+    pending: &mut Pending,
+    chrome: &mut Chrome<'_>,
     target: &mut PixmapMut<'_>,
     band: Damage,
-    backdrop: Color,
-    scale: f32,
-    format: Format,
 ) {
+    let Layers {
+        ink,
+        laser,
+        selection,
+        draw_mode,
+        scale,
+        format,
+    } = *layers;
     let row_bytes = band.width as usize * 4;
     let len = row_bytes * band.height as usize;
+    let Pending {
+        scratch, builder, ..
+    } = pending;
     if scratch.len() < len {
         scratch.resize(len, 0);
     }
@@ -268,8 +302,24 @@ fn draw_band(
     let Some(mut region) = PixmapMut::from_bytes(bytes, band.width, band.height) else {
         return;
     };
-    region.fill(backdrop);
+    // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
+    // sends clicks on fully transparent pixels to the apps underneath.
+    region.fill(Color::from_rgba8(0, 0, 0, u8::from(draw_mode)));
     draw_elements(ink, laser, builder, &mut region, band, scale, format);
+    let mut canvas = Canvas::new(&mut region, band.x, band.y);
+    let this = Area::from_bounds(bounds_of(band));
+    if selection
+        .shown()
+        .is_some_and(|area| overlaps(area, bounds_of(band)))
+    {
+        selection.paint(ink, &mut canvas, scale, format);
+    }
+    if chrome.region().is_some_and(|r| r.intersects(&this)) {
+        chrome.paint(&mut canvas, format);
+    }
+    if chrome.panel_region().is_some_and(|r| r.intersects(&this)) {
+        chrome.paint_panel(&mut canvas, format);
+    }
     let stride = target.width() as usize * 4;
     let data = target.data_mut();
     let Some(rendered) = scratch.get(..len) else {

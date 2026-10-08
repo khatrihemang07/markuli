@@ -149,3 +149,27 @@ fn the_panel_is_shown_for_the_pen_only_in_draw_mode() {
     key(&mut a, 'p');
     assert!(a.panel_center(Control::Color(0)).is_some());
 }
+
+fn paint(a: &mut Annotator, pm: &mut tiny_skia::Pixmap) -> Option<markuli_core::Damage> {
+    a.render(&mut pm.as_mut(), markuli_core::Format::Rgba)
+}
+
+#[test]
+fn moving_within_the_same_swatch_changes_nothing_and_reports_no_damage() {
+    let mut a = session();
+    let mut pm = tiny_skia::Pixmap::new(800, 600).expect("pixmap");
+    let c = centre(&a, Control::Color(1));
+    a.handle(Event::PointerMove(c));
+    assert!(
+        paint(&mut a, &mut pm).is_some(),
+        "entering the swatch repaints"
+    );
+    for dx in [1.0, 2.0, -1.0, 0.5] {
+        let view = a.handle(Event::PointerMove(p(c.x + dx, c.y + 1.0)));
+        assert!(!view.needs_render, "same swatch: nothing to render");
+        assert_eq!(paint(&mut a, &mut pm), None);
+    }
+    // Another swatch does change what is shown.
+    let view = a.handle(Event::PointerMove(centre(&a, Control::Color(2))));
+    assert!(view.needs_render);
+}

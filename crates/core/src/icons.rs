@@ -6,8 +6,9 @@
 //! A Tool brings its own icon as a `const Icon`, so adding one never edits
 //! this file's other icons.
 
+use crate::render::Canvas;
 use crate::svg_path;
-use tiny_skia::{LineCap, LineJoin, Paint, PixmapMut, Stroke, Transform};
+use tiny_skia::{LineCap, LineJoin, Paint, Stroke, Transform};
 
 pub(crate) struct Icon {
     /// The square viewBox edge, in path units.
@@ -83,7 +84,7 @@ pub(crate) const TRASH: Icon = Icon {
 
 /// Strokes `icon` into a `size` x `size` pixel square at `(x, y)`.
 pub(crate) fn draw(
-    target: &mut PixmapMut<'_>,
+    target: &mut Canvas<'_, '_>,
     icon: &Icon,
     (x, y, size): (f32, f32, f32),
     paint: &Paint<'_>,
@@ -120,7 +121,7 @@ fn digit(c: char) -> Option<&'static str> {
 /// Draws the hint digit `c` with its bottom-right corner at `(right, bottom)`,
 /// `height` pixels tall.
 pub(crate) fn draw_digit(
-    target: &mut PixmapMut<'_>,
+    target: &mut Canvas<'_, '_>,
     c: char,
     (right, bottom, height): (f32, f32, f32),
     paint: &Paint<'_>,
@@ -132,7 +133,7 @@ pub(crate) fn draw_digit(
 }
 
 fn stroke_paths(
-    target: &mut PixmapMut<'_>,
+    target: &mut Canvas<'_, '_>,
     paths: &[&str],
     width: f32,
     at: Transform,
@@ -146,7 +147,7 @@ fn stroke_paths(
     };
     for d in paths {
         if let Some(path) = svg_path::parse(d) {
-            target.stroke_path(&path, paint, &stroke, at, None);
+            target.stroke_path(&path, paint, &stroke, at);
         }
     }
 }

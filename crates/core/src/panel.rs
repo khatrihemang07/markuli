@@ -13,10 +13,10 @@
 
 use crate::icons;
 use crate::ink::Point;
-use crate::render::Format;
+use crate::render::{Canvas, Format};
 use crate::style::{Control, OPACITY_STEP, PALETTE, WIDTHS};
 use crate::toolbar::{fill_rounded, rounded_rect, shadow, solid_paint, Area, Theme};
-use tiny_skia::{FillRule, LineCap, PathBuilder, PixmapMut, Stroke, Transform};
+use tiny_skia::{FillRule, LineCap, PathBuilder, Stroke, Transform};
 
 /// Logical pixel metrics.
 const MARGIN: f32 = 16.0;
@@ -311,7 +311,7 @@ impl Panel {
         self.shown = view.map(|_| self.region());
     }
 
-    pub fn paint(&self, view: PanelView, target: &mut PixmapMut<'_>, format: Format) {
+    pub fn paint(&self, view: PanelView, target: &mut Canvas<'_, '_>, format: Format) {
         let (s, colors) = (self.scale, self.theme.palette());
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         shadow(target, self.area(), s, format);
@@ -340,7 +340,7 @@ impl Panel {
                     ..Stroke::default()
                 };
                 if let Some(path) = rounded_rect(outer(2.5), 5.0 * s) {
-                    target.stroke_path(&path, &solid(ring), &line, Transform::identity(), None);
+                    target.stroke_path(&path, &solid(ring), &line, Transform::identity());
                 }
             }
         }
@@ -371,13 +371,13 @@ impl Panel {
                     line_cap: LineCap::Round,
                     ..Stroke::default()
                 };
-                target.stroke_path(&path, &solid(ink), &stroke, Transform::identity(), None);
+                target.stroke_path(&path, &solid(ink), &stroke, Transform::identity());
             }
         }
         self.paint_slider(view.opacity, target, format);
     }
 
-    fn paint_slider(&self, opacity: u8, target: &mut PixmapMut<'_>, format: Format) {
+    fn paint_slider(&self, opacity: u8, target: &mut Canvas<'_, '_>, format: Format) {
         let (s, colors) = (self.scale, self.theme.palette());
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         let zone = self.slider();
@@ -396,13 +396,7 @@ impl Panel {
         };
         fill_rounded(target, filled, TRACK * s / 2.0, &solid(colors.track_fill));
         if let Some(thumb) = PathBuilder::from_circle(cx, cy, THUMB * s / 2.0) {
-            target.fill_path(
-                &thumb,
-                &solid(colors.thumb),
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
+            target.fill_path(&thumb, &solid(colors.thumb), FillRule::Winding);
         }
         // The value under the thumb, hidden at 0 like Excalidraw's bubble.
         if opacity > 0 {
