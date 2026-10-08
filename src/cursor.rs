@@ -21,6 +21,8 @@ pub struct Image {
 
 /// Dark outline of the icons, as in the lab.
 const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
+/// Light body of the marker.
+const BODY: [u8; 3] = [0xf4, 0xf4, 0xf7];
 const WHITE: [u8; 3] = [255; 3];
 const LASER_RED: [u8; 3] = [0xff, 0x2b, 0x2b];
 /// How far the icons reach up and to the right of the hotspot, logical px.
@@ -178,7 +180,9 @@ impl Canvas {
         }
     }
 
-    /// Marker nib: the chisel tip is on the hotspot, in the stroke color.
+    /// Marker nib: the chisel tip is on the hotspot, in the stroke color. The
+    /// body is light with a dark outline, and a white halo around the whole
+    /// silhouette keeps that outline visible on dark backgrounds.
     fn pen(&mut self, color: [u8; 3], tip: f32) {
         let mut b = PathBuilder::new();
         b.move_to(0.0, -tip);
@@ -186,15 +190,26 @@ impl Canvas {
         b.line_to(6.0, 4.0);
         b.line_to(0.0, tip);
         b.close();
-        if let Some(path) = b.finish() {
-            let to = self.tilted();
-            self.fill(&path, color, 1.0, to);
-            self.line(&path, INK, 1.2, 1.2, to);
+        let nib = b.finish();
+        let body = rounded_rect((6.0, -4.5, 16.0, 9.0), 2.0);
+        let band = rounded_rect((10.0, -4.5, 3.0, 9.0), 0.0);
+        let to = self.tilted();
+        // The halo reaches 1 px past the outline's outer edge.
+        for path in [&nib, &body].into_iter().flatten() {
+            self.line(path, WHITE, 1.0, 1.2 + 2.0, to);
         }
-        self.block((6.0, -4.5, 22.0, 9.0), 2.0, [0x2a, 0x2a, 0x33]);
-        if let Some(band) = rounded_rect((10.0, -4.5, 3.0, 9.0), 0.0) {
-            let to = self.tilted();
-            self.fill(&band, color, 1.0, to);
+        if let Some(path) = &nib {
+            self.fill(path, color, 1.0, to);
+            self.line(path, INK, 1.2, 1.2, to);
+        }
+        if let Some(path) = &body {
+            self.fill(path, BODY, 1.0, to);
+        }
+        if let Some(band) = &band {
+            self.fill(band, color, 1.0, to);
+        }
+        if let Some(path) = &body {
+            self.line(path, INK, 1.0, 1.2, to);
         }
     }
 
