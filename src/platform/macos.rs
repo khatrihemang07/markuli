@@ -3,7 +3,7 @@
 use markuli_core::{Damage, Format};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
-use objc2::{msg_send, MainThreadMarker};
+use objc2::{msg_send, sel, MainThreadMarker};
 use objc2_app_kit::{
     NSApplication, NSEvent, NSEventSubtype, NSEventType, NSPasteboard, NSPasteboardTypeString,
     NSScreen, NSScreenSaverWindowLevel, NSView, NSWindowCollectionBehavior,
@@ -140,9 +140,20 @@ extern "C" {
 /// 'BGRA': bytes B, G, R, A in memory, premultiplied, as the core's `Bgra`.
 const PIXEL_FORMAT_BGRA: u64 = 0x4247_5241;
 
+/// `kIOSurfaceLockReadOnly`: the CPU only reads, so no seed bump.
+const LOCK_READ_ONLY: u32 = 1;
+
 pub struct Presenter {
     layer: Retained<CALayer>,
-    surface: IOSurfaceRef,
+    /// The second surface exists only without the `setContentsChanged` SPI
+    /// (see `present`); it is null otherwise.
+    surfaces: [IOSurfaceRef; 2],
+    /// The surface the layer shows (the last presented one).
+    shown: usize,
+    /// `CALayer.setContentsChanged` exists: one surface is enough.
+    notify: bool,
+    /// Double-buffered only: the part of `shown` the other surface lacks.
+    stale: Option<Damage>,
     /// Surface width in pixels: the window width rounded up to a whole
     /// 64-byte row, because a `Pixmap` needs tightly packed rows. The layer
     /// shows only the first columns (`contentsRect`).
@@ -195,68 +206,149 @@ impl Presenter {
         let size = window.inner_size();
         let (width, height) = (size.width.max(1), size.height.max(1));
         let padded_width = width.div_ceil(16) * 16;
-        let surface = create_surface(padded_width, height);
+        let notify = can_notify_contents_changed(&layer);
+        let surfaces = [
+            create_surface(padded_width, height),
+            if notify {
+                ptr::null_mut()
+            } else {
+                create_surface(padded_width, height)
+            },
+        ];
         let crop = f64::from(width) / f64::from(padded_width);
         layer.setContentsRect(CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(crop, 1.0)));
         Self {
             layer,
-            surface,
+            surfaces,
+            shown: 0,
+            notify,
+            stale: None,
             padded_width,
             height,
             locked: false,
         }
     }
 
-    /// The surface's pixels, locked for CPU writes until `present`.
+    /// The surface the core renders into next.
+    fn back(&self) -> usize {
+        if self.notify {
+            0
+        } else {
+            1 - self.shown
+        }
+    }
+
+    /// The surface's pixels, locked for CPU writes until `present`. Without
+    /// the SPI this is the back surface, brought up to date first: the core
+    /// renders incrementally, so it must find the last frame there.
     pub fn buffer(&mut self) -> PixmapMut<'_> {
+        let back = self.surfaces[self.back()];
         if !self.locked {
-            // SAFETY: `surface` is the live surface created in `new`.
-            let status = unsafe { IOSurfaceLock(self.surface, 0, ptr::null_mut()) };
+            // SAFETY: `back` is a live surface created in `new`.
+            let status = unsafe { IOSurfaceLock(back, 0, ptr::null_mut()) };
             assert_eq!(status, 0, "IOSurfaceLock failed");
             self.locked = true;
+            if let Some(damage) = self.stale.take() {
+                self.copy_from_shown(back, damage);
+            }
         }
         let len = self.padded_width as usize * self.height as usize * 4;
         // SAFETY: the surface owns `len` bytes at its base address (rows are
         // tightly packed, checked in `create_surface`) while it is locked, and
         // `&mut self` guarantees exclusive access.
         let bytes = unsafe {
-            core::slice::from_raw_parts_mut(IOSurfaceGetBaseAddress(self.surface).cast::<u8>(), len)
+            core::slice::from_raw_parts_mut(IOSurfaceGetBaseAddress(back).cast::<u8>(), len)
         };
         PixmapMut::from_bytes(bytes, self.padded_width, self.height)
             .expect("buffer length matches its size")
     }
 
-    /// Unlocks the surface and tells Core Animation its contents changed.
-    /// There is no partial update, so the damage rectangle is not needed.
-    pub fn present(&mut self, _damage: Damage) {
+    /// Copies `damage` of the shown surface into the locked `back` surface.
+    fn copy_from_shown(&self, back: IOSurfaceRef, damage: Damage) {
+        let shown = self.surfaces[self.shown];
+        let row = self.padded_width as usize * 4;
+        let left = (damage.x.min(self.padded_width) as usize) * 4;
+        let right = (damage.x.saturating_add(damage.width).min(self.padded_width) as usize) * 4;
+        let rows =
+            damage.y.min(self.height)..damage.y.saturating_add(damage.height).min(self.height);
+        // SAFETY: both surfaces are live, tightly packed `row * height`
+        // bytes, and distinct; `shown` is locked read-only for the copy and
+        // `back` is already locked by `buffer`. Every copied range lies
+        // inside a row (clamped above).
+        unsafe {
+            IOSurfaceLock(shown, LOCK_READ_ONLY, ptr::null_mut());
+            let (from, to) = (
+                IOSurfaceGetBaseAddress(shown).cast::<u8>(),
+                IOSurfaceGetBaseAddress(back).cast::<u8>(),
+            );
+            for y in rows {
+                let at = y as usize * row + left;
+                ptr::copy_nonoverlapping(from.add(at), to.add(at), right.saturating_sub(left));
+            }
+            IOSurfaceUnlock(shown, LOCK_READ_ONLY, ptr::null_mut());
+        }
+    }
+
+    /// Unlocks the surface and puts it on screen.
+    ///
+    /// Assigning the SAME `IOSurface` to `contents` again is a no-op to Core
+    /// Animation: it compares objects, not the surface's seed, so the
+    /// compositor keeps the old frame (ADR-0003). `setContentsChanged` (the
+    /// SPI `WebKit` and Chromium use for `IOSurface` layers) says the pixels
+    /// changed. Where it is missing, two surfaces alternate, so `contents`
+    /// really changes every frame.
+    pub fn present(&mut self, damage: Damage) {
         if self.locked {
             // SAFETY: locked by `buffer`, same surface.
-            unsafe { IOSurfaceUnlock(self.surface, 0, ptr::null_mut()) };
+            unsafe { IOSurfaceUnlock(self.surfaces[self.back()], 0, ptr::null_mut()) };
             self.locked = false;
+        }
+        if !self.notify {
+            self.shown = 1 - self.shown;
+            self.stale = Some(damage);
         }
         CATransaction::begin();
         // Without this, every contents change cross-fades for 0.25 s.
         CATransaction::setDisableActions(true);
         // SAFETY: an `IOSurfaceRef` is an Objective-C object that `contents`
-        // accepts; assigning it again after a CPU write publishes the new seed.
+        // accepts; `setContentsChanged` was checked with `respondsToSelector:`.
         unsafe {
-            let object: &AnyObject = &*self.surface.cast::<AnyObject>();
+            let object: &AnyObject = &*self.surfaces[self.shown].cast::<AnyObject>();
             self.layer.setContents(Some(object));
+            if self.notify {
+                let _: () = msg_send![&*self.layer, setContentsChanged];
+            }
         }
         CATransaction::commit();
     }
 }
 
+/// Whether `CALayer` has the private `setContentsChanged`. With the
+/// `dev-hooks` feature, `MARKULI_PRESENT_FALLBACK` forces the answer to no,
+/// so the double-buffered path can be tested on a machine that has the SPI.
+fn can_notify_contents_changed(layer: &CALayer) -> bool {
+    #[cfg(feature = "dev-hooks")]
+    if std::env::var_os("MARKULI_PRESENT_FALLBACK").is_some() {
+        return false;
+    }
+    // SAFETY: `respondsToSelector:` is declared on NSObject.
+    let responds: Bool = unsafe { msg_send![layer, respondsToSelector: sel!(setContentsChanged)] };
+    responds.as_bool()
+}
+
 impl Drop for Presenter {
     fn drop(&mut self) {
-        // SAFETY: the surface was created (+1) in `new` and is released once;
-        // an unpresented lock is dropped first.
+        // SAFETY: the surfaces were created (+1) in `new` and are released
+        // once; an unpresented lock is dropped first.
         unsafe {
             if self.locked {
-                IOSurfaceUnlock(self.surface, 0, ptr::null_mut());
+                IOSurfaceUnlock(self.surfaces[self.back()], 0, ptr::null_mut());
             }
             self.layer.setContents(None);
-            CFRelease(self.surface);
+            CFRelease(self.surfaces[0]);
+            if !self.surfaces[1].is_null() {
+                CFRelease(self.surfaces[1]);
+            }
         }
     }
 }
