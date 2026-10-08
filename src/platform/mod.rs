@@ -20,6 +20,8 @@ pub use macos_settings::SettingsWindow;
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]
+mod windows_recorder;
+#[cfg(target_os = "windows")]
 mod windows_settings;
 #[cfg(target_os = "windows")]
 use windows as imp;

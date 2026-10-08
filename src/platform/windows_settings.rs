@@ -1,7 +1,6 @@
 //! Windows Settings window: a plain Win32 window with `BUTTON` and `STATIC`
-//! controls, created on demand and destroyed on close. The hotkey recorder is
-//! the window itself: after a recorder button is pressed, keyboard focus moves
-//! to the window so its `WM_KEYDOWN` sees the combo.
+//! controls, created on demand and destroyed on close. The hotkey recorder
+//! lives in `windows_recorder`.
 //!
 //! Compile-checked on CI; not yet run on real hardware.
 
@@ -14,22 +13,20 @@
 )]
 
 use super::windows::wide;
-use crate::hotkeys::{self, Binding, Mods};
+use super::windows_recorder::Recorder;
+use crate::hotkeys::Binding;
 use crate::settings::{emit, SettingsEvent};
 use core::ffi::c_void;
 use core::ptr::{null, null_mut};
 use markuli_core::Config;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{GetStockObject, COLOR_BTNFACE, DEFAULT_GUI_FONT, HBRUSH};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, SetFocus, VK_CONTROL, VK_ESCAPE, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
-};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CreateWindowExW, DefWindowProcW, DestroyWindow, GetSystemMetrics,
     GetWindowLongPtrW, IsWindow, LoadCursorW, RegisterClassW, SendMessageW, SetForegroundWindow,
-    SetWindowLongPtrW, SetWindowTextW, ShowWindow, BM_GETCHECK, BM_SETCHECK, BN_CLICKED,
+    SetWindowLongPtrW, ShowWindow, BM_GETCHECK, BM_SETCHECK, BN_CLICKED,
     BS_AUTOCHECKBOX, BS_PUSHBUTTON, CREATESTRUCTW, GWLP_USERDATA, IDC_ARROW, SM_CXSCREEN,
     SM_CYSCREEN, SW_SHOW, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_KEYDOWN, WM_NCCREATE, WM_NCDESTROY,
     WM_SETFONT, WM_SYSKEYDOWN, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_OVERLAPPED, WS_SYSMENU,
@@ -47,35 +44,9 @@ const CLIENT: (i32, i32) = (400, 190);
 
 /// Per-window state, owned by the window (freed in `WM_NCDESTROY`).
 struct State {
-    recording: Cell<Option<Binding>>,
-    /// Combo text per hotkey (Toggle, Clear), restored if recording is cancelled.
-    shown: RefCell<[String; 2]>,
-    toggle: Cell<HWND>,
-    clear: Cell<HWND>,
+    recorder: Recorder,
     login: Cell<HWND>,
-    message: Cell<HWND>,
     initial: Config,
-}
-
-impl State {
-    fn button(&self, binding: Binding) -> HWND {
-        match binding {
-            Binding::Toggle => self.toggle.get(),
-            Binding::Clear => self.clear.get(),
-        }
-    }
-
-    fn show_binding(&self, binding: Binding) {
-        let title = wide(&super::label(&self.shown.borrow()[binding as usize]));
-        // SAFETY: the control belongs to a live window of this thread.
-        unsafe { SetWindowTextW(self.button(binding), title.as_ptr()) };
-    }
-
-    fn set_message(&self, text: &str) {
-        let text = wide(text);
-        // SAFETY: as above.
-        unsafe { SetWindowTextW(self.message.get(), text.as_ptr()) };
-    }
 }
 
 /// The state of a live Settings window, or `None` while it is being created
@@ -84,59 +55,6 @@ fn state<'a>(hwnd: HWND) -> Option<&'a State> {
     // SAFETY: the pointer was stored by `WM_NCCREATE` from a leaked `Box` and
     // is cleared in `WM_NCDESTROY`; everything runs on the one UI thread.
     unsafe { (GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const State).as_ref() }
-}
-
-fn modifier_down(vk: u16) -> bool {
-    // SAFETY: plain query.
-    unsafe { GetKeyState(i32::from(vk)) < 0 }
-}
-
-fn key_down(hwnd: HWND, state: &State, vk: u16) {
-    let Some(binding) = state.recording.get() else {
-        return;
-    };
-    if [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN].contains(&vk) {
-        return; // wait for the real key
-    }
-    if vk == VK_ESCAPE {
-        state.recording.set(None);
-        state.show_binding(binding);
-        state.set_message("");
-        emit(SettingsEvent::Listening(false));
-        return;
-    }
-    let mods = Mods {
-        ctrl: modifier_down(VK_CONTROL),
-        alt: modifier_down(VK_MENU),
-        shift: modifier_down(VK_SHIFT),
-        logo: modifier_down(VK_LWIN) || modifier_down(VK_RWIN),
-    };
-    match hotkeys::key_from_vk(vk).and_then(|key| hotkeys::recorded(mods, key)) {
-        Some(text) => {
-            state.recording.set(None);
-            state.show_binding(binding);
-            emit(SettingsEvent::Record(binding, text));
-            emit(SettingsEvent::Listening(false));
-        }
-        None => state.set_message("Hold Ctrl, Alt, Shift or Win with a key (Esc cancels)."),
-    }
-    let _ = hwnd;
-}
-
-fn start_recording(hwnd: HWND, state: &State, binding: Binding) {
-    if let Some(previous) = state.recording.replace(Some(binding)) {
-        state.show_binding(previous);
-    }
-    // A combo another app owns never reaches this window (the OS hands it to
-    // that app), so say what silence means.
-    state.set_message("No reaction? Another app owns it. Esc cancels.");
-    let title = wide("Press the new shortcut...");
-    // SAFETY: live controls; moving focus off the button lets the window get keys.
-    unsafe {
-        SetWindowTextW(state.button(binding), title.as_ptr());
-        SetFocus(hwnd);
-    }
-    emit(SettingsEvent::Listening(true));
 }
 
 fn control(parent: HWND, class: &str, text: &str, style: u32, id: usize, rect: [i32; 4]) -> HWND {
@@ -170,7 +88,7 @@ fn control(parent: HWND, class: &str, text: &str, style: u32, id: usize, rect: [
 fn create_controls(hwnd: HWND, state: &State) {
     let config = &state.initial;
     control(hwnd, "STATIC", "Toggle Draw Mode", 0, 0, [20, 24, 160, 20]);
-    state.toggle.set(control(
+    state.recorder.toggle.set(control(
         hwnd,
         "BUTTON",
         &super::label(&config.toggle),
@@ -179,7 +97,7 @@ fn create_controls(hwnd: HWND, state: &State) {
         [190, 20, 190, 28],
     ));
     control(hwnd, "STATIC", "Clear", 0, 0, [20, 64, 160, 20]);
-    state.clear.set(control(
+    state.recorder.clear.set(control(
         hwnd,
         "BUTTON",
         &super::label(&config.clear),
@@ -204,6 +122,7 @@ fn create_controls(hwnd: HWND, state: &State) {
     unsafe { SendMessageW(login, BM_SETCHECK, check as WPARAM, 0) };
     state.login.set(login);
     state
+        .recorder
         .message
         .set(control(hwnd, "STATIC", "", 0, 0, [20, 140, 360, 40]));
 }
@@ -231,8 +150,8 @@ unsafe extern "system" fn window_proc(
             let Some(state) = state(hwnd) else { return 0 };
             if code == BN_CLICKED {
                 match id {
-                    ID_TOGGLE => start_recording(hwnd, state, Binding::Toggle),
-                    ID_CLEAR => start_recording(hwnd, state, Binding::Clear),
+                    ID_TOGGLE => state.recorder.start(hwnd, Binding::Toggle),
+                    ID_CLEAR => state.recorder.start(hwnd, Binding::Clear),
                     ID_LOGIN => {
                         // SAFETY: live checkbox.
                         let checked = unsafe { SendMessageW(state.login.get(), BM_GETCHECK, 0, 0) }
@@ -246,8 +165,8 @@ unsafe extern "system" fn window_proc(
         }
         WM_KEYDOWN | WM_SYSKEYDOWN => {
             if let Some(state) = state(hwnd) {
-                if state.recording.get().is_some() {
-                    key_down(hwnd, state, wparam as u16);
+                if state.recorder.is_recording() {
+                    state.recorder.key_down(wparam as u16);
                     return 0; // swallow, so Alt+key does not open the system menu
                 }
             }
@@ -300,12 +219,8 @@ impl SettingsWindow {
     pub fn open(config: &Config) -> Option<Self> {
         register_class();
         let state = Box::new(State {
-            recording: Cell::new(None),
-            shown: RefCell::new([config.toggle.clone(), config.clear.clone()]),
-            toggle: Cell::new(null_mut()),
-            clear: Cell::new(null_mut()),
+            recorder: Recorder::new(&config.toggle, &config.clear),
             login: Cell::new(null_mut()),
-            message: Cell::new(null_mut()),
             initial: config.clone(),
         });
         let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
@@ -358,14 +273,13 @@ impl SettingsWindow {
 
     pub fn set_hotkey(&self, binding: Binding, text: &str) {
         if let Some(state) = state(self.hwnd) {
-            text.clone_into(&mut state.shown.borrow_mut()[binding as usize]);
-            state.show_binding(binding);
+            state.recorder.set_hotkey(binding, text);
         }
     }
 
     pub fn set_message(&self, text: &str) {
         if let Some(state) = state(self.hwnd) {
-            state.set_message(text);
+            state.recorder.set_message(text);
         }
     }
 
