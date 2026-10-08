@@ -69,14 +69,6 @@ fn colors(a: &Annotator) -> Vec<[u8; 3]> {
         .collect()
 }
 
-fn opacities(a: &Annotator) -> Vec<u8> {
-    a.ink()
-        .elements()
-        .iter()
-        .map(markuli_core::Element::opacity)
-        .collect()
-}
-
 /// Three strokes at y = 100, 200, 300; the Select Tool with the first and
 /// third selected.
 fn first_and_third_selected() -> Annotator {
@@ -98,12 +90,10 @@ fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
     assert_eq!(a.selection().len(), 2);
     pick(&mut a, Control::Color(3));
     pick(&mut a, Control::Width(0));
-    pick(&mut a, Control::Opacity(40));
     for (i, selected) in [true, false, true].into_iter().enumerate() {
         let e = &a.ink().elements()[i];
         assert_eq!(e.stroke_color() == BLUE, selected, "colour of {i}");
         assert_eq!((e.stroke_width() - 1.0).abs() < f32::EPSILON, selected);
-        assert_eq!(e.opacity() == 40, selected, "opacity of {i}");
     }
     // The next Strokes keep their own style.
     stroke(&mut a, 400.0);
@@ -131,27 +121,13 @@ fn a_restyle_is_one_undo_step_per_choice_and_redo_applies_it_again() {
 fn choosing_what_is_already_set_logs_nothing() {
     let mut a = first_and_third_selected();
     pick(&mut a, Control::Color(1));
-    pick(&mut a, Control::Opacity(100));
+    pick(&mut a, Control::Width(1));
     command(&mut a, 'z', false);
     assert_eq!(
         a.ink().len(),
         2,
         "undo removed the last stroke, not a no-op"
     );
-}
-
-#[test]
-fn dragging_the_slider_is_one_undo_step() {
-    let mut a = first_and_third_selected();
-    a.handle(Event::PointerDown(centre(&a, Control::Opacity(100))));
-    for v in [80, 60, 40, 20] {
-        let at = centre(&a, Control::Opacity(v));
-        a.handle(Event::PointerMove(at));
-    }
-    a.handle(Event::PointerUp(centre(&a, Control::Opacity(20))));
-    assert_eq!(opacities(&a), [20, 100, 20]);
-    command(&mut a, 'z', false);
-    assert_eq!(opacities(&a), [100, 100, 100]);
 }
 
 #[test]
@@ -168,7 +144,6 @@ fn copied_excalidraw_json_reflects_the_restyled_values() {
     let mut a = first_and_third_selected();
     pick(&mut a, Control::Color(4));
     pick(&mut a, Control::Width(2));
-    pick(&mut a, Control::Opacity(70));
     command(&mut a, 'c', false);
     let text = a.take_copy().expect("something is selected");
     let doc: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
@@ -177,10 +152,10 @@ fn copied_excalidraw_json_reflects_the_restyled_values() {
     for e in elements {
         assert_eq!(e["strokeColor"], "#f08c00");
         assert_eq!(e["strokeWidth"], 4);
-        assert_eq!(e["opacity"], 70);
+        assert_eq!(e["opacity"], 100);
     }
-    // Undo all three, and the copy goes back to the old values.
-    for _ in 0..3 {
+    // Undo both, and the copy goes back to the old values.
+    for _ in 0..2 {
         command(&mut a, 'z', false);
     }
     command(&mut a, 'c', false);

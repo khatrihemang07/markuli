@@ -58,8 +58,7 @@ impl Annotator {
         self.toolbar.center_of(button, self.tools.len())
     }
 
-    /// The centre of a style panel control in Overlay pixels (for
-    /// `Opacity`, the thumb at that value); `None` while the panel is hidden.
+    /// The centre of a style panel control in Overlay pixels; `None` while the panel is hidden.
     /// It shows for the Pen and, with a Selection, for the Select Tool.
     #[cfg(feature = "test-support")]
     #[must_use]
@@ -117,7 +116,6 @@ impl Annotator {
             Some(StyleTarget::NextStrokes) => Some(PanelView {
                 color: Some(self.style.color),
                 width: Some(self.style.width),
-                opacity: self.style.opacity,
             }),
             Some(StyleTarget::Selection) if !self.selection.is_empty() => {
                 let chosen = self
@@ -130,13 +128,11 @@ impl Annotator {
                         None => PanelView {
                             color: Some(s.color),
                             width: Some(s.width),
-                            opacity: s.opacity,
                         },
                         Some(v) => PanelView {
                             color: v.color.filter(|&c| c == s.color),
                             #[allow(clippy::float_cmp, reason = "widths come from a fixed list")]
                             width: v.width.filter(|&w| w == s.width),
-                            ..v
                         },
                     })
                 })

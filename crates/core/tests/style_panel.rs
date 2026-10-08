@@ -56,7 +56,6 @@ fn without_a_selection_a_choice_styles_the_next_strokes_only() {
     stroke(&mut a, 100.0);
     pick(&mut a, Control::Color(2));
     pick(&mut a, Control::Width(2));
-    pick(&mut a, Control::Opacity(50));
     stroke(&mut a, 200.0);
     let [first, second] = a.ink().elements() else {
         panic!("two strokes")
@@ -66,7 +65,7 @@ fn without_a_selection_a_choice_styles_the_next_strokes_only() {
     assert_eq!(first.opacity(), 100);
     assert_eq!(second.stroke_color(), GREEN);
     assert!((second.stroke_width() - 4.0).abs() < f32::EPSILON);
-    assert_eq!(second.opacity(), 50);
+    assert_eq!(second.opacity(), 100);
 }
 
 #[test]
@@ -100,22 +99,6 @@ fn the_palette_is_excalidraws_quick_picks_and_widths_are_thin_medium_bold() {
             .map(markuli_core::Element::stroke_width);
         assert_eq!(drawn, Some(width));
     }
-}
-
-#[test]
-fn opacity_moves_in_steps_of_ten_and_a_drag_follows_the_pointer() {
-    let mut a = session();
-    let from = centre(&a, Control::Opacity(100));
-    let to = centre(&a, Control::Opacity(30));
-    a.handle(Event::PointerDown(from));
-    a.handle(Event::PointerMove(p(
-        f32::midpoint(from.x, to.x),
-        from.y + 30.0,
-    )));
-    a.handle(Event::PointerMove(p(to.x + 2.0, to.y + 60.0)));
-    a.handle(Event::PointerUp(p(to.x + 2.0, to.y + 60.0)));
-    stroke(&mut a, 100.0);
-    assert_eq!(a.ink().elements()[0].opacity(), 30);
 }
 
 #[test]

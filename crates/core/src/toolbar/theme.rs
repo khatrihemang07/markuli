@@ -28,10 +28,6 @@ pub(crate) struct Tokens {
     /// (`--color-primary-darkest`).
     pub swatch_border: [u8; 3],
     pub swatch_active: [u8; 3],
-    /// Range input: filled track, rest of the track, thumb.
-    pub track_fill: [u8; 3],
-    pub track_rest: [u8; 3],
-    pub thumb: [u8; 3],
 }
 
 const LIGHT: Tokens = Tokens {
@@ -43,9 +39,6 @@ const LIGHT: Tokens = Tokens {
     disabled: [0xb8, 0xb8, 0xb8],
     swatch_border: [0xd6, 0xd6, 0xd6],
     swatch_active: [0x4a, 0x47, 0xb1],
-    track_fill: [0xcc, 0xcc, 0xff],
-    track_rest: [0xec, 0xec, 0xf4],
-    thumb: [0x3d, 0x3d, 0x3d],
 };
 
 const DARK: Tokens = Tokens {
@@ -57,9 +50,6 @@ const DARK: Tokens = Tokens {
     disabled: [0x5c, 0x5c, 0x5c],
     swatch_border: [0x5c, 0x5c, 0x66],
     swatch_active: [0xa8, 0xa5, 0xff],
-    track_fill: [0x50, 0x4d, 0x7a],
-    track_rest: [0x32, 0x30, 0x39],
-    thumb: [0xe3, 0xe3, 0xe8],
 };
 
 impl Theme {

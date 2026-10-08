@@ -73,7 +73,7 @@ impl Element {
             simulate_pressure,
             stroke_color: style.color,
             stroke_width: style.width,
-            opacity: style.opacity,
+            opacity: 100,
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "a seed only needs to differ"
@@ -231,7 +231,8 @@ impl Element {
         self.stroke_width
     }
 
-    /// 0 to 100, like Excalidraw.
+    /// 0 to 100, like Excalidraw. Always 100 when drawn; kept so copied JSON
+    /// round-trips and the Eraser can dim a pending-erase Element.
     #[must_use]
     pub fn opacity(&self) -> u8 {
         self.opacity
@@ -251,7 +252,6 @@ impl Element {
         Appearance {
             color: self.stroke_color,
             width: self.stroke_width,
-            opacity: self.opacity,
         }
     }
 
@@ -262,8 +262,7 @@ impl Element {
         let old = self.bounds;
         #[allow(clippy::float_cmp, reason = "widths are picked from a fixed list")]
         let resized = style.width != self.stroke_width;
-        (self.stroke_color, self.stroke_width, self.opacity) =
-            (style.color, style.width, style.opacity);
+        (self.stroke_color, self.stroke_width) = (style.color, style.width);
         self.version = self.version.wrapping_add(1);
         if resized {
             self.refresh(scratch, true);

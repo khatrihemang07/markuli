@@ -1,22 +1,20 @@
-//! The style panel: stroke color, stroke width and opacity.
+//! The style panel: stroke color and stroke width.
 //!
 //! A trimmed copy of Excalidraw's properties panel (an Island on the left of
 //! the Overlay), in logical pixels times the scale factor. Metrics and colours
 //! are Excalidraw's stock theme: 1.35 rem swatches with a 1 px border and a
 //! 1 px outline 2 px outside the active one (`ColorPicker.scss`), 2 rem width
-//! buttons, a 4 px range track with a 16 px thumb and the value under it
-//! (`Range.scss`). Deviations: only the five quick picks (no shade grid, no
-//! hex input), no section titles or bubble (Markuli has no font; digits are
-//! stroked glyphs), swatches show their literal colour in both themes
+//! buttons. Deviations: only the five quick picks (no shade grid, no hex
+//! input), no section titles (Markuli has no font), no opacity slider (every
+//! Stroke is opaque), swatches show their literal colour in both themes
 //! (Excalidraw inverts them with its canvas filter, Markuli has none), and the
 //! shadow is a stack of rounded rectangles.
 
-use crate::icons;
 use crate::ink::Point;
 use crate::render::{Canvas, Format};
-use crate::style::{Control, OPACITY_STEP, PALETTE, WIDTHS};
+use crate::style::{Control, PALETTE, WIDTHS};
 use crate::toolbar::{fill_rounded, rounded_rect, shadow, solid_paint, Area, Theme};
-use tiny_skia::{FillRule, LineCap, PathBuilder, Stroke, Transform};
+use tiny_skia::{LineCap, PathBuilder, Stroke, Transform};
 
 /// Logical pixel metrics.
 const MARGIN: f32 = 16.0;
@@ -34,10 +32,6 @@ const SWATCH_GAP: f32 = 8.0;
 const ROW_GAP: f32 = 16.0;
 const BUTTON: f32 = 32.0;
 const BUTTON_GAP: f32 = 8.0;
-const THUMB: f32 = 16.0;
-const TRACK: f32 = 4.0;
-const DIGITS: f32 = 9.0;
-const DIGIT_GAP: f32 = 6.0;
 const RADIUS: f32 = 8.0;
 /// Line thickness of the three width buttons' icons.
 const ICON_LINES: [f32; 3] = [1.5, 3.0, 4.5];
@@ -48,16 +42,13 @@ const INNER: f32 = 5.0 * SWATCH + 4.0 * SWATCH_GAP;
 const WIDTH: f32 = INNER + 2.0 * PAD;
 const SWATCH_Y: f32 = TOP + PAD;
 const BUTTON_Y: f32 = SWATCH_Y + SWATCH + ROW_GAP;
-const SLIDER_Y: f32 = BUTTON_Y + BUTTON + ROW_GAP;
-const DIGITS_BOTTOM: f32 = SLIDER_Y + THUMB + 4.0 + DIGITS;
-const HEIGHT: f32 = DIGITS_BOTTOM - TOP + PAD;
+const HEIGHT: f32 = BUTTON_Y + BUTTON - TOP + PAD;
 
 /// What the panel shows as chosen. `None` means the Selection is mixed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PanelView {
     pub color: Option<[u8; 3]>,
     pub width: Option<f32>,
-    pub opacity: u8,
 }
 
 /// Where a press landed.
@@ -89,8 +80,6 @@ pub(crate) struct Panel {
     /// below them.
     top: f32,
     size: Option<(f32, f32)>,
-    /// Hover and press ignore the slider position (they are normalised to
-    /// `Opacity(0)`), so moving along the slider repaints nothing extra.
     hover: Option<Control>,
     press: Option<Control>,
     /// A press on the panel's padding.
@@ -144,7 +133,7 @@ impl Panel {
         let hit = self.hit(at);
         self.over = hit != Press::Miss;
         self.hover = match hit {
-            Press::Control(c) => Some(normal(c)),
+            Press::Control(c) => Some(c),
             _ => None,
         };
     }
@@ -153,19 +142,11 @@ impl Panel {
         self.hover_at(at);
         let hit = self.hit(at);
         match hit {
-            Press::Control(c) => self.press = Some(normal(c)),
+            Press::Control(c) => self.press = Some(c),
             Press::Dead => self.pressed_dead = true,
             Press::Miss => {}
         }
         hit
-    }
-
-    /// While the slider is held, the opacity under the pointer (even when the
-    /// pointer has left the panel).
-    pub fn drag_to(&mut self, at: Point) -> Option<Control> {
-        self.hover_at(at);
-        matches!(self.press, Some(Control::Opacity(_)))
-            .then(|| Control::Opacity(self.opacity_at(at.x)))
     }
 
     pub fn release(&mut self) {
@@ -219,11 +200,7 @@ impl Panel {
         self.shown
     }
 
-    fn slider(&self) -> Area {
-        self.origin(PAD, SLIDER_Y, INNER, THUMB)
-    }
-
-    /// The Area of a control; the slider's is the whole track zone.
+    /// The Area of a control.
     fn rect(&self, control: Control) -> Area {
         match control {
             Control::Color(i) => self.origin(
@@ -238,7 +215,6 @@ impl Panel {
                 BUTTON,
                 BUTTON,
             ),
-            Control::Opacity(_) => self.slider(),
         }
     }
 
@@ -251,9 +227,6 @@ impl Panel {
         if let Some(c) = Self::controls().find(|&c| self.rect(c).contains(at)) {
             return Press::Control(c);
         }
-        if self.slider().contains(at) {
-            return Press::Control(Control::Opacity(self.opacity_at(at.x)));
-        }
         if self.area().contains(at) {
             Press::Dead
         } else {
@@ -261,30 +234,11 @@ impl Panel {
         }
     }
 
-    /// The thumb centre travels the track minus one thumb width.
-    fn thumb_x(&self, opacity: u8) -> f32 {
-        let slider = self.slider();
-        let travel = slider.w - THUMB * self.scale;
-        slider.x + THUMB * self.scale / 2.0 + travel * f32::from(opacity.min(100)) / 100.0
-    }
-
-    fn opacity_at(&self, x: f32) -> u8 {
-        let slider = self.slider();
-        let travel = slider.w - THUMB * self.scale;
-        let t = ((x - slider.x - THUMB * self.scale / 2.0) / travel).clamp(0.0, 1.0);
-        let step = f32::from(OPACITY_STEP);
-        round_to_u8((t * 100.0 / step).round() * step)
-    }
-
     #[cfg(feature = "test-support")]
     pub fn center_of(&self, control: Control) -> Point {
         let r = self.rect(control);
-        let x = match control {
-            Control::Opacity(v) => self.thumb_x(v / OPACITY_STEP * OPACITY_STEP),
-            _ => r.x + r.w / 2.0,
-        };
         Point {
-            x,
+            x: r.x + r.w / 2.0,
             y: r.y + r.h / 2.0,
         }
     }
@@ -374,62 +328,10 @@ impl Panel {
                 target.stroke_path(&path, &solid(ink), &stroke, Transform::identity());
             }
         }
-        self.paint_slider(view.opacity, target, format);
-    }
-
-    fn paint_slider(&self, opacity: u8, target: &mut Canvas<'_, '_>, format: Format) {
-        let (s, colors) = (self.scale, self.theme.tokens());
-        let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
-        let zone = self.slider();
-        let cy = zone.y + zone.h / 2.0;
-        let cx = self.thumb_x(opacity);
-        let track = Area {
-            x: zone.x,
-            y: cy - TRACK * s / 2.0,
-            w: zone.w,
-            h: TRACK * s,
-        };
-        fill_rounded(target, track, TRACK * s / 2.0, &solid(colors.track_rest));
-        let filled = Area {
-            w: cx - zone.x,
-            ..track
-        };
-        fill_rounded(target, filled, TRACK * s / 2.0, &solid(colors.track_fill));
-        if let Some(thumb) = PathBuilder::from_circle(cx, cy, THUMB * s / 2.0) {
-            target.fill_path(&thumb, &solid(colors.thumb), FillRule::Winding);
-        }
-        // The value under the thumb, hidden at 0 like Excalidraw's bubble.
-        if opacity > 0 {
-            let text = opacity.to_string();
-            let width = DIGIT_GAP * s * to_f32(text.len());
-            let mut right = cx - width / 2.0 + (DIGIT_GAP - 1.0) * s;
-            for c in text.chars() {
-                let corner = (right, (DIGITS_BOTTOM) * s, DIGITS * s);
-                icons::draw_digit(target, c, corner, &solid(colors.icon));
-                right += DIGIT_GAP * s;
-            }
-        }
-    }
-}
-
-/// A press or hover on the slider, whatever the value.
-fn normal(c: Control) -> Control {
-    match c {
-        Control::Opacity(_) => Control::Opacity(0),
-        other => other,
     }
 }
 
 #[allow(clippy::cast_precision_loss, reason = "a handful of controls")]
 fn to_f32(v: usize) -> f32 {
     v as f32
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the value is a multiple of 10 between 0 and 100"
-)]
-fn round_to_u8(v: f32) -> u8 {
-    v.clamp(0.0, 100.0) as u8
 }
