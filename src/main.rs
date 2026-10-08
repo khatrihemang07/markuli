@@ -4,6 +4,8 @@
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
 mod cursor;
+#[cfg(any(windows, test))]
+mod editor;
 mod editors;
 mod hotkeys;
 mod platform;
@@ -12,10 +14,8 @@ mod settings;
 use editors::EditorEvent;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use hotkeys::{Binding, Hotkeys, RebindError};
-use markuli_core::{
-    Annotator, Config, Cursor, DisplayId, EditRequest, Event, Insets, Key, Point, Theme, View,
-};
-use platform::{Editors, Presenter, SettingsWindow};
+use markuli_core::{Annotator, Config, Cursor, DisplayId, Event, Insets, Key, Point, Theme, View};
+use platform::{Presenter, SettingsWindow};
 use settings::SettingsEvent;
 use std::time::{Duration, Instant};
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
@@ -26,6 +26,7 @@ use winit::event::{ElementState, KeyEvent, MouseButton, StartCause, TouchPhase, 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
+use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Theme as OsTheme, Window, WindowId};
 
 /// Wake-ups sent from the hotkey and menu callbacks, so the loop never polls.
@@ -59,8 +60,6 @@ struct App {
     /// Exists only while the Settings window is open.
     settings: Option<SettingsWindow>,
     settings_id: Option<MenuId>,
-    /// The Palette editor on screen, if any.
-    editors: Editors,
     /// Test hook (`dev-hooks`): reopen Settings this many more times after it
     /// closes.
     #[cfg(feature = "dev-hooks")]
@@ -98,7 +97,9 @@ impl App {
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
         if !view.draw_mode {
             if self.overlay.take().is_some() {
-                self.close_editor();
+                platform::close_editor(&mut |event| {
+                    self.core.handle(event);
+                });
                 // The Overlay's key events are gone with it, and so is the
                 // chance to see a modifier being released.
                 self.forget_modifiers();
@@ -317,26 +318,22 @@ impl App {
         }
     }
 
-    /// A right click, or Control+click on macOS. When it lands on a Palette
-    /// button the core answers with `View::edit` and `input` opens the editor.
+    /// A right click, or Control+click on macOS. On a Palette button the
+    /// core reports `View::edit` and the platform editor runs until closed.
     fn secondary_click(&mut self, event_loop: &ActiveEventLoop) {
         self.input(event_loop, Event::SecondaryClick(self.cursor));
-    }
-
-    /// Closes the open editor, if any, and ends its edit in the core.
-    fn close_editor(&mut self) {
-        if self.editors.is_open() {
-            self.editors.close();
-            self.core.handle(Event::EditEnd);
-        }
-    }
-
-    /// Opens the editor the core asked for, next to its button. A previous
-    /// editor is closed (and its edit ended) first.
-    fn open_editor(&mut self, request: EditRequest) {
-        self.close_editor();
-        if let Some(overlay) = self.overlay.as_ref() {
-            self.editors.open(&overlay.window, request);
+        let Some(request) = self.core.view().edit else {
+            return;
+        };
+        // The raw handle is Copy, so the editor does not borrow the Overlay
+        // while its edits come back through `input`.
+        let owner = self
+            .overlay
+            .as_ref()
+            .and_then(|overlay| overlay.window.window_handle().ok())
+            .map(|handle| handle.as_raw());
+        if let Some(owner) = owner {
+            platform::open_editor(request, owner, &mut |event| self.input(event_loop, event));
         }
     }
 
@@ -347,7 +344,7 @@ impl App {
             EditorEvent::Color { slot, rgb } => Event::EditColor { slot, rgb },
             EditorEvent::Width { slot, width } => Event::EditWidth { slot, width },
             EditorEvent::Closed => {
-                self.editors.close();
+                platform::close_editor(&mut |_| {});
                 Event::EditEnd
             }
         };
@@ -360,9 +357,6 @@ impl App {
         let was_drawing = self.core.view().draw_mode;
         let view = self.core.handle(event);
         self.remember_style(view);
-        if let Some(request) = view.edit {
-            self.open_editor(request);
-        }
         if view.draw_mode != was_drawing {
             self.sync(event_loop, view, None);
             return;
@@ -657,7 +651,6 @@ fn main() {
         config,
         settings: None,
         settings_id: None,
-        editors: Editors::default(),
         #[cfg(feature = "dev-hooks")]
         reopen: 0,
         modifiers: ModifiersState::empty(),

@@ -4,7 +4,7 @@
 //! `EditWidth`, `EditEnd`).
 
 use crate::editors::{emit, EditorEvent};
-use markuli_core::{Anchor, EditRequest, Palette, SlotValue, MAX_WIDTH, MIN_WIDTH};
+use markuli_core::{Anchor, EditRequest, Event, Palette, SlotValue, MAX_WIDTH, MIN_WIDTH};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
@@ -13,9 +13,8 @@ use objc2_app_kit::{
     NSTextField, NSView, NSViewController, NSWindowLevel,
 };
 use objc2_foundation::{NSNotification, NSObject, NSPoint, NSRect, NSRectEdge, NSSize, NSString};
-use std::cell::{Cell, OnceCell};
-use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use winit::window::Window;
+use std::cell::{Cell, OnceCell, RefCell};
+use winit::raw_window_handle::RawWindowHandle;
 
 // ---- Pure conversions (unit-tested below) --------------------------------
 
@@ -226,64 +225,66 @@ enum Open {
     },
 }
 
-/// The editor on screen, if any. At most one: opening another closes it.
-#[derive(Default)]
-pub struct Editors {
-    open: Option<Open>,
+thread_local! {
+    /// The editor on screen, if any. At most one: opening another closes it.
+    /// `AppKit` is main-thread only, so a thread-local is the whole story.
+    static OPEN: RefCell<Option<Open>> = const { RefCell::new(None) };
 }
 
-impl Editors {
-    pub fn is_open(&self) -> bool {
-        self.open.is_some()
-    }
+/// Opens the editor for `request` next to its button on the Overlay `owner`.
+/// Not modal: returns at once, and later edits arrive as `EditorEvent`s. An
+/// editor already open is closed first, which ends its edit through `send`.
+pub fn open_editor(request: EditRequest, owner: RawWindowHandle, send: &mut dyn FnMut(Event)) {
+    close_editor(send);
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(handle) = owner else {
+        return;
+    };
+    // SAFETY: the handle comes from the live Overlay window on the main
+    // thread and `ns_view` is its NSView.
+    let Some(view) = (unsafe { Retained::retain(handle.ns_view.as_ptr().cast::<NSView>()) }) else {
+        return;
+    };
+    let scale = view
+        .window()
+        .map_or(1.0, |window| window.backingScaleFactor());
+    let open = match request.value {
+        SlotValue::Color(rgb) => open_color(mtm, &view, request.index, rgb),
+        SlotValue::Width(width) => {
+            open_width(mtm, &view, scale, request.index, width, request.anchor)
+        }
+    };
+    OPEN.with_borrow_mut(|slot| *slot = Some(open));
+}
 
-    /// Opens the editor for `request` next to its button on `window`.
-    pub fn open(&mut self, window: &Window, request: EditRequest) {
-        self.close();
-        let Some(mtm) = MainThreadMarker::new() else {
-            return;
-        };
-        let Some(view) = content_view(window) else {
-            return;
-        };
-        let scale = window.scale_factor();
-        self.open = match request.value {
-            SlotValue::Color(rgb) => Some(open_color(mtm, &view, request.index, rgb)),
-            SlotValue::Width(width) => Some(open_width(
-                mtm,
-                &view,
-                scale,
-                request.index,
-                width,
-                request.anchor,
-            )),
-        };
-    }
-
-    /// Closes the editor without a `Closed` event (the caller ends the edit).
-    pub fn close(&mut self) {
-        match self.open.take() {
-            Some(Open::Color { level, .. }) => {
-                if let Some(mtm) = MainThreadMarker::new() {
-                    let panel = NSColorPanel::sharedColorPanel(mtm);
-                    detach(&panel);
-                    // SAFETY: clearing the target and action is always valid.
-                    unsafe {
-                        panel.setTarget(None);
-                        panel.setAction(None);
-                    }
-                    panel.setAccessoryView(None);
-                    panel.setLevel(level);
-                    panel.orderOut(None);
+/// Closes the editor, if one is open, and ends its edit through `send`.
+pub fn close_editor(send: &mut dyn FnMut(Event)) {
+    let Some(open) = OPEN.with_borrow_mut(Option::take) else {
+        return;
+    };
+    match open {
+        Open::Color { level, .. } => {
+            if let Some(mtm) = MainThreadMarker::new() {
+                let panel = NSColorPanel::sharedColorPanel(mtm);
+                detach(&panel);
+                // SAFETY: clearing the target and action is always valid.
+                unsafe {
+                    panel.setTarget(None);
+                    panel.setAction(None);
                 }
+                panel.setAccessoryView(None);
+                panel.setLevel(level);
+                panel.orderOut(None);
             }
-            Some(Open::Width { popover, .. }) => {
-                detach(&popover);
-                popover.close();
-            }
-            None => {}
+        }
+        Open::Width { popover, .. } => {
+            detach(&popover);
+            popover.close();
         }
     }
+    send(Event::EditEnd);
 }
 
 /// Stops `object` telling its (about to die) delegate anything.
@@ -293,15 +294,6 @@ fn detach(object: &AnyObject) {
     unsafe {
         let _: () = msg_send![object, setDelegate: std::ptr::null::<AnyObject>()];
     }
-}
-
-fn content_view(window: &Window) -> Option<Retained<NSView>> {
-    let RawWindowHandle::AppKit(handle) = window.window_handle().ok()?.as_raw() else {
-        return None;
-    };
-    // SAFETY: the handle comes from a live winit window on the main thread
-    // and `ns_view` is its NSView.
-    unsafe { Retained::retain(handle.ns_view.as_ptr().cast::<NSView>()) }
 }
 
 fn open_color(mtm: MainThreadMarker, view: &NSView, slot: usize, rgb: [u8; 3]) -> Open {

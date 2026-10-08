@@ -3,7 +3,9 @@
 
 use std::sync::OnceLock;
 
-/// Sent by an open editor; handled on the event loop.
+/// Sent by an open editor; handled on the event loop. Only macOS has
+/// non-modal editors that report later; Windows edits come back inline.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EditorEvent {
     Color {

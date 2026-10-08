@@ -2,8 +2,11 @@
 //!
 //! - `window_attributes` tunes the Overlay window before it is created.
 //! - `monitor_under_cursor` picks the display for Draw Mode.
-//! - `Editors` opens the Palette editors (color panel, width popover).
 //! - `config_dir`, `set_launch_at_login` and `SettingsWindow` serve Settings.
+//! - `open_editor` runs the Palette editor for a `View::edit` request until
+//!   it closes, sending edits to the core as they happen. On macOS the editor
+//!   is not modal: it returns at once and later edits arrive as `editors`
+//!   events. `close_editor` ends one still open.
 //! - `Presenter` owns the pixel buffer and puts it on screen with per-pixel
 //!   alpha (softbuffer cannot, see the PR notes).
 //!
@@ -18,12 +21,14 @@ mod macos_settings;
 #[cfg(target_os = "macos")]
 use macos as imp;
 #[cfg(target_os = "macos")]
-pub use macos_editors::Editors;
+pub use macos_editors::{close_editor, open_editor};
 #[cfg(target_os = "macos")]
 pub use macos_settings::SettingsWindow;
 
 #[cfg(target_os = "windows")]
 mod windows;
+#[cfg(target_os = "windows")]
+mod windows_editors;
 #[cfg(target_os = "windows")]
 mod windows_recorder;
 #[cfg(target_os = "windows")]
@@ -31,7 +36,10 @@ mod windows_settings;
 #[cfg(target_os = "windows")]
 use windows as imp;
 #[cfg(target_os = "windows")]
-pub use windows::Editors;
+pub use windows_editors::open_editor;
+/// The Windows editor is modal: nothing is left open to close.
+#[cfg(target_os = "windows")]
+pub fn close_editor(_: &mut dyn FnMut(markuli_core::Event)) {}
 #[cfg(target_os = "windows")]
 pub use windows_settings::SettingsWindow;
 
