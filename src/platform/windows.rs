@@ -364,7 +364,7 @@ pub fn command_held(modifiers: ModifiersState) -> bool {
 }
 
 /// Windows has a right button: no modifier turns a left click into one.
-pub fn secondary_click_modifier(_modifiers: ModifiersState) -> bool {
+pub fn secondary_click_modifier() -> bool {
     false
 }
 

@@ -4,8 +4,6 @@
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
 mod cursor;
-#[cfg(any(windows, test))]
-mod editor;
 mod editors;
 mod hotkeys;
 mod platform;
@@ -321,6 +319,8 @@ impl App {
     /// A right click, or Control+click on macOS. On a Palette button the
     /// core reports `View::edit` and the platform editor runs until closed.
     fn secondary_click(&mut self, event_loop: &ActiveEventLoop) {
+        // An editor still open ends its edit before the new request arrives.
+        platform::close_editor(&mut |event| self.input(event_loop, event));
         self.input(event_loop, Event::SecondaryClick(self.cursor));
         let Some(request) = self.core.view().edit else {
             return;
@@ -343,9 +343,9 @@ impl App {
         let event = match event {
             EditorEvent::Color { slot, rgb } => Event::EditColor { slot, rgb },
             EditorEvent::Width { slot, width } => Event::EditWidth { slot, width },
-            EditorEvent::Closed => {
-                platform::close_editor(&mut |_| {});
-                Event::EditEnd
+            EditorEvent::Closed { generation } => {
+                platform::editor_closed(generation, &mut |event| self.input(event_loop, event));
+                return;
             }
         };
         self.input(event_loop, event);
@@ -526,17 +526,18 @@ impl ApplicationHandler<UserEvent> for App {
                 state,
                 ..
             } => {
-                let control_click = platform::secondary_click_modifier(self.modifiers);
-                if state == ElementState::Pressed && control_click {
+                // The focus may be elsewhere (an editor took it), and then
+                // winit's modifier state is stale: ask the press itself.
+                if state == ElementState::Pressed {
+                    self.reclaim_focus();
+                }
+                if state == ElementState::Pressed && platform::secondary_click_modifier() {
                     self.secondary_press = true;
                     self.secondary_click(event_loop);
                     return;
                 }
                 if state == ElementState::Released && std::mem::take(&mut self.secondary_press) {
                     return;
-                }
-                if state == ElementState::Pressed {
-                    self.reclaim_focus();
                 }
                 self.core.handle(self.clock());
                 self.core.handle(Event::Pressure(platform::pen_pressure()));

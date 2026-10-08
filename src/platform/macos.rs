@@ -6,9 +6,9 @@ use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, sel, AnyThread, MainThreadMarker};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSBitmapImageRep, NSCursor,
-    NSDeviceRGBColorSpace, NSEvent, NSEventSubtype, NSEventType, NSImage, NSPasteboard,
-    NSPasteboardTypeString, NSRunningApplication, NSScreen, NSScreenSaverWindowLevel, NSView,
-    NSWindowCollectionBehavior, NSWorkspace,
+    NSDeviceRGBColorSpace, NSEvent, NSEventModifierFlags, NSEventSubtype, NSEventType, NSImage,
+    NSPasteboard, NSPasteboardTypeString, NSRunningApplication, NSScreen, NSScreenSaverWindowLevel,
+    NSView, NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{ns_string, NSDictionary, NSNumber, NSPoint, NSSize, NSString};
@@ -572,9 +572,16 @@ pub fn command_held(modifiers: ModifiersState) -> bool {
     modifiers.super_key()
 }
 
-/// Control+click is the secondary click on a one-button trackpad.
-pub fn secondary_click_modifier(modifiers: ModifiersState) -> bool {
-    modifiers.control_key()
+/// Control+click is the secondary click on a one-button trackpad. Read from
+/// the click's own `NSEvent`: winit's modifier state goes stale when another
+/// window (an editor popover) was key and took the key-up.
+pub fn secondary_click_modifier() -> bool {
+    let current = MainThreadMarker::new()
+        .and_then(|mtm| NSApplication::sharedApplication(mtm).currentEvent())
+        .map(|event| event.modifierFlags());
+    current
+        .unwrap_or_else(NSEvent::modifierFlags_class)
+        .contains(NSEventModifierFlags::Control)
 }
 
 /// Replaces the clipboard with plain text (what Excalidraw pastes from).
