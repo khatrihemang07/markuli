@@ -103,7 +103,7 @@ pub(crate) fn draw(
 /// a 5 x 9 box.
 fn digit(c: char) -> Option<&'static str> {
     Some(match c {
-        '0' => "M.5 .5h4v8h-4z",
+        '0' => "M2.5 .5C1 .5 .5 2 .5 4.5S1 8.5 2.5 8.5 4.5 7 4.5 4.5 4 .5 2.5 .5z",
         '1' => "M1 2l2.5-1.5v8",
         '2' => "M.5 1.5l1-1h2l1 1v2l-4 5h4",
         '3' => "M.5 .5h4l-2 3.5l2 1v2.5l-1 1h-2l-1-1",
