@@ -9,11 +9,11 @@ The single transparent, always-on-top window, covering one display, that Ink is 
 _Avoid_: canvas, board, motion-board
 
 **Draw Mode**:
-The state in which the Overlay captures pointer and keyboard input. Outside Draw Mode the Overlay is click-through.
+The state in which the Overlay exists, captures pointer and keyboard input, and shows the Ink. Outside Draw Mode there is no Overlay, so the screen shows nothing of Markuli.
 _Avoid_: edit mode, active mode
 
 **Ink**:
-The set of elements currently on the Overlay. It exists only in memory.
+The set of elements drawn on the Overlay. It exists only in memory and is shown only in Draw Mode.
 _Avoid_: drawing, scene, annotations
 
 **Element**:
@@ -42,9 +42,9 @@ User preferences that persist across launches: the hotkeys and launch at login. 
 
 ## Relationships
 
-- An **Overlay** shows exactly one **Ink**. Moving the **Overlay** to another display **Clears** it.
+- An **Overlay** shows exactly one **Ink**. Leaving **Draw Mode** hides the **Ink** (the **Overlay** is destroyed, the **Ink** stays in memory); entering again on the same display shows the same **Ink**, with its undo history. Entering on another display **Clears** it.
 - **Ink** is made of zero or more **Elements**. A **Selection** is a subset of the **Ink**.
-- **Tools** act only in **Draw Mode**. **Ink** stays visible outside **Draw Mode**.
+- **Tools** act only in **Draw Mode**. **Ink** is shown only in **Draw Mode**.
 
 ## Example dialogue
 
