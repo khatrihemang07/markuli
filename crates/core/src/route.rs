@@ -18,8 +18,12 @@ impl Annotator {
                 self.toolbar.resize(width, height);
                 self.paint.full();
             }
-            Event::Insets { top } => {
-                self.toolbar.set_top(top);
+            Event::Insets(insets) => {
+                self.toolbar.set_insets(insets);
+                self.paint.full();
+            }
+            Event::ToolbarPosition(position) => {
+                self.toolbar.set_position(position);
                 self.paint.full();
             }
             Event::Style(style) => self.style = self.style.with_style(style),

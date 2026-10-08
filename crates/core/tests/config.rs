@@ -17,6 +17,7 @@ fn saved_settings_load_back_unchanged() {
         clear: "F9".into(),
         launch_at_login: true,
         style: Style { color: 4, width: 0 },
+        toolbar: markuli_core::ToolbarPosition::Left,
     };
     assert_eq!(Config::parse(&config.to_text()), config);
 }
@@ -87,4 +88,26 @@ fn invalid_or_out_of_range_style_values_keep_the_defaults() {
     }
     let config = Config::parse("color=9\nwidth=2\n");
     assert_eq!(config.style, Style { color: 1, width: 2 });
+}
+
+#[test]
+fn the_toolbar_position_is_read_tolerantly() {
+    use markuli_core::ToolbarPosition as Pos;
+    assert_eq!(Config::default().toolbar, Pos::Top);
+    for (text, want) in [
+        ("toolbar=left\n", Pos::Left),
+        ("toolbar=right\n", Pos::Right),
+        ("toolbar=bottom\n", Pos::Bottom),
+        ("toolbar = bottom \n", Pos::Bottom),
+        ("toolbar=sideways\n", Pos::Top),
+        ("toolbar=\n", Pos::Top),
+        ("toolbar=LEFT\n", Pos::Top),
+    ] {
+        assert_eq!(Config::parse(text).toolbar, want, "{text:?}");
+    }
+    let c = Config {
+        toolbar: Pos::Right,
+        ..Config::default()
+    };
+    assert_eq!(Config::parse(&c.to_text()), c);
 }

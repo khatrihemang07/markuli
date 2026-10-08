@@ -9,7 +9,10 @@ const PAD: f32 = 4.0;
 const BUTTON: f32 = 32.0;
 const GAP: f32 = 4.0;
 const ISLAND_GAP: f32 = 8.0;
-const TOP: f32 = 16.0;
+/// Distance from the edge of the usable area to the Toolbar.
+const EDGE: f32 = 16.0;
+/// Same at the bottom, so the shadow stays off the Dock.
+const BOTTOM: f32 = 24.0;
 /// How far the shadow reaches around the islands, for damage and clearing.
 pub(super) const SHADOW: [f32; 4] = [16.0, 16.0, 16.0, 24.0];
 
@@ -78,11 +81,59 @@ pub(super) fn count(tools: usize) -> usize {
     tools + COLORS + WIDTHS + ACTIONS
 }
 
+/// Where the Toolbar sits: a row at the top or bottom, or a column at the
+/// left or right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ToolbarPosition {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl ToolbarPosition {
+    /// The name used in the config file.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        [Self::Top, Self::Bottom, Self::Left, Self::Right]
+            .into_iter()
+            .find(|p| p.name() == name)
+    }
+}
+
+/// The parts of the Overlay's edges that belong to the OS (menu bar and
+/// notch, Dock, Windows taskbar), in physical pixels. The Toolbar stays
+/// clear of them; Ink can still go there.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Insets {
+    pub top: u32,
+    pub bottom: u32,
+    pub left: u32,
+    pub right: u32,
+}
+
+impl Insets {
+    /// `[left, top, right, bottom]` in physical pixels, as floats.
+    fn bounds(self) -> [f32; 4] {
+        [self.left, self.top, self.right, self.bottom].map(to_f32)
+    }
+}
+
 /// The toolbar's geometry for one Overlay size and Tool count: four islands
-/// (Tools, colours, widths, actions) in one row.
+/// (Tools, colours, widths, actions) in one row or column.
 pub(super) struct Layout {
-    x0: f32,
-    top: f32,
+    /// Physical position of the bounding box's top-left corner.
+    origin: (f32, f32),
+    vertical: bool,
     pub scale: f32,
     sizes: [usize; ISLANDS],
 }
@@ -92,24 +143,71 @@ fn island_width(n: usize) -> f32 {
 }
 
 impl Layout {
-    /// `width` is the Overlay width in physical pixels, `top` the physical
-    /// pixels at the top that belong to the OS.
-    pub fn new(width: f32, scale: f32, top: f32, tools: usize) -> Self {
+    /// `size` is the Overlay size in physical pixels. A column that does not
+    /// fit between the insets (with a margin at both ends) falls back to the
+    /// Top row.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "l, t, r, b and w, h are the edges and size"
+    )]
+    pub fn new(
+        size: (f32, f32),
+        scale: f32,
+        insets: Insets,
+        position: ToolbarPosition,
+        tools: usize,
+    ) -> Self {
         let sizes = [tools, COLORS, WIDTHS, ACTIONS];
-        let total: f32 = sizes.iter().map(|&n| island_width(n)).sum::<f32>()
+        let length = sizes.iter().map(|&n| island_width(n)).sum::<f32>()
             + ISLAND_GAP * to_f32_usize(ISLANDS - 1);
+        let thick = 2.0 * PAD + BUTTON;
+        let [l, t, r, b] = insets.bounds();
+        let (w, h) = size;
+        let column_fits = (length + 2.0 * EDGE) * scale <= h - t - b;
+        let position = match position {
+            ToolbarPosition::Left | ToolbarPosition::Right if !column_fits => ToolbarPosition::Top,
+            p => p,
+        };
+        let across = |lo: f32, hi: f32| (lo + ((hi - lo) - length * scale) / 2.0).max(lo);
+        let origin = match position {
+            ToolbarPosition::Top => (across(l, w - r), t + EDGE * scale),
+            ToolbarPosition::Bottom => (across(l, w - r), h - b - (BOTTOM + thick) * scale),
+            ToolbarPosition::Left => (l + EDGE * scale, across(t, h - b)),
+            ToolbarPosition::Right => (w - r - (EDGE + thick) * scale, across(t, h - b)),
+        };
         Self {
-            x0: ((width / scale - total) / 2.0).max(0.0),
-            top,
+            origin,
+            vertical: matches!(position, ToolbarPosition::Left | ToolbarPosition::Right),
             scale,
             sizes,
         }
     }
 
-    /// Logical x of the left edge of island `g`.
-    fn island_x(&self, g: usize) -> f32 {
+    /// Logical offset along the row or column of the start of island `g`.
+    fn island_start(&self, g: usize) -> f32 {
         let before = self.sizes.iter().take(g);
-        self.x0 + before.map(|&n| island_width(n) + ISLAND_GAP).sum::<f32>()
+        before.map(|&n| island_width(n) + ISLAND_GAP).sum::<f32>()
+    }
+
+    /// The pixel area at logical `main` offset along the toolbar and `cross`
+    /// offset across it, each as (start, length).
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "x, y, w, h and the scale are plain geometry"
+    )]
+    fn area(&self, (main, main_len): (f32, f32), (cross, cross_len): (f32, f32)) -> Area {
+        let s = self.scale;
+        let (x, y, w, h) = if self.vertical {
+            (cross, main, cross_len, main_len)
+        } else {
+            (main, cross, main_len, cross_len)
+        };
+        Area {
+            x: self.origin.0 + x * s,
+            y: self.origin.1 + y * s,
+            w: w * s,
+            h: h * s,
+        }
     }
 
     pub fn button_rect(&self, i: usize) -> Area {
@@ -118,23 +216,14 @@ impl Layout {
             j -= self.sizes[g];
             g += 1;
         }
-        let s = self.scale;
-        Area {
-            x: (self.island_x(g) + PAD + to_f32_usize(j) * (BUTTON + GAP)) * s,
-            y: (TOP + PAD) * s + self.top,
-            w: BUTTON * s,
-            h: BUTTON * s,
-        }
+        let main = self.island_start(g) + PAD + to_f32_usize(j) * (BUTTON + GAP);
+        self.area((main, BUTTON), (PAD, BUTTON))
     }
 
     pub fn islands(&self) -> [Area; ISLANDS] {
-        let s = self.scale;
-        let height = (2.0 * PAD + BUTTON) * s;
-        std::array::from_fn(|g| Area {
-            x: self.island_x(g) * s,
-            y: TOP * s + self.top,
-            w: island_width(self.sizes[g]) * s,
-            h: height,
+        std::array::from_fn(|g| {
+            let len = island_width(self.sizes[g]);
+            self.area((self.island_start(g), len), (0.0, 2.0 * PAD + BUTTON))
         })
     }
 

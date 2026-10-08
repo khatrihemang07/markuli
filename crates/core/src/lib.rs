@@ -30,7 +30,7 @@ use style::Appearance;
 use style::Control;
 pub use style::Style;
 use toolbar::Toolbar;
-pub use toolbar::{Button, Theme};
+pub use toolbar::{Button, Insets, Theme, ToolbarPosition};
 use tools::Tools;
 pub use tools::{Cursor, ToolKind};
 
@@ -61,12 +61,12 @@ pub enum Event {
         width: u32,
         height: u32,
     },
-    /// Height in physical pixels of the area at the top of the Overlay that
-    /// belongs to the OS (macOS menu bar and notch, Windows work area). The
-    /// toolbar is laid out below it; Ink can still go there.
-    Insets {
-        top: u32,
-    },
+    /// The parts of each edge of the Overlay that belong to the OS (menu bar,
+    /// notch, Dock, taskbar), in physical pixels. The Toolbar is laid out
+    /// clear of them; Ink can still go there.
+    Insets(Insets),
+    /// Where the Toolbar sits. Sent at startup and when Settings changes it.
+    ToolbarPosition(ToolbarPosition),
     /// The remembered Style of the Pen, sent at startup. Out-of-range
     /// indices are ignored.
     Style(Style),

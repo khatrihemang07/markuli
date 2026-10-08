@@ -1,6 +1,6 @@
 //! macOS: Accessory app, `CALayer` presentation, no permission prompts.
 
-use markuli_core::{Damage, Format};
+use markuli_core::{Damage, Format, Insets};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, sel, AnyThread, MainThreadMarker};
@@ -65,16 +65,17 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
     })
 }
 
-/// Physical pixels at the top of `monitor` that macOS keeps for itself: the
-/// menu bar and, on a notched display, the notch's safe area. The toolbar is
-/// laid out below them.
-pub fn top_inset(monitor: &MonitorHandle) -> u32 {
+/// Physical pixels at each edge of `monitor` that macOS keeps for itself: the
+/// menu bar, the Dock on any side, and a notch's safe area. The toolbar is
+/// laid out clear of them.
+pub fn insets(monitor: &MonitorHandle) -> Insets {
+    let none = Insets::default();
     let Some(mtm) = MainThreadMarker::new() else {
-        return 0;
+        return none;
     };
     let screens = NSScreen::screens(mtm);
     let Some(primary) = screens.firstObject() else {
-        return 0;
+        return none;
     };
     let primary_height = primary.frame().size.height;
     let scale = monitor.scale_factor();
@@ -88,19 +89,32 @@ pub fn top_inset(monitor: &MonitorHandle) -> u32 {
         (frame.origin.x - left).abs() < 1.0
             && (primary_height - frame.origin.y - frame.size.height - top).abs() < 1.0
     }) else {
-        return 0;
+        return none;
     };
     let (frame, visible) = (screen.frame(), screen.visibleFrame());
-    let bar = (frame.origin.y + frame.size.height) - (visible.origin.y + visible.size.height);
-    let notch = screen.safeAreaInsets().top;
-    let points = bar.max(notch).max(0.0);
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a few dozen points, non-negative"
-    )]
-    let physical = (points * scale).round() as u32;
-    physical
+    let safe = screen.safeAreaInsets();
+    // Cocoa's origin is bottom-left: the usable area against the frame, per side.
+    let physical = |usable: f64, safe: f64| {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a few hundred points, non-negative"
+        )]
+        let pixels = (usable.max(safe).max(0.0) * scale).round() as u32;
+        pixels
+    };
+    Insets {
+        top: physical(
+            (frame.origin.y + frame.size.height) - (visible.origin.y + visible.size.height),
+            safe.top,
+        ),
+        bottom: physical(visible.origin.y - frame.origin.y, safe.bottom),
+        left: physical(visible.origin.x - frame.origin.x, safe.left),
+        right: physical(
+            (frame.origin.x + frame.size.width) - (visible.origin.x + visible.size.width),
+            safe.right,
+        ),
+    }
 }
 
 /// A mouse cursor for the Overlay: the system arrow, or a picture.

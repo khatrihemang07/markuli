@@ -10,7 +10,7 @@
     reason = "test pixel coordinates are small and positive"
 )]
 
-use markuli_core::{Annotator, Button, DisplayId, Event, Format, Point};
+use markuli_core::{Annotator, Button, DisplayId, Event, Format, Insets, Point};
 use tiny_skia::Pixmap;
 
 const W: u32 = 1600;
@@ -23,7 +23,10 @@ fn scene(scale: f32, inset: u32) -> Annotator {
         width: W,
         height: H,
     });
-    a.handle(Event::Insets { top: inset });
+    a.handle(Event::Insets(Insets {
+        top: inset,
+        ..Insets::default()
+    }));
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a
 }

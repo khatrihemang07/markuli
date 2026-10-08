@@ -14,7 +14,7 @@
 use core::ffi::c_void;
 use core::mem::{size_of, zeroed};
 use core::ptr::{null, null_mut};
-use markuli_core::{Damage, Format};
+use markuli_core::{Damage, Format, Insets};
 use std::path::PathBuf;
 use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
@@ -125,18 +125,25 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
     })
 }
 
-/// Physical pixels at the top of `monitor` outside its work area (a taskbar
-/// docked at the top). The toolbar is laid out below them.
-pub fn top_inset(monitor: &MonitorHandle) -> u32 {
+/// Physical pixels at each edge of `monitor` outside its work area (a taskbar
+/// docked on any side). The toolbar is laid out clear of them.
+pub fn insets(monitor: &MonitorHandle) -> Insets {
     // SAFETY: an all-zero MONITORINFO is valid; `cbSize` is set before the call
     // and the handle comes from a live winit monitor.
     unsafe {
         let mut info: MONITORINFO = zeroed();
         info.cbSize = size_of::<MONITORINFO>() as u32;
         if GetMonitorInfoW(monitor.hmonitor() as HMONITOR, &mut info) == 0 {
-            return 0;
+            return Insets::default();
         }
-        u32::try_from(info.rcWork.top - info.rcMonitor.top).unwrap_or(0)
+        let (work, full) = (info.rcWork, info.rcMonitor);
+        let side = |v: i32| u32::try_from(v).unwrap_or(0);
+        Insets {
+            top: side(work.top - full.top),
+            bottom: side(full.bottom - work.bottom),
+            left: side(work.left - full.left),
+            right: side(full.right - work.right),
+        }
     }
 }
 

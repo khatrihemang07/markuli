@@ -1,6 +1,7 @@
 //! Settings: the two hotkeys, launch at login and the remembered Style. Never Ink.
 
 use crate::style::{Style, PALETTE, WIDTHS};
+use crate::ToolbarPosition;
 
 /// What the user can change in Settings. Hotkeys are kept as text because the
 /// core knows no key codes; the platform layer parses and validates them.
@@ -11,6 +12,8 @@ pub struct Config {
     pub launch_at_login: bool,
     /// The Pen's Style, remembered across launches.
     pub style: Style,
+    /// Where the Toolbar sits.
+    pub toolbar: ToolbarPosition,
 }
 
 impl Default for Config {
@@ -20,6 +23,7 @@ impl Default for Config {
             clear: "alt+Digit1".into(),
             launch_at_login: false,
             style: Style::default(),
+            toolbar: ToolbarPosition::default(),
         }
     }
 }
@@ -41,6 +45,9 @@ impl Config {
                 "launch_at_login" => config.launch_at_login = value == "true",
                 "color" => config.style.color = index(value, PALETTE.len(), config.style.color),
                 "width" => config.style.width = index(value, WIDTHS.len(), config.style.width),
+                "toolbar" => {
+                    config.toolbar = ToolbarPosition::from_name(value).unwrap_or(config.toolbar);
+                }
                 _ => {}
             }
         }
@@ -50,8 +57,13 @@ impl Config {
     #[must_use]
     pub fn to_text(&self) -> String {
         format!(
-            "toggle={}\nclear={}\nlaunch_at_login={}\ncolor={}\nwidth={}\n",
-            self.toggle, self.clear, self.launch_at_login, self.style.color, self.style.width
+            "toggle={}\nclear={}\nlaunch_at_login={}\ncolor={}\nwidth={}\ntoolbar={}\n",
+            self.toggle,
+            self.clear,
+            self.launch_at_login,
+            self.style.color,
+            self.style.width,
+            self.toolbar.name()
         )
     }
 }

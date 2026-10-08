@@ -10,7 +10,7 @@ mod settings;
 
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use hotkeys::{Binding, Hotkeys, RebindError};
-use markuli_core::{Annotator, Config, Cursor, DisplayId, Event, Key, Point, Theme, View};
+use markuli_core::{Annotator, Config, Cursor, DisplayId, Event, Insets, Key, Point, Theme, View};
 use platform::{Presenter, SettingsWindow};
 use settings::SettingsEvent;
 use std::time::{Duration, Instant};
@@ -103,7 +103,7 @@ impl App {
             self.previous = platform::frontmost_other();
             self.overlay = Some(create_overlay(event_loop, monitor));
             self.core.handle(Event::ScaleFactor(scale_of(monitor)));
-            self.send_surface(platform::top_inset(monitor));
+            self.send_surface(platform::insets(monitor));
             self.core.handle(Event::SurfaceReset);
         }
         if self.overlay.is_none() {
@@ -139,7 +139,7 @@ impl App {
     /// Tells the core the new Overlay's size and the OS theme. winit reads the
     /// theme from `effectiveAppearance` on macOS and from the
     /// `AppsUseLightTheme` registry value on Windows.
-    fn send_surface(&mut self, inset: u32) {
+    fn send_surface(&mut self, insets: Insets) {
         let Some(overlay) = self.overlay.as_ref() else {
             return;
         };
@@ -149,7 +149,7 @@ impl App {
             width: size.width,
             height: size.height,
         });
-        self.core.handle(Event::Insets { top: inset });
+        self.core.handle(Event::Insets(insets));
         self.core.handle(Event::Theme(theme_of(theme)));
     }
 
@@ -206,6 +206,14 @@ impl App {
                     } else {
                         window.set_message("");
                     }
+                }
+            }
+            SettingsEvent::Toolbar(position) => {
+                self.config.toolbar = position;
+                settings::save(&self.config);
+                let view = self.core.handle(Event::ToolbarPosition(position));
+                if view.needs_render {
+                    self.redraw();
                 }
             }
             // Dropping the handle is what returns the window's memory.
@@ -563,6 +571,7 @@ fn main() {
 
     let mut core = Annotator::new();
     core.handle(Event::Style(config.style));
+    core.handle(Event::ToolbarPosition(config.toolbar));
 
     let mut app = App {
         core,

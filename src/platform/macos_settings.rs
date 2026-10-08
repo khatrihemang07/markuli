@@ -5,18 +5,27 @@
 
 use crate::hotkeys::{self, Binding, Mods};
 use crate::settings::{emit, SettingsEvent};
-use markuli_core::Config;
+use markuli_core::{Config, ToolbarPosition};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSApplication, NSBackingStoreType, NSButton, NSColor, NSControlStateValueOff,
-    NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSTextField, NSWindow, NSWindowStyleMask,
+    NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSTextField, NSView, NSWindow,
+    NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use std::cell::{Cell, OnceCell, RefCell};
 
 const ESCAPE: u16 = 53;
+
+/// The Toolbar radio buttons, in order; a button's tag is its index.
+const POSITIONS: [(&str, ToolbarPosition); 4] = [
+    ("Top", ToolbarPosition::Top),
+    ("Bottom", ToolbarPosition::Bottom),
+    ("Left", ToolbarPosition::Left),
+    ("Right", ToolbarPosition::Right),
+];
 
 #[derive(Default)]
 struct Ivars {
@@ -58,6 +67,18 @@ define_class!(
                 .get()
                 .is_some_and(|b| b.state() == NSControlStateValueOn);
             emit(SettingsEvent::LaunchAtLogin(on));
+        }
+
+        #[unsafe(method(positionChanged:))]
+        fn position_changed(&self, sender: Option<&AnyObject>) {
+            // SAFETY: the sender is one of our radio buttons, an NSButton.
+            let tag: isize = sender.map_or(-1, |s| unsafe { msg_send![s, tag] });
+            let position = usize::try_from(tag)
+                .ok()
+                .and_then(|i| POSITIONS.get(i).map(|(_, p)| *p));
+            if let Some(position) = position {
+                emit(SettingsEvent::Toolbar(position));
+            }
         }
 
         #[unsafe(method(keyDown:))]
@@ -147,6 +168,41 @@ impl Window {
     }
 }
 
+/// The "Toolbar" row: a label and four radio buttons, `current` one on.
+fn add_toolbar_row(
+    content: &NSView,
+    target: &AnyObject,
+    current: ToolbarPosition,
+    mtm: MainThreadMarker,
+) {
+    let label = NSTextField::labelWithString(&NSString::from_str("Toolbar"), mtm);
+    label.setFrame(NSRect::new(
+        NSPoint::new(20.0, 114.0),
+        NSSize::new(160.0, 20.0),
+    ));
+    content.addSubview(&label);
+    // Radio buttons sharing a superview and an action exclude each other.
+    let mut x = 190.0;
+    for (tag, (title, position)) in (0_isize..).zip(POSITIONS) {
+        // SAFETY: the target is the window, which implements `positionChanged:`.
+        let radio = unsafe {
+            NSButton::radioButtonWithTitle_target_action(
+                &NSString::from_str(title),
+                Some(target),
+                Some(sel!(positionChanged:)),
+                mtm,
+            )
+        };
+        radio.setTag(tag);
+        radio.setFrame(NSRect::new(NSPoint::new(x, 110.0), NSSize::new(64.0, 24.0)));
+        if position == current {
+            radio.setState(NSControlStateValueOn);
+        }
+        content.addSubview(&radio);
+        x += 64.0;
+    }
+}
+
 /// Handle to the open window. Dropping it releases everything.
 pub struct SettingsWindow {
     window: Retained<Window>,
@@ -155,7 +211,7 @@ pub struct SettingsWindow {
 impl SettingsWindow {
     pub fn open(config: &Config) -> Option<Self> {
         let mtm = MainThreadMarker::new()?;
-        let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 200.0));
+        let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(450.0, 240.0));
         let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
         let window = Window::alloc(mtm).set_ivars(Ivars::default());
         // SAFETY: designated initialiser of NSWindow on the main thread.
@@ -200,19 +256,21 @@ impl SettingsWindow {
             text.clone_into(&mut ivars.shown.borrow_mut()[binding as usize]);
         };
         add_row(
-            150.0,
+            190.0,
             "Toggle Draw Mode",
             sel!(recordToggle:),
             Binding::Toggle,
             &config.toggle,
         );
         add_row(
-            110.0,
+            150.0,
             "Clear",
             sel!(recordClear:),
             Binding::Clear,
             &config.clear,
         );
+
+        add_toolbar_row(&content, target, config.toolbar, mtm);
 
         // SAFETY: the target is the window, which implements `loginChanged:`.
         let login = unsafe {
@@ -225,7 +283,7 @@ impl SettingsWindow {
         };
         login.setFrame(NSRect::new(
             NSPoint::new(20.0, 70.0),
-            NSSize::new(360.0, 24.0),
+            NSSize::new(410.0, 24.0),
         ));
         login.setState(if config.launch_at_login {
             NSControlStateValueOn
@@ -238,7 +296,7 @@ impl SettingsWindow {
         let message = NSTextField::labelWithString(&NSString::from_str(""), mtm);
         message.setFrame(NSRect::new(
             NSPoint::new(20.0, 20.0),
-            NSSize::new(360.0, 36.0),
+            NSSize::new(410.0, 36.0),
         ));
         message.setTextColor(Some(&NSColor::systemRedColor()));
         content.addSubview(&message);

@@ -4,7 +4,9 @@
 //! at. Regenerate after an intended change with `UPDATE_GOLDEN=1 cargo test`
 //! and look at the PNGs in `tests/golden/` before committing them.
 
-use markuli_core::{Annotator, Button, DisplayId, Event, Format, Key, Point, Theme};
+use markuli_core::{
+    Annotator, Button, DisplayId, Event, Format, Key, Point, Theme, ToolbarPosition,
+};
 use std::path::PathBuf;
 use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
 
@@ -71,7 +73,11 @@ fn check(name: &str, actual: &Pixmap) {
             path.display()
         )
     });
-    assert_eq!((golden.width(), golden.height()), (W, H), "{name}: size");
+    assert_eq!(
+        (golden.width(), golden.height()),
+        (actual.width(), actual.height()),
+        "{name}: size"
+    );
     // The SIMD and scalar rasterizer paths may differ by a rounding step.
     let worst = golden
         .data()
@@ -260,4 +266,77 @@ fn toolbar_highlights_the_chosen_colour_and_width_in_both_themes() {
         key(&mut a, ']');
         check(name, &image(&mut a, page));
     }
+}
+
+/// A tall Overlay for the column positions (the column is about 612 px).
+const TALL: u32 = 700;
+
+fn placed(theme: Theme, pos: ToolbarPosition, height: u32) -> Annotator {
+    let mut a = Annotator::new();
+    a.handle(Event::Theme(theme));
+    a.handle(Event::Resize { width: W, height });
+    a.handle(Event::ToolbarPosition(pos));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
+    a
+}
+
+/// A stroke clear of the toolbar in every position, from `(x, y)`.
+fn stroke_at(a: &mut Annotator, x: f32, y: f32) {
+    a.handle(Event::PointerDown(p(x, y)));
+    a.handle(Event::PointerMove(p(x + 50.0, y - 30.0)));
+    a.handle(Event::PointerUp(p(x + 130.0, y + 20.0)));
+}
+
+fn image_sized(a: &mut Annotator, page: Color, height: u32) -> Pixmap {
+    let mut overlay = Pixmap::new(W, height).expect("size is non-zero");
+    a.render(&mut overlay.as_mut(), Format::Rgba);
+    let mut out = Pixmap::new(W, height).expect("size is non-zero");
+    out.fill(page);
+    out.draw_pixmap(
+        0,
+        0,
+        overlay.as_ref(),
+        &PixmapPaint::default(),
+        Transform::identity(),
+        None,
+    );
+    out
+}
+
+#[test]
+fn toolbar_on_the_left_light() {
+    let mut a = placed(Theme::Light, ToolbarPosition::Left, TALL);
+    stroke_at(&mut a, 120.0, 300.0);
+    check("toolbar_left_light", &image_sized(&mut a, WHITE_PAGE, TALL));
+}
+
+#[test]
+fn toolbar_on_the_right_dark_with_a_mixed_selection() {
+    let mut a = placed(Theme::Dark, ToolbarPosition::Right, TALL);
+    stroke_at(&mut a, 100.0, 300.0);
+    key(&mut a, '4');
+    key(&mut a, ']');
+    stroke_at(&mut a, 100.0, 450.0);
+    key(&mut a, 'v');
+    a.handle(Event::PointerDown(p(150.0, 270.0)));
+    a.handle(Event::PointerUp(p(150.0, 270.0)));
+    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::PointerDown(p(150.0, 420.0)));
+    a.handle(Event::PointerUp(p(150.0, 420.0)));
+    assert_eq!(a.selection().len(), 2);
+    check(
+        "toolbar_right_dark_mixed",
+        &image_sized(&mut a, dark_page(), TALL),
+    );
+}
+
+#[test]
+fn toolbar_at_the_bottom_light_with_the_eraser_dimming_the_style() {
+    let mut a = placed(Theme::Light, ToolbarPosition::Bottom, H);
+    stroke_at(&mut a, 60.0, 60.0);
+    key(&mut a, 'e');
+    check(
+        "toolbar_bottom_light_eraser",
+        &image_sized(&mut a, WHITE_PAGE, H),
+    );
 }

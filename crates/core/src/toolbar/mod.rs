@@ -1,6 +1,6 @@
 //! The Excalidraw-style toolbar: state and hit-testing.
 //!
-//! One row at the top centre of the Overlay, in Draw Mode only, in four
+//! One row (top or bottom) or column (left or right) of the Overlay, in Draw Mode only, in four
 //! islands: the Tool buttons, the five colours, the three widths, then undo,
 //! redo and Clear. Metrics and colours are
 //! Excalidraw's stock theme (`theme.scss`, `ToolIcon.scss`, `Island.scss`),
@@ -20,6 +20,7 @@ use crate::tools::Tools;
 use layout::Layout;
 
 pub(crate) use layout::Area;
+pub use layout::{Insets, ToolbarPosition};
 pub use theme::Theme;
 
 /// A toolbar button. `Tool(i)` is the i-th registered Tool.
@@ -64,7 +65,8 @@ pub(crate) struct Look {
     theme: Theme,
     size: (f32, f32),
     scale: f32,
-    top: f32,
+    insets: Insets,
+    position: ToolbarPosition,
 }
 
 /// Where a pointer position lands on the toolbar.
@@ -81,8 +83,9 @@ pub(crate) struct Toolbar {
     /// Overlay size in physical pixels, and its scale factor.
     size: Option<(f32, f32)>,
     scale: f32,
-    /// Physical pixels at the top that belong to the OS.
-    top: f32,
+    /// Physical pixels at each edge that belong to the OS.
+    insets: Insets,
+    position: ToolbarPosition,
     hover: Option<Button>,
     press: Option<Button>,
     over: bool,
@@ -95,7 +98,8 @@ impl Default for Toolbar {
             theme: Theme::default(),
             size: None,
             scale: 1.0,
-            top: 0.0,
+            insets: Insets::default(),
+            position: ToolbarPosition::default(),
             hover: None,
             press: None,
             over: false,
@@ -113,8 +117,12 @@ impl Toolbar {
         self.scale = scale;
     }
 
-    pub fn set_top(&mut self, top: u32) {
-        self.top = layout::to_f32(top);
+    pub fn set_insets(&mut self, insets: Insets) {
+        self.insets = insets;
+    }
+
+    pub fn set_position(&mut self, position: ToolbarPosition) {
+        self.position = position;
     }
 
     pub fn hover_at(&mut self, at: Point, tools: usize) {
@@ -153,8 +161,14 @@ impl Toolbar {
     }
 
     fn layout(&self, tools: usize) -> Option<Layout> {
-        let (width, _) = self.size?;
-        Some(Layout::new(width, self.scale, self.top, tools))
+        let size = self.size?;
+        Some(Layout::new(
+            size,
+            self.scale,
+            self.insets,
+            self.position,
+            tools,
+        ))
     }
 
     pub fn hit(&self, at: Point, tools: usize) -> Option<Hit> {
@@ -189,7 +203,8 @@ impl Toolbar {
             theme: self.theme,
             size,
             scale: self.scale,
-            top: self.top,
+            insets: self.insets,
+            position: self.position,
         })
     }
 
