@@ -83,11 +83,11 @@ impl Annotator {
     }
 
     pub(super) fn ui(&self) -> UiState {
-        let (color, width, dimmed) = self.chosen_style();
+        let chosen = self.chosen_style();
         UiState {
-            color,
-            width,
-            dimmed,
+            color: chosen.color,
+            width: chosen.width,
+            dimmed: chosen.dimmed,
             active: self.tools.active(),
             can_undo: self.history.can_undo(),
             can_redo: self.history.can_redo(),
@@ -95,17 +95,17 @@ impl Annotator {
         }
     }
 
-    /// The chosen colour and width the Toolbar highlights, and whether the
+    /// The chosen color and width the Toolbar highlights, and whether the
     /// active Tool leaves them dimmed. With a Selection they are the
     /// Selection's own values, `None` where it mixes them; otherwise the Pen's
     /// Style (a dimmed Tool shows it too: a click then switches to the Pen).
-    fn chosen_style(&self) -> (Option<usize>, Option<usize>, bool) {
+    fn chosen_style(&self) -> Chosen {
         let target = self.tools.get(self.tools.active()).map(Tool::styles);
-        let own = (
-            self.style.color_index(),
-            Some(self.style.width_index()),
-            false,
-        );
+        let own = Chosen {
+            color: self.style.color_index(),
+            width: Some(self.style.width_index()),
+            dimmed: false,
+        };
         match target {
             Some(StyleTarget::NextStrokes) => own,
             Some(StyleTarget::Selection) if !self.selection.is_empty() => {
@@ -114,20 +114,35 @@ impl Annotator {
                     .elements()
                     .iter()
                     .filter(|e| self.selection.contains(e.id()));
-                let mut looks = chosen.map(Element::style);
-                let Some(first) = looks.next() else {
-                    return (own.0, own.1, false);
+                let mut appearances = chosen.map(Element::style);
+                let Some(first) = appearances.next() else {
+                    return own;
                 };
                 let first = (first.color_index(), Some(first.width_index()));
-                let (color, width) = looks.fold(first, |(c, w), s| {
+                let (color, width) = appearances.fold(first, |(c, w), s| {
                     (
                         c.filter(|&c| s.color_index() == Some(c)),
                         w.filter(|&w| s.width_index() == w),
                     )
                 });
-                (color, width, false)
+                Chosen {
+                    color,
+                    width,
+                    dimmed: false,
+                }
             }
-            _ => (own.0, own.1, true),
+            _ => Chosen {
+                dimmed: true,
+                ..own
+            },
         }
     }
+}
+
+/// What the Toolbar highlights: palette and width indices (`None` where a
+/// Selection mixes them), and whether the active Tool leaves them dimmed.
+struct Chosen {
+    color: Option<usize>,
+    width: Option<usize>,
+    dimmed: bool,
 }
