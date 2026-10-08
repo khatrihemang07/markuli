@@ -303,14 +303,18 @@ fn display_id(monitor: &MonitorHandle) -> DisplayId {
 }
 
 fn create_overlay(event_loop: &ActiveEventLoop, monitor: &MonitorHandle) -> Overlay {
+    // winit's monitor values are physical pixels of that monitor, but a window
+    // is placed and sized in the coordinates of the screen it lands on, so a
+    // mixed-DPI setup needs them converted with the monitor's own scale.
+    let scale = monitor.scale_factor();
     let attributes = platform::window_attributes(
         Window::default_attributes()
             .with_title("Markuli")
             .with_decorations(false)
             .with_resizable(false)
             .with_visible(false)
-            .with_position(monitor.position())
-            .with_inner_size(monitor.size()),
+            .with_position(monitor.position().to_logical::<f64>(scale))
+            .with_inner_size(monitor.size().to_logical::<f64>(scale)),
     );
     let window = event_loop
         .create_window(attributes)
