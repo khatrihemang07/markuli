@@ -3,8 +3,8 @@
 //! Two islands at the top centre of the Overlay, in Draw Mode only: the
 //! Tool buttons, then undo, redo and Clear. Metrics and colours are
 //! Excalidraw's stock theme (`theme.scss`, `ToolIcon.scss`, `Island.scss`),
-//! in logical pixels times the Overlay's scale factor. Deviations: the hint
-//! digits are stroked glyphs (no font), the shadow is a stack of rounded
+//! in logical pixels times the Overlay's scale factor. Deviation: the shadow is a
+//! stack of rounded
 //! rectangles instead of a blur, and there is no pressed-state border.
 
 use crate::icons::{self, Icon};
@@ -50,7 +50,6 @@ pub(crate) struct Palette {
     pub selected: [u8; 3],
     pub selected_icon: [u8; 3],
     pub disabled: [u8; 3],
-    pub hint: [u8; 3],
     /// Swatch border (`--color-gray-30`) and the active swatch outline
     /// (`--color-primary-darkest`).
     pub swatch_border: [u8; 3],
@@ -68,7 +67,6 @@ const LIGHT: Palette = Palette {
     selected: [0xe0, 0xdf, 0xff],
     selected_icon: [0x03, 0x00, 0x64],
     disabled: [0xb8, 0xb8, 0xb8],
-    hint: [0xb8, 0xb8, 0xb8],
     swatch_border: [0xd6, 0xd6, 0xd6],
     swatch_active: [0x4a, 0x47, 0xb1],
     track_fill: [0xcc, 0xcc, 0xff],
@@ -83,7 +81,6 @@ const DARK: Palette = Palette {
     selected: [0x40, 0x3e, 0x6a],
     selected_icon: [0xe0, 0xdf, 0xff],
     disabled: [0x5c, 0x5c, 0x5c],
-    hint: [0x7a, 0x7a, 0x7a],
     swatch_border: [0x5c, 0x5c, 0x66],
     swatch_active: [0xa8, 0xa5, 0xff],
     track_fill: [0x50, 0x4d, 0x7a],
@@ -479,19 +476,6 @@ impl Chrome<'_> {
                 size,
             );
             icons::draw(target, icon, at, &solid(ink));
-            if let Button::Tool(t) = button {
-                let digit = tools
-                    .get(t)
-                    .and_then(|tool| tool.keys().iter().copied().find(char::is_ascii_digit));
-                if let Some(d) = digit {
-                    let corner = (
-                        rect.x + rect.w - 4.0 * s,
-                        rect.y + rect.h - 4.0 * s,
-                        7.0 * s,
-                    );
-                    icons::draw_digit(target, d, corner, &solid(colors.hint));
-                }
-            }
         }
     }
 

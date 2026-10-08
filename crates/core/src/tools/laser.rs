@@ -22,9 +22,9 @@ impl Tool for LaserTool {
         &icons::LASER
     }
 
-    /// Excalidraw's shortcut: K (it has no digit).
+    /// K (Excalidraw) and 4, its place in the toolbar.
     fn keys(&self) -> &'static [char] {
-        &['k']
+        &['k', '4']
     }
 
     fn cursor(&self) -> Cursor {

@@ -53,7 +53,7 @@ impl Tool for Select {
         &icons::SELECTION
     }
 
-    /// Excalidraw's shortcuts: V and 1.
+    /// V (Excalidraw) and 1, its place in the toolbar.
     fn keys(&self) -> &'static [char] {
         &['v', '1']
     }

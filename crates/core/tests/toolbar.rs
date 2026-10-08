@@ -130,14 +130,14 @@ fn the_undo_redo_and_clear_buttons_behave_like_their_keys() {
     click(&mut by_button, redo);
     assert_eq!(by_button.ink(), by_key.ink());
 
-    // Clear: removes all Ink and leaves Draw Mode, like the hotkey.
+    // Clear: removes all Ink and stays in Draw Mode, like the hotkey.
     let clear = center(&by_button, Button::Clear);
     click(&mut by_button, clear);
     let view = by_key.handle(Event::Clear);
     assert_eq!(by_button.ink(), by_key.ink());
     assert!(by_button.ink().is_empty());
-    assert_eq!(by_button.view(), view);
-    assert!(!view.draw_mode);
+    assert_eq!(by_button.view().draw_mode, view.draw_mode);
+    assert!(view.draw_mode);
 }
 
 #[test]
@@ -166,6 +166,37 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     key(&mut a, Key::Char('7'), false, false);
     assert_eq!(a.view().tool, ToolKind::Pen);
+}
+
+#[test]
+fn letters_and_digits_select_tools_in_toolbar_order() {
+    // V/1 Select, P/2 Pen, E/3 Eraser, K/4 Laser; Excalidraw's 7 (Pen) and 0
+    // (Eraser) stay as aliases.
+    let table = [
+        (ToolKind::Select, ['v', '1']),
+        (ToolKind::Pen, ['p', '2']),
+        (ToolKind::Eraser, ['e', '3']),
+        (ToolKind::Laser, ['k', '4']),
+        (ToolKind::Pen, ['7', '7']),
+        (ToolKind::Eraser, ['0', '0']),
+    ];
+    let mut a = drawing();
+    for (kind, keys) in table {
+        for k in keys {
+            // Start from another Tool so the key has to change something.
+            let other = if kind == ToolKind::Select { 'p' } else { 'v' };
+            key(&mut a, Key::Char(other), false, false);
+            key(&mut a, Key::Char(k), false, false);
+            assert_eq!(a.view().tool, kind, "key {k}");
+        }
+    }
+}
+
+#[test]
+fn digits_work_on_the_first_key_after_entering_draw_mode() {
+    let mut a = drawing();
+    key(&mut a, Key::Char('4'), false, false);
+    assert_eq!(a.view().tool, ToolKind::Laser);
 }
 
 #[test]

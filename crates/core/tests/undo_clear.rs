@@ -111,22 +111,28 @@ fn undo_asks_for_a_redraw() {
 }
 
 #[test]
-fn clear_removes_ink_leaves_draw_mode_and_releases_the_overlay() {
+fn clear_removes_ink_and_stays_in_draw_mode() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
     let v = a.handle(Event::Clear);
     assert!(a.ink().is_empty());
-    assert!(!v.draw_mode);
+    assert!(v.draw_mode);
+    assert!(v.needs_render);
 }
 
 #[test]
-fn clear_works_outside_draw_mode_too() {
+fn clear_outside_draw_mode_clears_the_hidden_ink_and_does_not_enter_it() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
     a.handle(Event::ToggleDrawMode(D1));
     let v = a.handle(Event::Clear);
     assert!(a.ink().is_empty());
     assert!(!v.draw_mode);
+    // Entering again shows nothing, and the Clear can be undone.
+    a.handle(Event::ToggleDrawMode(D1));
+    assert!(a.ink().is_empty());
+    undo(&mut a);
+    assert_eq!(a.ink().len(), 1);
 }
 
 #[test]
@@ -136,7 +142,6 @@ fn clear_is_undoable_and_redoable() {
     stroke(&mut a, 50.0);
     let before = a.ink().clone();
     a.handle(Event::Clear);
-    a.handle(Event::ToggleDrawMode(D1));
     undo(&mut a);
     assert_eq!(*a.ink(), before);
     redo(&mut a);
@@ -152,9 +157,7 @@ fn clearing_empty_ink_logs_nothing() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
     a.handle(Event::Clear);
-    a.handle(Event::ToggleDrawMode(D1));
     a.handle(Event::Clear);
-    a.handle(Event::ToggleDrawMode(D1));
     undo(&mut a);
     assert_eq!(a.ink().len(), 1);
 }

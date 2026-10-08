@@ -24,7 +24,7 @@ _Avoid_: shape, object, path
 The gesture of drawing one Element with the Pen, from pointer down to pointer up.
 
 **Clear**:
-Removes all Ink from the Overlay.
+Removes all Ink (undoable). It does not change **Draw Mode**: in Draw Mode the Overlay stays, outside it the hidden Ink is cleared silently and no Overlay appears.
 _Avoid_: reset, wipe
 
 **Laser**:

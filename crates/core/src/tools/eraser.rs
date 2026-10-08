@@ -43,9 +43,9 @@ impl Tool for Eraser {
         &icons::ERASER
     }
 
-    /// Excalidraw's shortcuts: E and 0.
+    /// E, 3 (its place in the toolbar) and Excalidraw's 0.
     fn keys(&self) -> &'static [char] {
-        &['e', '0']
+        &['e', '3', '0']
     }
 
     fn cursor(&self) -> Cursor {

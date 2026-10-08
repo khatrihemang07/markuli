@@ -234,11 +234,9 @@ impl Annotator {
         if !self.ink.is_empty() {
             self.history.record_clear(self.ink.take());
         }
-        self.draw_mode = false;
+        // Draw Mode is untouched: Clear empties the Ink, nothing more.
         self.selection.clear();
         self.laser.clear();
-        self.toolbar.forget_pointer();
-        self.panel.forget_pointer();
         self.paint.full();
     }
 

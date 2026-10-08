@@ -92,7 +92,8 @@ pub enum Event {
         /// Alt (Option) is held: Tool shortcut keys then do nothing.
         alt: bool,
     },
-    /// The Clear hotkey: removes all Ink and leaves Draw Mode.
+    /// The Clear hotkey: removes all Ink (undoable). Draw Mode stays as it is:
+    /// nothing appears or disappears.
     Clear,
     /// The time, in milliseconds from any fixed origin. Send it before
     /// pointer events and whenever [`View::next_frame`] is due. It is how the

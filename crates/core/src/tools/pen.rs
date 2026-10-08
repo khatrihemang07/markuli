@@ -22,9 +22,9 @@ impl Tool for Pen {
         &icons::PEN
     }
 
-    /// Excalidraw's shortcuts: P and 7.
+    /// P, 2 (its place in the toolbar) and Excalidraw's 7.
     fn keys(&self) -> &'static [char] {
-        &['p', '7']
+        &['p', '2', '7']
     }
 
     fn cursor(&self) -> Cursor {

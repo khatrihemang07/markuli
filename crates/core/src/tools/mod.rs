@@ -2,7 +2,7 @@
 //!
 //! Adding a Tool is one new type implementing [`Tool`] in its own file plus
 //! one line in [`Tools::new`] (standards rule 5). The toolbar button, the
-//! shortcut keys, the cursor and the key-binding hint all come from the trait,
+//! shortcut keys and the cursor all come from the trait,
 //! so no other Tool and no other module is edited.
 
 mod eraser;
@@ -93,8 +93,8 @@ impl Ctx<'_> {
 pub(crate) trait Tool: Debug {
     fn kind(&self) -> ToolKind;
     fn icon(&self) -> &'static Icon;
-    /// Lowercase keys that select this Tool. The first digit is also the
-    /// hint printed on its toolbar button.
+    /// Lowercase keys that select this Tool: a letter, its toolbar position
+    /// as a digit (1-4) and any Excalidraw digit.
     fn keys(&self) -> &'static [char];
     fn cursor(&self) -> Cursor;
     /// What the style panel applies to while this Tool is active.
