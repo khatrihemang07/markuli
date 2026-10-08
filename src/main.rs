@@ -94,7 +94,7 @@ impl App {
             let Some(monitor) = monitor else { return };
             self.overlay = Some(create_overlay(event_loop, monitor));
             self.core.handle(Event::ScaleFactor(scale_of(monitor)));
-            self.send_surface();
+            self.send_surface(platform::top_inset(monitor));
             self.core.handle(Event::SurfaceReset);
         }
         let Some(overlay) = self.overlay.as_ref() else {
@@ -117,7 +117,7 @@ impl App {
     /// Tells the core the new Overlay's size and the OS theme. winit reads the
     /// theme from `effectiveAppearance` on macOS and from the
     /// `AppsUseLightTheme` registry value on Windows.
-    fn send_surface(&mut self) {
+    fn send_surface(&mut self, inset: u32) {
         let Some(overlay) = self.overlay.as_ref() else {
             return;
         };
@@ -127,6 +127,7 @@ impl App {
             width: size.width,
             height: size.height,
         });
+        self.core.handle(Event::Insets { top: inset });
         self.core.handle(Event::Theme(theme_of(theme)));
     }
 

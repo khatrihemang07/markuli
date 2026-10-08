@@ -62,6 +62,12 @@ pub enum Event {
         width: u32,
         height: u32,
     },
+    /// Height in physical pixels of the area at the top of the Overlay that
+    /// belongs to the OS (macOS menu bar and notch, Windows work area). The
+    /// toolbar and style panel are laid out below it; Ink can still go there.
+    Insets {
+        top: u32,
+    },
     /// The OS light or dark theme.
     Theme(Theme),
     /// Physical pixels.

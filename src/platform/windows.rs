@@ -20,8 +20,9 @@ use tiny_skia::PixmapMut;
 use tray_icon::{Icon, TrayIconBuilder};
 use windows_sys::Win32::Foundation::{GlobalFree, ERROR_FILE_NOT_FOUND, HWND, POINT, RECT, SIZE};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA,
-    AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetMonitorInfoW, SelectObject,
+    AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS,
+    HBITMAP, HDC, HMONITOR, MONITORINFO,
 };
 use windows_sys::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
@@ -37,7 +38,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
 use winit::keyboard::ModifiersState;
 use winit::monitor::MonitorHandle;
-use winit::platform::windows::WindowAttributesExtWindows;
+use winit::platform::windows::{MonitorHandleExtWindows, WindowAttributesExtWindows};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowAttributes, WindowLevel};
 
@@ -71,6 +72,21 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
         let bottom = position.y.saturating_add_unsigned(size.height);
         at.x >= position.x && at.y >= position.y && at.x < right && at.y < bottom
     })
+}
+
+/// Physical pixels at the top of `monitor` outside its work area (a taskbar
+/// docked at the top). The toolbar is laid out below them.
+pub fn top_inset(monitor: &MonitorHandle) -> u32 {
+    // SAFETY: an all-zero MONITORINFO is valid; `cbSize` is set before the call
+    // and the handle comes from a live winit monitor.
+    unsafe {
+        let mut info: MONITORINFO = zeroed();
+        info.cbSize = size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(monitor.hmonitor() as HMONITOR, &mut info) == 0 {
+            return 0;
+        }
+        u32::try_from(info.rcWork.top - info.rcMonitor.top).unwrap_or(0)
+    }
 }
 
 /// Windows pens arrive as touch events with a force (see `main.rs`), so

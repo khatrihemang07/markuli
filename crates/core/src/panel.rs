@@ -78,12 +78,16 @@ struct Look {
     press: Option<Control>,
     theme: Theme,
     scale: f32,
+    top: f32,
 }
 
 #[derive(Debug)]
 pub(crate) struct Panel {
     pub theme: Theme,
     scale: f32,
+    /// Physical pixels at the top that belong to the OS; the panel starts
+    /// below them.
+    top: f32,
     size: Option<(f32, f32)>,
     /// Hover and press ignore the slider position (they are normalised to
     /// `Opacity(0)`), so moving along the slider repaints nothing extra.
@@ -102,6 +106,7 @@ impl Default for Panel {
         Self {
             theme: Theme::default(),
             scale: 1.0,
+            top: 0.0,
             size: None,
             hover: None,
             press: None,
@@ -116,6 +121,11 @@ impl Default for Panel {
 impl Panel {
     pub fn set_scale(&mut self, scale: f32) {
         self.scale = scale;
+    }
+
+    #[allow(clippy::cast_precision_loss, reason = "pixel sizes are far below 2^24")]
+    pub fn set_top(&mut self, top: u32) {
+        self.top = top as f32;
     }
 
     pub fn over(&self) -> bool {
@@ -173,7 +183,7 @@ impl Panel {
     /// Overlay (or none yet) shows no panel instead of a clipped one.
     pub fn fits(&self) -> bool {
         self.size.is_some_and(|(w, h)| {
-            w / self.scale >= MIN_WIDTH && h / self.scale >= TOP + HEIGHT + MARGIN
+            w / self.scale >= MIN_WIDTH && (h - self.top) / self.scale >= TOP + HEIGHT + MARGIN
         })
     }
 
@@ -190,7 +200,7 @@ impl Panel {
         let s = self.scale;
         Area {
             x: (x + self.left()) * s,
-            y: y * s,
+            y: y * s + self.top,
             w: w * s,
             h: h * s,
         }
@@ -286,6 +296,7 @@ impl Panel {
             press: self.press,
             theme: self.theme,
             scale: self.scale,
+            top: self.top,
         })
     }
 

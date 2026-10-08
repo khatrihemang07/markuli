@@ -19,6 +19,11 @@ impl Annotator {
                 self.panel.resize(width, height);
                 self.paint.full();
             }
+            Event::Insets { top } => {
+                self.toolbar.set_top(top);
+                self.panel.set_top(top);
+                self.paint.full();
+            }
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
                 self.panel.theme = theme;

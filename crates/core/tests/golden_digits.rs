@@ -34,7 +34,10 @@ fn label_crop(value: u8) -> Pixmap {
     a.handle(Event::PointerDown(thumb));
     a.handle(Event::PointerUp(thumb));
     // Park the pointer away so no hover ring is painted.
-    a.handle(Event::PointerMove(Point { x: 1500.0, y: 900.0 }));
+    a.handle(Event::PointerMove(Point {
+        x: 1500.0,
+        y: 900.0,
+    }));
     let mut overlay = Pixmap::new(W, H).expect("size is non-zero");
     a.render(&mut overlay.as_mut(), Format::Rgba);
     let (x, y) = (thumb.x as i32 - 70, thumb.y as i32 + 20);
@@ -77,7 +80,10 @@ fn opacity_label_prints_every_digit() {
             path.display()
         )
     });
-    assert_eq!((golden.width(), golden.height()), (sheet.width(), sheet.height()));
+    assert_eq!(
+        (golden.width(), golden.height()),
+        (sheet.width(), sheet.height())
+    );
     let worst = golden
         .data()
         .iter()

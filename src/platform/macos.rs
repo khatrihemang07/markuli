@@ -63,6 +63,44 @@ pub fn monitor_under_cursor(event_loop: &ActiveEventLoop) -> Option<MonitorHandl
     })
 }
 
+/// Physical pixels at the top of `monitor` that macOS keeps for itself: the
+/// menu bar and, on a notched display, the notch's safe area. The toolbar is
+/// laid out below them.
+pub fn top_inset(monitor: &MonitorHandle) -> u32 {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return 0;
+    };
+    let screens = NSScreen::screens(mtm);
+    let Some(primary) = screens.firstObject() else {
+        return 0;
+    };
+    let primary_height = primary.frame().size.height;
+    let scale = monitor.scale_factor();
+    let (left, top) = (
+        f64::from(monitor.position().x) / scale,
+        f64::from(monitor.position().y) / scale,
+    );
+    // The NSScreen whose frame is the monitor (global points, top-left origin).
+    let Some(screen) = screens.iter().find(|screen| {
+        let frame = screen.frame();
+        (frame.origin.x - left).abs() < 1.0
+            && (primary_height - frame.origin.y - frame.size.height - top).abs() < 1.0
+    }) else {
+        return 0;
+    };
+    let (frame, visible) = (screen.frame(), screen.visibleFrame());
+    let bar = (frame.origin.y + frame.size.height) - (visible.origin.y + visible.size.height);
+    let notch = screen.safeAreaInsets().top;
+    let points = bar.max(notch).max(0.0);
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a few dozen points, non-negative"
+    )]
+    let physical = (points * scale).round() as u32;
+    physical
+}
+
 /// Pressure (0..=1) of the stylus behind the mouse event being dispatched, or
 /// `None` for a mouse or trackpad. winit does not expose this, so read the
 /// current `NSEvent`. Only the subtype `TabletPoint` counts: a Force Touch

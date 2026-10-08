@@ -118,6 +118,7 @@ pub(crate) struct Look {
     theme: Theme,
     size: (f32, f32),
     scale: f32,
+    top: f32,
 }
 
 /// Where a pointer position lands on the toolbar.
@@ -187,6 +188,8 @@ pub(crate) struct Toolbar {
     /// Overlay size in physical pixels, and its scale factor.
     size: Option<(f32, f32)>,
     scale: f32,
+    /// Physical pixels at the top that belong to the OS.
+    top: f32,
     hover: Option<Button>,
     press: Option<Button>,
     over: bool,
@@ -199,6 +202,7 @@ impl Default for Toolbar {
             theme: Theme::default(),
             size: None,
             scale: 1.0,
+            top: 0.0,
             hover: None,
             press: None,
             over: false,
@@ -210,6 +214,7 @@ impl Default for Toolbar {
 /// The toolbar's geometry for one Overlay size and Tool count.
 struct Layout {
     x0: f32,
+    top: f32,
     scale: f32,
     tools: usize,
     first_width: f32,
@@ -222,6 +227,10 @@ impl Toolbar {
 
     pub fn set_scale(&mut self, scale: f32) {
         self.scale = scale;
+    }
+
+    pub fn set_top(&mut self, top: u32) {
+        self.top = to_f32(top);
     }
 
     pub fn hover_at(&mut self, at: Point, tools: usize) {
@@ -269,6 +278,7 @@ impl Toolbar {
         let total = first_width + ISLAND_GAP + island(3);
         Some(Layout {
             x0: ((width / scale - total) / 2.0).max(0.0),
+            top: self.top,
             scale,
             tools,
             first_width,
@@ -284,7 +294,7 @@ impl Toolbar {
         let s = l.scale;
         Area {
             x: (l.x0 + offset + to_f32_usize(j) * (BUTTON + GAP)) * s,
-            y: (TOP + PAD) * s,
+            y: (TOP + PAD) * s + l.top,
             w: BUTTON * s,
             h: BUTTON * s,
         }
@@ -295,7 +305,7 @@ impl Toolbar {
         let height = (2.0 * PAD + BUTTON) * s;
         let island = |x: f32, n: usize| Area {
             x: x * s,
-            y: TOP * s,
+            y: TOP * s + l.top,
             w: (2.0 * PAD + to_f32_usize(n) * BUTTON + to_f32_usize(n.saturating_sub(1)) * GAP) * s,
             h: height,
         };
@@ -361,6 +371,7 @@ impl Toolbar {
             theme: self.theme,
             size,
             scale: self.scale,
+            top: self.top,
         })
     }
 

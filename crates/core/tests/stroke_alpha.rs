@@ -80,7 +80,10 @@ fn live_drawn_stroke_equals_one_full_render() {
         .map(|(p, q)| p.abs_diff(*q))
         .max()
         .unwrap_or(0);
-    assert!(worst <= 24, "live render differs from a full one by {worst}");
+    assert!(
+        worst <= 24,
+        "live render differs from a full one by {worst}"
+    );
 }
 
 #[test]

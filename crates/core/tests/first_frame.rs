@@ -20,7 +20,9 @@ fn render(a: &mut Annotator) -> Option<Damage> {
 }
 
 fn covers_toolbar(a: &Annotator, d: Damage) -> bool {
-    let c = a.button_center(Button::Tool(1)).expect("toolbar is visible");
+    let c = a
+        .button_center(Button::Tool(1))
+        .expect("toolbar is visible");
     let (x, y) = (c.x as u32, c.y as u32);
     d.x <= x && x < d.x + d.width && d.y <= y && y < d.y + d.height
 }
