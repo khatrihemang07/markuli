@@ -161,6 +161,9 @@ pub struct Hotkeys<R: Registrar> {
     registrar: R,
     toggle: HotKey,
     clear: HotKey,
+    /// The Settings recorder is listening: our own combos are released so the
+    /// OS does not swallow them before the window sees the key press.
+    suspended: bool,
 }
 
 impl<R: Registrar> Hotkeys<R> {
@@ -188,6 +191,30 @@ impl<R: Registrar> Hotkeys<R> {
             registrar,
             toggle,
             clear,
+            suspended: false,
+        }
+    }
+
+    /// Releases both combos while the Settings recorder listens, so pressing
+    /// one of Markuli's own combos reaches the recorder instead of firing it.
+    pub fn suspend(&mut self) {
+        if !self.suspended {
+            self.suspended = true;
+            self.registrar.unregister(self.toggle);
+            self.registrar.unregister(self.clear);
+        }
+    }
+
+    /// Registers both combos again (the recorder finished, was cancelled, or
+    /// its window closed).
+    pub fn resume(&mut self) {
+        if self.suspended {
+            self.suspended = false;
+            for hotkey in [self.toggle, self.clear] {
+                if !self.registrar.register(hotkey) {
+                    eprintln!("markuli: {hotkey} is in use by another app");
+                }
+            }
         }
     }
 
@@ -228,7 +255,12 @@ impl<R: Registrar> Hotkeys<R> {
         if !self.registrar.register(new) {
             return Err(RebindError::Taken);
         }
-        self.registrar.unregister(*slot);
+        if self.suspended {
+            // Only probing: `resume` registers whatever the bindings are then.
+            self.registrar.unregister(new);
+        } else {
+            self.registrar.unregister(*slot);
+        }
         *slot = new;
         Ok(())
     }
@@ -324,6 +356,61 @@ mod tests {
         let mut hotkeys = Hotkeys::new(&os, &Config::default());
         assert_eq!(hotkeys.rebind(Binding::Clear, "alt+Digit1"), Ok(()));
         assert_eq!(os.registered.borrow().len(), 2);
+    }
+
+    #[test]
+    fn listening_releases_both_combos_and_resuming_restores_them() {
+        let os = Fake::default();
+        let mut hotkeys = Hotkeys::new(&os, &Config::default());
+        hotkeys.suspend();
+        assert!(os.registered.borrow().is_empty());
+        hotkeys.resume();
+        assert_eq!(os.registered.borrow().len(), 2);
+        assert!(os.registered.borrow().contains(&id("alt+Backquote")));
+        assert!(os.registered.borrow().contains(&id("alt+Digit1")));
+    }
+
+    #[test]
+    fn while_listening_a_duplicate_of_the_other_binding_is_still_reported() {
+        let os = Fake::default();
+        let mut hotkeys = Hotkeys::new(&os, &Config::default());
+        hotkeys.suspend();
+        assert_eq!(
+            hotkeys.rebind(Binding::Toggle, "alt+Digit1"),
+            Err(RebindError::UsedByOther(Binding::Clear))
+        );
+        hotkeys.resume();
+        assert_eq!(hotkeys.text(Binding::Toggle), "alt+Backquote");
+    }
+
+    #[test]
+    fn while_listening_a_combo_of_another_app_is_still_refused() {
+        let os = Fake {
+            taken_elsewhere: vec![id("control+KeyD")],
+            ..Fake::default()
+        };
+        let mut hotkeys = Hotkeys::new(&os, &Config::default());
+        hotkeys.suspend();
+        assert_eq!(
+            hotkeys.rebind(Binding::Toggle, "control+KeyD"),
+            Err(RebindError::Taken)
+        );
+        hotkeys.resume();
+        assert!(os.registered.borrow().contains(&id("alt+Backquote")));
+    }
+
+    #[test]
+    fn a_rebind_while_listening_takes_effect_on_resume() {
+        let os = Fake::default();
+        let mut hotkeys = Hotkeys::new(&os, &Config::default());
+        hotkeys.suspend();
+        assert_eq!(hotkeys.rebind(Binding::Toggle, "control+KeyD"), Ok(()));
+        assert!(os.registered.borrow().is_empty());
+        hotkeys.resume();
+        let registered = os.registered.borrow();
+        assert_eq!(registered.len(), 2);
+        assert!(registered.contains(&id("control+KeyD")));
+        assert!(!registered.contains(&id("alt+Backquote")));
     }
 
     #[test]

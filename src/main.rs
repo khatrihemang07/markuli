@@ -152,6 +152,8 @@ impl App {
     fn on_settings(&mut self, event: SettingsEvent) {
         match event {
             SettingsEvent::Record(binding, text) => self.rebind(binding, &text),
+            SettingsEvent::Listening(true) => self.hotkeys.suspend(),
+            SettingsEvent::Listening(false) => self.hotkeys.resume(),
             SettingsEvent::LaunchAtLogin(on) => {
                 let result = platform::set_launch_at_login(on);
                 if result.is_ok() {
@@ -169,6 +171,7 @@ impl App {
             }
             // Dropping the handle is what returns the window's memory.
             SettingsEvent::Closed => {
+                self.hotkeys.resume();
                 self.settings = None;
                 #[cfg(feature = "dev-hooks")]
                 if self.reopen > 0 {

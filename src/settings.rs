@@ -12,6 +12,9 @@ pub enum SettingsEvent {
     /// The user pressed a new combo for a hotkey (text like `alt+Backquote`).
     Record(Binding, String),
     LaunchAtLogin(bool),
+    /// The recorder started (`true`) or stopped (`false`) listening for a
+    /// combo; Markuli's own hotkeys are released meanwhile.
+    Listening(bool),
     /// The window is gone; drop the handle so its memory is freed.
     Closed,
 }

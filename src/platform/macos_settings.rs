@@ -71,6 +71,7 @@ define_class!(
             if code == ESCAPE {
                 self.stop_recording(binding);
                 self.set_message("");
+                emit(SettingsEvent::Listening(false));
                 return;
             }
             let flags = event.modifierFlags();
@@ -84,6 +85,7 @@ define_class!(
                 Some(text) => {
                     self.stop_recording(binding);
                     emit(SettingsEvent::Record(binding, text));
+                    emit(SettingsEvent::Listening(false));
                 }
                 None => self.set_message("Hold Ctrl, Alt, Shift or Cmd with a key (Esc cancels)."),
             }
@@ -104,12 +106,15 @@ impl Window {
         if let Some(previous) = self.ivars().recording.replace(Some(binding)) {
             self.set_binding_title(previous, None);
         }
-        self.set_message("");
+        // A combo another app owns never reaches this window (the OS hands it
+        // to that app), so say what silence means.
+        self.set_message("No reaction? Another app owns it. Esc cancels.");
         if let Some(button) = self.button(binding) {
             button.setTitle(&NSString::from_str("Press the new shortcut..."));
         }
         // Buttons would swallow Space and Return; the window must get the keys.
         self.makeFirstResponder(None);
+        emit(SettingsEvent::Listening(true));
     }
 
     fn stop_recording(&self, binding: Binding) {

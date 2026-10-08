@@ -102,6 +102,7 @@ fn key_down(hwnd: HWND, state: &State, vk: u16) {
         state.recording.set(None);
         state.show_binding(binding);
         state.set_message("");
+        emit(SettingsEvent::Listening(false));
         return;
     }
     let mods = Mods {
@@ -115,6 +116,7 @@ fn key_down(hwnd: HWND, state: &State, vk: u16) {
             state.recording.set(None);
             state.show_binding(binding);
             emit(SettingsEvent::Record(binding, text));
+            emit(SettingsEvent::Listening(false));
         }
         None => state.set_message("Hold Ctrl, Alt, Shift or Win with a key (Esc cancels)."),
     }
@@ -125,13 +127,16 @@ fn start_recording(hwnd: HWND, state: &State, binding: Binding) {
     if let Some(previous) = state.recording.replace(Some(binding)) {
         state.show_binding(previous);
     }
-    state.set_message("");
+    // A combo another app owns never reaches this window (the OS hands it to
+    // that app), so say what silence means.
+    state.set_message("No reaction? Another app owns it. Esc cancels.");
     let title = wide("Press the new shortcut...");
     // SAFETY: live controls; moving focus off the button lets the window get keys.
     unsafe {
         SetWindowTextW(state.button(binding), title.as_ptr());
         SetFocus(hwnd);
     }
+    emit(SettingsEvent::Listening(true));
 }
 
 fn control(parent: HWND, class: &str, text: &str, style: u32, id: usize, rect: [i32; 4]) -> HWND {
