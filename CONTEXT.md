@@ -17,7 +17,7 @@ The set of elements drawn on the Overlay. It exists only in memory and is shown 
 _Avoid_: drawing, scene, annotations
 
 **Element**:
-One piece of Ink: a freehand stroke with its points, optional pressures, color, width and opacity. It has the same shape as an Excalidraw freedraw element.
+One piece of Ink: a freehand stroke with its points, optional pressures, color, width and opacity. It has the same shape as an Excalidraw freedraw element. Its opacity is always 100 when drawn.
 _Avoid_: shape, object, path
 
 **Stroke**:
@@ -37,8 +37,19 @@ What pointer input does in Draw Mode. One of Select, Pen, Eraser or Laser.
 **Selection**:
 The Elements currently chosen with the Select Tool, for moving, deleting or copying.
 
+**Toolbar**:
+The single row of buttons shown in Draw Mode: the Tools, the five colors, the three widths, then undo, redo and Clear. It is part of the Overlay, not Ink.
+_Avoid_: panel, palette, style panel
+
+**Toolbar Position**:
+Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. A Setting; the default is top.
+
+**Style**:
+The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color index into the 5-color palette and a width index into the 3 presets. It persists across launches and is not reset when Draw Mode is entered.
+_Avoid_: pen settings, brush
+
 **Settings**:
-User preferences that persist across launches: the hotkeys and launch at login. Ink is never part of Settings.
+User preferences that persist across launches: the hotkeys, launch at login, the Toolbar Position and the Style. Ink is never part of Settings.
 
 ## Relationships
 
