@@ -43,7 +43,7 @@ fn click(a: &mut Annotator, at: Point) {
 }
 
 fn stroke(a: &mut Annotator, y: f32) {
-    key(a, 'p');
+    key(a, '2');
     a.handle(Event::PointerDown(p(300.0, y)));
     a.handle(Event::PointerMove(p(350.0, y)));
     a.handle(Event::PointerUp(p(400.0, y)));

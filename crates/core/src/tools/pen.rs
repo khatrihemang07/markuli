@@ -40,7 +40,12 @@ impl Tool for Pen {
         &['p', '2', '7']
     }
 
-    /// A ring as wide as the Stroke: Excalidraw's freedraw `size` is
+    /// Pressing P or 7 on the Pen swaps to the Eraser.
+    fn toggle(&self) -> Option<(&'static [char], ToolKind)> {
+        Some((&['p', '7'], ToolKind::Eraser))
+    }
+
+    /// A dot as wide as the Stroke: Excalidraw's freedraw `size` is
     /// `strokeWidth * 4.25` and the outline is about that wide at the
     /// simulated pressure of a mouse. Never below `MIN_RING`, which would be
     /// hard to see.

@@ -27,7 +27,7 @@ fn key(a: &mut Annotator, c: char) {
 
 /// A horizontal Pen stroke at height `y`.
 fn stroke(a: &mut Annotator, y: f32) {
-    key(a, 'p');
+    key(a, '2');
     a.handle(Event::PointerDown(p(300.0, y)));
     a.handle(Event::PointerMove(p(350.0, y)));
     a.handle(Event::PointerUp(p(400.0, y)));
@@ -146,7 +146,7 @@ fn the_panel_is_shown_for_the_pen_only_in_draw_mode() {
         key(&mut a, hidden);
         assert_eq!(a.panel_center(Control::Color(0)), None, "tool {hidden}");
     }
-    key(&mut a, 'p');
+    key(&mut a, '2');
     assert!(a.panel_center(Control::Color(0)).is_some());
 }
 

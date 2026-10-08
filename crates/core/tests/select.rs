@@ -45,7 +45,7 @@ fn press(a: &mut Annotator, key: Key) {
 
 /// A Pen stroke through `points`; leaves the Pen active.
 fn stroke(a: &mut Annotator, points: &[(f32, f32)]) {
-    key(a, 'p');
+    key(a, '2');
     a.handle(Event::PointerDown(p(points[0].0, points[0].1)));
     for &(x, y) in &points[1..] {
         a.handle(Event::PointerMove(p(x, y)));
@@ -101,7 +101,7 @@ fn v_and_1_select_the_select_tool_and_p_returns_to_the_pen() {
     key(&mut a, 'v');
     let select = a.view().tool;
     assert_ne!(select, pen);
-    key(&mut a, 'p');
+    key(&mut a, '2');
     assert_eq!(a.view().tool, pen);
     key(&mut a, '1');
     assert_eq!(a.view().tool, select);
@@ -179,7 +179,7 @@ fn shift_box_keeps_the_existing_selection() {
 #[test]
 fn cmd_a_selects_all_ink_even_from_the_pen() {
     let (mut a, first, second) = two_strokes();
-    key(&mut a, 'p');
+    key(&mut a, '2');
     let pen = a.view().tool;
     command(&mut a, 'a', false);
     assert_eq!(a.selection(), [first, second]);
@@ -203,7 +203,7 @@ fn escape_deselects_but_keeps_the_ink() {
 fn switching_to_another_tool_drops_the_selection() {
     let (mut a, _, _) = two_strokes();
     command(&mut a, 'a', false);
-    key(&mut a, 'p');
+    key(&mut a, '2');
     assert_eq!(a.selection(), []);
 }
 

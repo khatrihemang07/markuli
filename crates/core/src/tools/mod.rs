@@ -30,11 +30,11 @@ use std::fmt::Debug;
 pub enum Cursor {
     /// The system arrow.
     Arrow,
-    /// A ring as wide as the Stroke the Pen draws, in its color.
+    /// A marker whose dot is as wide as the Stroke the Pen draws, in its color.
     Pen { diameter: u16, color: [u8; 3] },
-    /// A hollow circle as wide as the Eraser's reach.
+    /// An eraser block whose contact corner reaches `diameter / 2` around the pointer.
     Eraser { diameter: u16 },
-    /// A small red dot with a soft glow.
+    /// A red ring with a dot in the middle.
     Laser,
 }
 
@@ -106,6 +106,11 @@ pub(crate) trait Tool: Debug {
     /// Lowercase keys that select this Tool: a letter, its toolbar position
     /// as a digit (1-4) and any Excalidraw digit.
     fn keys(&self) -> &'static [char];
+    /// The keys that swap this Tool for another when it is already active,
+    /// and that other Tool (P and E swap Pen and Eraser).
+    fn toggle(&self) -> Option<(&'static [char], ToolKind)> {
+        None
+    }
     /// The cursor over the canvas; `style` is the style of the next Strokes.
     fn cursor(&self, style: Style) -> Cursor;
     /// What the style panel applies to while this Tool is active.
@@ -182,6 +187,23 @@ impl Tools {
     pub fn select(&mut self, index: usize) {
         if index < self.list.len() {
             self.active = index;
+        }
+    }
+
+    /// A Tool key pressed on the keyboard: the active Tool's toggle keys
+    /// switch to its partner, any other key selects its Tool.
+    pub fn press(&mut self, key: char) {
+        let partner = self
+            .list
+            .get(self.active)
+            .and_then(|t| t.toggle())
+            .filter(|(keys, _)| keys.contains(&key))
+            .and_then(|(_, kind)| self.list.iter().position(|t| t.kind() == kind));
+        match partner {
+            Some(index) => self.active = index,
+            None => {
+                self.select_by_key(key);
+            }
         }
     }
 

@@ -52,6 +52,11 @@ impl Tool for Eraser {
         &['e', '3', '0']
     }
 
+    /// Pressing E or 0 on the Eraser swaps back to the Pen.
+    fn toggle(&self) -> Option<(&'static [char], ToolKind)> {
+        Some((&['e', '0'], ToolKind::Pen))
+    }
+
     fn cursor(&self, _: Style) -> Cursor {
         Cursor::Eraser {
             diameter: ERASER_DIAMETER,

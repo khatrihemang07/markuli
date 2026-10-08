@@ -30,7 +30,7 @@ fn key(a: &mut Annotator, c: char, command: bool) {
 }
 
 fn stroke(a: &mut Annotator, points: &[(f32, f32)]) {
-    key(a, 'p', false);
+    key(a, '2', false);
     a.handle(Event::PointerDown(p(points[0].0, points[0].1)));
     for &(x, y) in &points[1..] {
         a.handle(Event::PointerMove(p(x, y)));

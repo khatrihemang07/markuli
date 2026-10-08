@@ -186,9 +186,7 @@ impl Annotator {
             }
             (Key::Char('c'), true, false) => self.copy(),
             (Key::Char(c), false, false) if !alt => {
-                self.switch_tool(|tools| {
-                    tools.select_by_key(c);
-                });
+                self.switch_tool(|tools| tools.press(c));
             }
             _ => {}
         }

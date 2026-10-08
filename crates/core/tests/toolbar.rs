@@ -156,6 +156,7 @@ fn a_click_must_press_and_release_on_the_same_button() {
 fn p_and_7_select_the_pen_and_other_keys_do_not() {
     let mut a = drawing();
     for k in ['p', '7'] {
+        key(&mut a, Key::Char('v'), false, false);
         key(&mut a, Key::Char(k), false, false);
         assert_eq!(a.view().tool, ToolKind::Pen);
     }
@@ -184,7 +185,7 @@ fn letters_and_digits_select_tools_in_toolbar_order() {
     for (kind, keys) in table {
         for k in keys {
             // Start from another Tool so the key has to change something.
-            let other = if kind == ToolKind::Select { 'p' } else { 'v' };
+            let other = if kind == ToolKind::Select { '2' } else { 'v' };
             key(&mut a, Key::Char(other), false, false);
             key(&mut a, Key::Char(k), false, false);
             assert_eq!(a.view().tool, kind, "key {k}");
@@ -299,13 +300,45 @@ fn incremental_rendering_with_the_toolbar_matches_a_full_redraw() {
 }
 
 #[test]
-fn a_tool_key_pressed_again_keeps_its_tool() {
-    // Unlike Excalidraw, pressing the key of the active Tool does not toggle
-    // back to the previous one.
+fn e_and_p_toggle_between_the_eraser_and_the_pen() {
+    // P and E (and Excalidraw's 7 and 0) swap Pen and Eraser: the key of the
+    // active Tool switches to the other one, any other key selects its Tool.
+    for (pen_key, eraser_key) in [('p', 'e'), ('7', '0'), ('p', '0'), ('7', 'e')] {
+        let mut a = drawing();
+        assert_eq!(a.view().tool, ToolKind::Pen, "Draw Mode starts on the Pen");
+        key(&mut a, Key::Char(pen_key), false, false);
+        assert_eq!(a.view().tool, ToolKind::Eraser, "{pen_key} on the Pen");
+        key(&mut a, Key::Char(pen_key), false, false);
+        assert_eq!(a.view().tool, ToolKind::Pen, "{pen_key} again");
+        key(&mut a, Key::Char(eraser_key), false, false);
+        assert_eq!(a.view().tool, ToolKind::Eraser, "{eraser_key} on the Pen");
+        key(&mut a, Key::Char(eraser_key), false, false);
+        assert_eq!(a.view().tool, ToolKind::Pen, "{eraser_key} on the Eraser");
+        key(&mut a, Key::Char(eraser_key), false, false);
+        key(&mut a, Key::Char(eraser_key), false, false);
+        key(&mut a, Key::Char(eraser_key), false, false);
+        assert_eq!(a.view().tool, ToolKind::Eraser, "{eraser_key} three times");
+    }
+}
+
+#[test]
+fn e_and_p_select_their_tool_from_select_and_laser() {
+    for from in ['v', 'k'] {
+        for (k, tool) in [('p', ToolKind::Pen), ('e', ToolKind::Eraser)] {
+            let mut a = drawing();
+            key(&mut a, Key::Char(from), false, false);
+            key(&mut a, Key::Char(k), false, false);
+            assert_eq!(a.view().tool, tool, "{k} after {from}");
+        }
+    }
+}
+
+#[test]
+fn the_other_tool_keys_do_not_toggle() {
     for (keys, tool) in [
         (['v', '1'], ToolKind::Select),
-        (['p', '2'], ToolKind::Pen),
-        (['e', '3'], ToolKind::Eraser),
+        (['2', '2'], ToolKind::Pen),
+        (['3', '3'], ToolKind::Eraser),
         (['k', '4'], ToolKind::Laser),
     ] {
         for k in keys {
@@ -317,4 +350,13 @@ fn a_tool_key_pressed_again_keeps_its_tool() {
             }
         }
     }
+}
+
+#[test]
+fn clicking_the_active_toolbar_button_does_not_toggle() {
+    let mut a = drawing();
+    let at = center(&a, Button::Tool(1));
+    click(&mut a, at);
+    click(&mut a, at);
+    assert_eq!(a.view().tool, ToolKind::Pen);
 }
