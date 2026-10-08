@@ -141,6 +141,17 @@ impl App {
         }
     }
 
+    /// Draw Mode needs keys (Tool shortcuts, Esc, undo), and keys go to the
+    /// key window of the active app. When another app took focus while Draw
+    /// Mode was on, a click on the Overlay brings it back.
+    fn reclaim_focus(&self) {
+        if let Some(overlay) = self.overlay.as_ref() {
+            if self.core.view().draw_mode && !overlay.window.has_focus() {
+                overlay.window.focus_window();
+            }
+        }
+    }
+
     fn open_settings(&mut self) {
         if let Some(window) = &self.settings {
             window.raise();
@@ -418,6 +429,9 @@ impl ApplicationHandler<UserEvent> for App {
                 state,
                 ..
             } => {
+                if state == ElementState::Pressed {
+                    self.reclaim_focus();
+                }
                 self.core.handle(self.clock());
                 self.core.handle(Event::Pressure(platform::pen_pressure()));
                 self.input(
@@ -431,6 +445,9 @@ impl ApplicationHandler<UserEvent> for App {
             // Windows pens (and touch) arrive here, with the pen's force.
             WindowEvent::Touch(touch) => {
                 self.cursor = point(touch.location);
+                if touch.phase == TouchPhase::Started {
+                    self.reclaim_focus();
+                }
                 self.core.handle(self.clock());
                 let pressure = touch.force.map(|f| {
                     #[allow(clippy::cast_possible_truncation, reason = "0..=1")]
