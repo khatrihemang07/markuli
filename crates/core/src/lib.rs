@@ -29,7 +29,7 @@ use panel::Panel;
 pub use render::{Damage, Format};
 use selection::Selection;
 use style::Appearance;
-pub use style::Control;
+pub use style::{Control, Style};
 use toolbar::Toolbar;
 pub use toolbar::{Button, Theme};
 use tools::Tools;

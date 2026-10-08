@@ -26,6 +26,23 @@ pub(crate) const WIDTHS: [f32; 3] = [1.0, 2.0, 4.0];
 
 pub(crate) const OPACITY_STEP: u8 = 10;
 
+/// The look a user chooses: a color index into the 5-color palette and a
+/// width index into the 3 presets (thin, medium, bold). Out-of-range indices
+/// are ignored by whoever applies them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Style {
+    pub color: usize,
+    pub width: usize,
+}
+
+impl Default for Style {
+    /// Excalidraw red, medium width.
+    fn default() -> Self {
+        Self { color: 1, width: 1 }
+    }
+}
+
+/// What one Element looks like: its stroke rgb and px width (and opacity).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Appearance {
     pub color: [u8; 3],
@@ -121,5 +138,18 @@ pub(crate) fn finish(gesture: Option<Vec<(usize, Appearance)>>, ink: &Ink, histo
     before.retain(|&(i, s)| ink.elements().get(i).is_some_and(|e| e.style() != s));
     if !before.is_empty() {
         history.record_restyle(before);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_style_is_the_default_appearance() {
+        let style = Style::default();
+        let look = Appearance::default();
+        assert_eq!(PALETTE.get(style.color), Some(&look.color));
+        assert_eq!(WIDTHS.get(style.width), Some(&look.width));
     }
 }
