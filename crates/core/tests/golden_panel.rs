@@ -97,6 +97,28 @@ fn style_panel_light_with_the_default_style() {
 }
 
 #[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "test pixel coordinates are small and positive"
+)]
+fn the_panel_ends_below_the_width_buttons_with_no_opacity_slider() {
+    let mut a = scene(Theme::Light);
+    let mut overlay = Pixmap::new(W, H).expect("size is non-zero");
+    a.render(&mut overlay.as_mut(), Format::Rgba);
+    let button = a
+        .panel_center(Control::Width(1))
+        .expect("the panel is shown");
+    // Where the slider track used to be: now only the shadow reaches here.
+    let (x, y) = (button.x as u32, button.y as u32 + 40);
+    let alpha = overlay.data()[((y * W + x) * 4 + 3) as usize];
+    assert!(
+        alpha < 128,
+        "alpha {alpha}: the panel still reaches this low"
+    );
+}
+
+#[test]
 fn style_panel_dark_showing_a_restyled_selection() {
     let mut a = scene(Theme::Dark);
     stroke(&mut a);
@@ -105,7 +127,6 @@ fn style_panel_dark_showing_a_restyled_selection() {
     a.handle(Event::PointerUp(p(330.0, 150.0)));
     pick(&mut a, Control::Color(3));
     pick(&mut a, Control::Width(2));
-    pick(&mut a, Control::Opacity(50));
     // The pointer rests on a swatch: its hover ring shows.
     let hover = a.panel_center(Control::Color(2)).expect("panel");
     a.handle(Event::PointerMove(hover));

@@ -126,11 +126,7 @@ impl Annotator {
 
     fn pointer_move(&mut self, at: Point) {
         self.toolbar.hover_at(at, self.tools.len());
-        if self.panel.pressing() {
-            if let Some(control) = self.panel.drag_to(at) {
-                self.choose(control);
-            }
-        } else if self.panel_view().is_some() {
+        if self.panel.pressing() || self.panel_view().is_some() {
             self.panel.hover_at(at);
         } else {
             self.panel.forget_pointer();

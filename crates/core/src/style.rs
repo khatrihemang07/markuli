@@ -1,11 +1,10 @@
-//! How an Element looks: stroke color, width and opacity.
+//! How an Element looks: stroke color and width.
 //!
 //! The choices are Excalidraw's: the quick stroke palette
 //! (`DEFAULT_ELEMENT_STROKE_PICKS`, colors.ts, open-color shade 4 of the
 //! 0/2/4/6/8 picks) and its stroke widths 1, 2 and 4 (constants.ts
 //! `STROKE_WIDTH`: thin, bold, extra bold; Markuli calls them thin, medium
-//! and bold). Excalidraw 0.18, MIT. Opacity is 0 to 100 in steps of 10, like
-//! its range input.
+//! and bold). Excalidraw 0.18, MIT.
 
 use crate::freehand::Scratch;
 use crate::history::History;
@@ -24,8 +23,6 @@ pub(crate) const PALETTE: [[u8; 3]; 5] = [
 /// Thin, medium, bold.
 pub(crate) const WIDTHS: [f32; 3] = [1.0, 2.0, 4.0];
 
-pub(crate) const OPACITY_STEP: u8 = 10;
-
 /// The look a user chooses: a color index into the 5-color palette and a
 /// width index into the 3 presets (thin, medium, bold). Out-of-range indices
 /// are ignored by whoever applies them.
@@ -42,21 +39,19 @@ impl Default for Style {
     }
 }
 
-/// What one Element looks like: its stroke rgb and px width (and opacity).
+/// What one Element looks like: its stroke rgb and px width.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Appearance {
     pub color: [u8; 3],
     pub width: f32,
-    pub opacity: u8,
 }
 
 impl Default for Appearance {
-    /// Excalidraw red, medium width, opaque (user story 19).
+    /// Excalidraw red, medium width.
     fn default() -> Self {
         Self {
             color: PALETTE[1],
             width: WIDTHS[1],
-            opacity: 100,
         }
     }
 }
@@ -68,8 +63,6 @@ pub enum Control {
     Color(usize),
     /// The i-th width: thin, medium, bold.
     Width(usize),
-    /// An opacity, 0 to 100 (rounded to a multiple of 10).
-    Opacity(u8),
 }
 
 impl Appearance {
@@ -82,10 +75,6 @@ impl Appearance {
             },
             Control::Width(i) => Self {
                 width: WIDTHS.get(i).copied().unwrap_or(self.width),
-                ..self
-            },
-            Control::Opacity(v) => Self {
-                opacity: (v.min(100) + OPACITY_STEP / 2) / OPACITY_STEP * OPACITY_STEP,
                 ..self
             },
         }

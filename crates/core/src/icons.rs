@@ -99,39 +99,6 @@ pub(crate) fn draw(
     );
 }
 
-/// The key-binding hint digits Excalidraw prints on its buttons. A font
-/// would break the size budget (standards rule 10), so digits are strokes in
-/// a 5 x 9 box.
-fn digit(c: char) -> Option<&'static str> {
-    Some(match c {
-        '0' => "M2.5 .5C1 .5 .5 2 .5 4.5S1 8.5 2.5 8.5 4.5 7 4.5 4.5 4 .5 2.5 .5z",
-        '1' => "M1 2l2.5-1.5v8",
-        '2' => "M.5 1.5l1-1h2l1 1v2l-4 5h4",
-        '3' => "M.5 .5h4l-2 3.5l2 1v2.5l-1 1h-2l-1-1",
-        '4' => "M3.5 8.5v-8l-3 6h4",
-        '5' => "M4.5 .5h-4v3.5h3l1 1v3l-1 1h-3l-1-1",
-        '6' => "M4 .5h-2l-1.5 1.5v6l1 1h3l1-1v-3l-1-1h-3",
-        '7' => "M.5 .5h4l-2.5 8",
-        '8' => "M1.5 .5h2l1 1v2l-1 1l1 1v2.5l-1 1h-3l-1-1v-2.5l1-1l-1-1v-2z",
-        '9' => "M.5 8.5h2l1.5-1.5v-6l-1-1h-3l-1 1v3l1 1h3",
-        _ => return None,
-    })
-}
-
-/// Draws the hint digit `c` with its bottom-right corner at `(right, bottom)`,
-/// `height` pixels tall.
-pub(crate) fn draw_digit(
-    target: &mut Canvas<'_, '_>,
-    c: char,
-    (right, bottom, height): (f32, f32, f32),
-    paint: &Paint<'_>,
-) {
-    let Some(d) = digit(c) else { return };
-    let k = height / 9.0;
-    let at = Transform::from_row(k, 0.0, 0.0, k, right - 5.0 * k, bottom - 9.0 * k);
-    stroke_paths(target, &[d], 1.1, at, paint);
-}
-
 fn stroke_paths(
     target: &mut Canvas<'_, '_>,
     paths: &[&str],
