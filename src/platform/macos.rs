@@ -5,8 +5,9 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{msg_send, sel, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSEvent, NSEventSubtype, NSEventType, NSPasteboard, NSPasteboardTypeString,
-    NSScreen, NSScreenSaverWindowLevel, NSView, NSWindowCollectionBehavior,
+    NSApplication, NSApplicationActivationOptions, NSEvent, NSEventSubtype, NSEventType,
+    NSPasteboard, NSPasteboardTypeString, NSRunningApplication, NSScreen, NSScreenSaverWindowLevel,
+    NSView, NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{ns_string, NSDictionary, NSNumber, NSString};
@@ -101,6 +102,41 @@ pub fn top_inset(monitor: &MonitorHandle) -> u32 {
     physical
 }
 
+/// The app that was frontmost before the Overlay took the focus.
+pub struct Previous(Retained<NSRunningApplication>);
+
+/// The app the user was working in, unless it is Markuli itself (Settings
+/// open): the one to give the focus back to when Draw Mode ends. This is the
+/// menu bar owner: `frontmostApplication` already answers Markuli itself while
+/// the toggle hotkey is handled, `menuBarOwningApplication` still names the
+/// app that had the focus.
+pub fn frontmost_other() -> Option<Previous> {
+    let app = NSWorkspace::sharedWorkspace().menuBarOwningApplication()?;
+    (app != NSRunningApplication::currentApplication()).then_some(Previous(app))
+}
+
+impl Previous {
+    /// Activates the app again, so keystrokes go back to it and to its key
+    /// window without a click. Does nothing when the user already switched
+    /// apps while in Draw Mode (Markuli is no longer the active app then).
+    pub fn restore(self) {
+        if !NSRunningApplication::currentApplication().isActive() {
+            return;
+        }
+        // SAFETY: `respondsToSelector:` is declared on NSObject; `activate`
+        // (macOS 14+) is the cooperative activation `activateWithOptions:`
+        // was deprecated for, and Markuli is the active app, so it may yield.
+        let responds: Bool = unsafe { msg_send![&*self.0, respondsToSelector: sel!(activate)] };
+        if responds.as_bool() {
+            // SAFETY: a plain no-argument message on a live NSRunningApplication.
+            let _: Bool = unsafe { msg_send![&*self.0, activate] };
+        } else {
+            self.0
+                .activateWithOptions(NSApplicationActivationOptions::empty());
+        }
+    }
+}
+
 /// Pressure (0..=1) of the stylus behind the mouse event being dispatched, or
 /// `None` for a mouse or trackpad. winit does not expose this, so read the
 /// current `NSEvent`. Only the subtype `TabletPoint` counts: a Force Touch
@@ -145,14 +181,12 @@ const LOCK_READ_ONLY: u32 = 1;
 
 pub struct Presenter {
     layer: Retained<CALayer>,
-    /// The second surface exists only without the `setContentsChanged` SPI
-    /// (see `present`); it is null otherwise.
+    /// Two surfaces: the core renders into the one that is not on screen
+    /// (see `present`).
     surfaces: [IOSurfaceRef; 2],
     /// The surface the layer shows (the last presented one).
     shown: usize,
-    /// `CALayer.setContentsChanged` exists: one surface is enough.
-    notify: bool,
-    /// Double-buffered only: the part of `shown` the other surface lacks.
+    /// The part of `shown` the other surface lacks.
     stale: Option<Damage>,
     /// Surface width in pixels: the window width rounded up to a whole
     /// 64-byte row, because a `Pixmap` needs tightly packed rows. The layer
@@ -206,22 +240,25 @@ impl Presenter {
         let size = window.inner_size();
         let (width, height) = (size.width.max(1), size.height.max(1));
         let padded_width = width.div_ceil(16) * 16;
-        let notify = can_notify_contents_changed(&layer);
         let surfaces = [
             create_surface(padded_width, height),
-            if notify {
-                ptr::null_mut()
-            } else {
-                create_surface(padded_width, height)
-            },
+            create_surface(padded_width, height),
         ];
+        #[cfg(feature = "dev-hooks")]
+        eprintln!("present: two IOSurfaces, rendering into the one not shown");
+        // Swapping `contents` must never cross-fade (0.25 s) or animate.
+        // SAFETY: a plain property message with a one-entry dictionary.
+        unsafe {
+            let null = objc2_foundation::NSNull::null();
+            let actions = NSDictionary::from_retained_objects(&[ns_string!("contents")], &[null]);
+            let _: () = msg_send![&*layer, setActions: &*actions];
+        }
         let crop = f64::from(width) / f64::from(padded_width);
         layer.setContentsRect(CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(crop, 1.0)));
         Self {
             layer,
             surfaces,
             shown: 0,
-            notify,
             stale: None,
             padded_width,
             height,
@@ -231,11 +268,7 @@ impl Presenter {
 
     /// The surface the core renders into next.
     fn back(&self) -> usize {
-        if self.notify {
-            0
-        } else {
-            1 - self.shown
-        }
+        1 - self.shown
     }
 
     /// The surface's pixels, locked for CPU writes until `present`. Without
@@ -289,51 +322,33 @@ impl Presenter {
         }
     }
 
-    /// Unlocks the surface and puts it on screen.
+    /// Unlocks the back surface and puts it on screen, then swaps the two.
     ///
-    /// Assigning the SAME `IOSurface` to `contents` again is a no-op to Core
-    /// Animation: it compares objects, not the surface's seed, so the
-    /// compositor keeps the old frame (ADR-0003). `setContentsChanged` (the
-    /// SPI `WebKit` and Chromium use for `IOSurface` layers) says the pixels
-    /// changed. Where it is missing, two surfaces alternate, so `contents`
-    /// really changes every frame.
+    /// Never render into the surface being displayed: the core paints a
+    /// frame in several passes (backdrop, Ink, toolbar, style panel), and the
+    /// compositor reads the surface whenever it likes, so it caught frames
+    /// with the panel not yet painted (a flicker while hovering it). Two
+    /// surfaces also make `contents` a different object on every frame, which
+    /// Core Animation needs to notice a change at all (ADR-0003).
     pub fn present(&mut self, damage: Damage) {
         if self.locked {
             // SAFETY: locked by `buffer`, same surface.
             unsafe { IOSurfaceUnlock(self.surfaces[self.back()], 0, ptr::null_mut()) };
             self.locked = false;
         }
-        if !self.notify {
-            self.shown = 1 - self.shown;
-            self.stale = Some(damage);
-        }
+        self.shown = 1 - self.shown;
+        self.stale = Some(damage);
         CATransaction::begin();
-        // Without this, every contents change cross-fades for 0.25 s.
+        // Belt and braces next to the layer's own `contents` action.
         CATransaction::setDisableActions(true);
         // SAFETY: an `IOSurfaceRef` is an Objective-C object that `contents`
-        // accepts; `setContentsChanged` was checked with `respondsToSelector:`.
+        // accepts.
         unsafe {
             let object: &AnyObject = &*self.surfaces[self.shown].cast::<AnyObject>();
             self.layer.setContents(Some(object));
-            if self.notify {
-                let _: () = msg_send![&*self.layer, setContentsChanged];
-            }
         }
         CATransaction::commit();
     }
-}
-
-/// Whether `CALayer` has the private `setContentsChanged`. With the
-/// `dev-hooks` feature, `MARKULI_PRESENT_FALLBACK` forces the answer to no,
-/// so the double-buffered path can be tested on a machine that has the SPI.
-fn can_notify_contents_changed(layer: &CALayer) -> bool {
-    #[cfg(feature = "dev-hooks")]
-    if std::env::var_os("MARKULI_PRESENT_FALLBACK").is_some() {
-        return false;
-    }
-    // SAFETY: `respondsToSelector:` is declared on NSObject.
-    let responds: Bool = unsafe { msg_send![layer, respondsToSelector: sel!(setContentsChanged)] };
-    responds.as_bool()
 }
 
 impl Drop for Presenter {
@@ -346,9 +361,7 @@ impl Drop for Presenter {
             }
             self.layer.setContents(None);
             CFRelease(self.surfaces[0]);
-            if !self.surfaces[1].is_null() {
-                CFRelease(self.surfaces[1]);
-            }
+            CFRelease(self.surfaces[1]);
         }
     }
 }
