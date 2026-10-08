@@ -40,7 +40,7 @@ thread_local! {
 /// caller closes an editor already open first (`close_editor`), so that its
 /// `EditEnd` reaches the core before the new request does; one still open
 /// here is dropped without a word.
-pub fn open_editor(request: EditRequest, owner: RawWindowHandle, _send: &mut dyn FnMut(Event)) {
+pub fn open_editor(request: EditRequest, owner: RawWindowHandle, send: &mut dyn FnMut(Event)) {
     close_silently();
     let Some(mtm) = MainThreadMarker::new() else {
         return;
@@ -60,7 +60,14 @@ pub fn open_editor(request: EditRequest, owner: RawWindowHandle, _send: &mut dyn
     GENERATION.set(generation);
     let slot = (request.index, generation);
     let kind = match request.value {
-        SlotValue::Color(rgb) => Kind::Color(color::open(mtm, &view, slot, rgb)),
+        SlotValue::Color(rgb) => {
+            // The color panel is not dismissed by a click on the canvas: the
+            // user draws with it open. So the core must not treat the next
+            // press as a dismissing one; end its "editing" state now. Edits
+            // still coalesce until a click or key.
+            send(Event::EditEnd);
+            Kind::Color(color::open(mtm, &view, slot, rgb))
+        }
         SlotValue::Width(w) => Kind::Width(width::open(
             mtm,
             &view,

@@ -35,6 +35,8 @@ mod windows_recorder;
 #[cfg(target_os = "windows")]
 mod windows_settings;
 #[cfg(target_os = "windows")]
+mod windows_width;
+#[cfg(target_os = "windows")]
 use windows as imp;
 #[cfg(target_os = "windows")]
 pub use windows_editors::{close_editor, editor_closed, open_editor};

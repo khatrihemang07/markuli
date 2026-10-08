@@ -1,10 +1,17 @@
 //! Windows Palette editors, opened for `View::edit`. Both run their own
 //! modal loop and return when closed, so the caller needs no state:
 //!
-//! - Color: the system `ChooseColor` dialog. It has no Reset, so the slot's
-//!   default is put in the first custom swatch; one click on it, then OK.
-//!   That costs no code and no control of our own.
+//! - Color: the system `ChooseColor` dialog, with a "Reset" button of ours
+//!   added under it by a hook (`windows_width` has the other editor).
 //! - Width: a small popup with a trackbar (0.5 steps), an edit box and Reset.
+//!
+//! Re-entrancy: both editors pump messages (`ChooseColorW` and the popup's
+//! loop) on the thread that is inside winit's event handler. That is safe
+//! because winit's Windows backend buffers every event that arrives while a
+//! handler is running (`EventLoopRunner::send_event`) and delivers it after
+//! the handler returns; nothing re-enters `App`, whose only access during the
+//! loop is the `send` closure this module was given. The consequence is that
+//! the click that dismisses an editor reaches the core after `EditEnd`.
 //!
 //! Compile-checked on CI; not yet run on real hardware.
 
@@ -17,148 +24,139 @@
 )]
 
 use super::windows::wide;
-use crate::editor::{
-    colorref, parse_width, pos_from_width, rgb_from_colorref, width_from_pos, width_text, MAX_POS,
-    MIN_POS,
-};
+use super::windows_width;
 use core::ffi::c_void;
 use core::mem::{size_of, zeroed};
-use core::ptr::{null, null_mut};
-use markuli_core::{EditRequest, Event, Palette, SlotValue};
-use std::cell::{Cell, RefCell};
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
+use core::ptr::null;
+use markuli_core::{EditRequest, Event, Palette, Side, SlotKind, SlotValue};
+use std::sync::atomic::{AtomicBool, Ordering};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    ClientToScreen, GetStockObject, COLOR_BTNFACE, DEFAULT_GUI_FONT, HBRUSH,
+    ClientToScreen, GetMonitorInfoW, GetStockObject, MonitorFromWindow, DEFAULT_GUI_FONT,
+    MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Controls::Dialogs::{
-    ChooseColorW, CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW,
+    ChooseColorW, CC_ENABLEHOOK, CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW,
 };
-use windows_sys::Win32::UI::Controls::{
-    InitCommonControlsEx, ICC_BAR_CLASSES, INITCOMMONCONTROLSEX, TBM_SETPAGESIZE, TBM_SETPOS,
-    TBM_SETRANGE, TBS_AUTOTICKS, TRACKBAR_CLASSW,
-};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    GetWindowLongPtrW, GetWindowTextW, IsDialogMessageW, LoadCursorW, PostQuitMessage,
-    RegisterClassW, SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowTextW,
-    TranslateMessage, BS_PUSHBUTTON, CREATESTRUCTW, EN_CHANGE, ES_AUTOHSCROLL, GWLP_USERDATA,
-    IDC_ARROW, MSG, WA_INACTIVE, WM_ACTIVATE, WM_COMMAND, WM_DESTROY, WM_HSCROLL, WM_NCCREATE,
-    WM_SETFONT, WNDCLASSW, WS_BORDER, WS_CHILD, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
-    WS_TABSTOP, WS_VISIBLE,
+    CreateWindowExW, EndDialog, GetClientRect, GetWindowRect, IsWindow, PostMessageW, SendMessageW,
+    SetForegroundWindow, SetWindowPos, BS_PUSHBUTTON, SWP_NOMOVE, SWP_NOZORDER, WM_APP, WM_COMMAND,
+    WM_INITDIALOG, WM_SETFONT, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 use winit::raw_window_handle::RawWindowHandle;
 
-const CLASS: &str = "MarkuliWidth";
-const ID_OK: usize = 1; // Enter, via IsDialogMessage
-const ID_CANCEL: usize = 2; // Esc, via IsDialogMessage
-/// `WM_USER`; windows-sys has no constant for it.
-const TBM_GETPOS: u32 = 0x0400;
-const ID_EDIT: usize = 101;
-const ID_RESET: usize = 102;
-/// Popup client size: trackbar on top, edit box and Reset below.
-const SIZE: (i32, i32) = (230, 74);
+const ID_RESET_COLOR: usize = 201;
+/// Set by the Choose Color hook when its Reset button ended the dialog.
+static RESET_COLOR: AtomicBool = AtomicBool::new(false);
 
-/// Opens the editor for `request` on top of `window` and returns when it is
-/// closed. Edits go out through `send` as they happen; `EditEnd` comes last.
+/// Where the editors send what the user does. Edits are dropped once the
+/// Overlay is gone (it can be destroyed while a modal loop runs), so the app
+/// never hears of an edit for a window it no longer has.
+pub(super) struct Out<'a> {
+    pub(super) owner: HWND,
+    send: &'a mut dyn FnMut(Event),
+}
+
+impl Out<'_> {
+    pub(super) fn edit(&mut self, event: Event) {
+        // SAFETY: IsWindow accepts any handle value, destroyed ones included.
+        if unsafe { IsWindow(self.owner) } != 0 {
+            (self.send)(event);
+        }
+    }
+}
+
+/// Opens the editor for `request` on top of the Overlay `owner` and returns
+/// when it is closed. Edits go out as they happen; `EditEnd` comes last.
 pub fn open_editor(request: EditRequest, owner: RawWindowHandle, send: &mut dyn FnMut(Event)) {
     let RawWindowHandle::Win32(handle) = owner else {
         return;
     };
     let owner = handle.hwnd.get() as HWND;
-    // The anchor is in Overlay pixels; the editor sits just under the button.
-    let mut at = POINT {
-        x: request.anchor.x as i32,
-        y: (request.anchor.y + request.anchor.h) as i32,
-    };
-    // SAFETY: `owner` is the live Overlay window of this thread.
-    unsafe { ClientToScreen(owner, &mut at) };
-    match request.value {
-        SlotValue::Color(rgb) => choose_color(owner, request.index, rgb, send),
-        SlotValue::Width(width) => width_popup(owner, at, request.index, width, send),
-    }
-    // SAFETY: the Overlay is live; the closed editor left it without focus.
-    unsafe { SetForegroundWindow(owner) };
-}
-
-fn choose_color(owner: HWND, slot: usize, rgb: [u8; 3], send: &mut dyn FnMut(Event)) {
-    let default = Palette::DEFAULT.colors.get(slot).copied().unwrap_or(rgb);
-    let mut custom = [0x00FF_FFFF_u32; 16];
-    custom[0] = colorref(default);
-    // SAFETY: all-zero is a valid CHOOSECOLORW (null pointers, no flags); the
-    // fields the dialog needs are set below, and `custom` outlives the call.
-    let ok = unsafe {
-        let mut choose: CHOOSECOLORW = zeroed();
-        choose.lStructSize = size_of::<CHOOSECOLORW>() as u32;
-        choose.hwndOwner = owner;
-        choose.rgbResult = colorref(rgb);
-        choose.lpCustColors = custom.as_mut_ptr();
-        choose.Flags = CC_RGBINIT | CC_FULLOPEN;
-        ChooseColorW(&mut choose) != 0 && {
-            send(Event::EditColor {
-                slot,
-                rgb: rgb_from_colorref(choose.rgbResult),
-            });
-            true
-        }
-    };
-    if ok {
-        send(Event::EditEnd);
-    }
-}
-
-/// What the popup's window procedure reaches through `GWLP_USERDATA`. It
-/// lives on the stack of `width_popup`, which outlives the window.
-struct State<'a> {
-    slot: usize,
-    send: RefCell<&'a mut dyn FnMut(Event)>,
-    track: Cell<HWND>,
-    edit: Cell<HWND>,
-    /// Set while the code, not the user, changes the edit box.
-    syncing: Cell<bool>,
-    closed: Cell<bool>,
-}
-
-impl State<'_> {
-    /// Shows `width` in the trackbar, and in the edit box unless the user is
-    /// typing there (`from_edit`), then reports it.
-    fn apply(&self, width: f32, from_edit: bool) {
-        // SAFETY: both controls are children of the live popup.
-        unsafe {
-            SendMessageW(
-                self.track.get(),
-                TBM_SETPOS,
-                1,
-                pos_from_width(width) as LPARAM,
-            );
-            if !from_edit {
-                self.syncing.set(true);
-                SetWindowTextW(self.edit.get(), wide(&width_text(width)).as_ptr());
-                self.syncing.set(false);
-            }
-        }
-        (self.send.borrow_mut())(Event::EditWidth {
-            slot: self.slot,
-            width,
-        });
-    }
-
-    fn typed(&self) {
-        if self.syncing.get() {
+    let mut out = Out { owner, send };
+    // SAFETY: IsWindow accepts any handle value; the rest runs only for a
+    // live window, on the thread that owns it.
+    unsafe {
+        if IsWindow(owner) == 0 {
             return;
         }
-        let mut text = [0_u16; 16];
-        // SAFETY: the buffer holds the 16 units passed.
-        let len = unsafe { GetWindowTextW(self.edit.get(), text.as_mut_ptr(), 16) };
-        // Half-typed text ("", "2.") is not a width yet: leave it alone.
-        if let Some(width) = parse_width(&String::from_utf16_lossy(&text[..len.max(0) as usize])) {
-            self.apply(width, true);
+        match request.value {
+            SlotValue::Color(rgb) => choose_color(&mut out, request.index, rgb),
+            SlotValue::Width(width) => {
+                let dpi = GetDpiForWindow(owner).max(96);
+                let size = windows_width::size(dpi);
+                let at = place(owner, &request, size);
+                windows_width::popup(&mut out, at, (request.index, width), dpi);
+            }
+        }
+    }
+    (out.send)(Event::EditEnd);
+    // SAFETY: SetForegroundWindow only asks the system to switch; a window
+    // destroyed meanwhile makes it fail harmlessly, but check anyway so the
+    // Overlay gets the keyboard back only if it is still there.
+    unsafe {
+        if IsWindow(owner) != 0 {
+            SetForegroundWindow(owner);
         }
     }
 }
 
-fn child(
+/// Nothing is left open between calls: the Windows editors are modal.
+pub fn close_editor(_send: &mut dyn FnMut(Event)) {}
+
+/// The Windows editors never report closing later.
+pub fn editor_closed(_generation: u64, _send: &mut dyn FnMut(Event)) {}
+
+/// The screen position of a `size` editor next to the button, on the side
+/// the core chose, moved to lie inside the work area of the nearest monitor.
+///
+/// # Safety
+/// `owner` is the live Overlay window.
+unsafe fn place(owner: HWND, request: &EditRequest, (width, height): (i32, i32)) -> POINT {
+    let anchor = request.anchor;
+    let mut corner = POINT {
+        x: anchor.x as i32,
+        y: anchor.y as i32,
+    };
+    // SAFETY: `owner` is live (caller); ClientToScreen writes the POINT.
+    unsafe { ClientToScreen(owner, &mut corner) };
+    let (aw, ah) = (anchor.w as i32, anchor.h as i32);
+    let (left, top) = match request.side {
+        Side::Below => (corner.x, corner.y + ah),
+        Side::Above => (corner.x, corner.y - height),
+        Side::Right => (corner.x + aw, corner.y),
+        Side::Left => (corner.x - width, corner.y),
+    };
+    // SAFETY: all-zero is a valid MONITORINFO once `cbSize` is set.
+    let work = unsafe {
+        let mut info: MONITORINFO = zeroed();
+        info.cbSize = size_of::<MONITORINFO>() as u32;
+        let monitor = MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST);
+        (GetMonitorInfoW(monitor, &mut info) != 0).then_some(info.rcWork)
+    };
+    match work {
+        // `max` last: a work area smaller than the editor keeps its top-left.
+        Some(area) => POINT {
+            x: left.min(area.right - width).max(area.left),
+            y: top.min(area.bottom - height).max(area.top),
+        },
+        None => POINT { x: left, y: top },
+    }
+}
+
+/// `value` (96 dpi pixels) at `dpi`.
+pub(super) fn scaled(value: i32, dpi: u32) -> i32 {
+    value * dpi as i32 / 96
+}
+
+/// A child control of `parent`, in the default GUI font.
+///
+/// # Safety
+/// `parent` is a live window of this thread, and `class` is a nul-terminated
+/// UTF-16 window class name that outlives the call.
+pub(super) unsafe fn child(
     parent: HWND,
     class: *const u16,
     text: &str,
@@ -166,7 +164,8 @@ fn child(
     id: usize,
     rect: [i32; 4],
 ) -> HWND {
-    // SAFETY: `parent` is the popup being created on this thread.
+    // SAFETY: `parent` and `class` are valid (caller); the text buffer lives
+    // until the call returns; the new window is ours, so WM_SETFONT is fine.
     unsafe {
         let hwnd = CreateWindowExW(
             0,
@@ -192,151 +191,117 @@ fn child(
     }
 }
 
-unsafe extern "system" fn window_proc(
-    hwnd: HWND,
-    message: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    if message == WM_NCCREATE {
-        // SAFETY: for this message `lparam` points to the CREATESTRUCTW.
-        let create = unsafe { &*(lparam as *const CREATESTRUCTW) };
-        // SAFETY: stores the stack state pointer passed to CreateWindowExW.
-        unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize) };
-    }
-    // SAFETY: set by `WM_NCCREATE` above to the `State` that outlives the
-    // window; the loop in `width_popup` ends before it is dropped.
-    let state = unsafe { (GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const State).as_ref() };
-    if let Some(state) = state {
-        let (id, code) = (wparam & 0xFFFF, (wparam >> 16) as u32);
-        match message {
-            WM_HSCROLL => {
-                // SAFETY: live trackbar.
-                let pos = unsafe { SendMessageW(state.track.get(), TBM_GETPOS, 0, 0) };
-                state.apply(width_from_pos(pos as i32), false);
-            }
-            WM_COMMAND if id == ID_EDIT && code == EN_CHANGE => state.typed(),
-            WM_COMMAND if id == ID_RESET => {
-                let default = Palette::DEFAULT.widths.get(state.slot).copied();
-                state.apply(default.unwrap_or(2.0), false);
-            }
-            WM_COMMAND if id == ID_OK || id == ID_CANCEL => {
-                // SAFETY: closes this popup; WM_DESTROY ends the loop.
-                unsafe { DestroyWindow(hwnd) };
-            }
-            // Clicking elsewhere closes the popup, like a menu.
-            WM_ACTIVATE if (wparam & 0xFFFF) as u32 == WA_INACTIVE => {
-                // SAFETY: as above.
-                unsafe { DestroyWindow(hwnd) };
-            }
-            WM_DESTROY => state.closed.set(true),
-            _ => {}
-        }
-    }
-    // SAFETY: default handling for everything else.
-    unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+/// A Win32 `COLORREF` (0x00BBGGRR) for `rgb`.
+fn colorref(rgb: [u8; 3]) -> u32 {
+    u32::from(rgb[0]) | u32::from(rgb[1]) << 8 | u32::from(rgb[2]) << 16
 }
 
-fn width_popup(owner: HWND, at: POINT, slot: usize, width: f32, send: &mut dyn FnMut(Event)) {
-    let name = wide(CLASS);
-    let state = State {
-        slot,
-        send: RefCell::new(send),
-        track: Cell::new(null_mut()),
-        edit: Cell::new(null_mut()),
-        syncing: Cell::new(false),
-        closed: Cell::new(false),
-    };
-    // SAFETY: plain Win32 calls on the UI thread. `state` and `name` outlive
-    // the window, and the loop below runs until the window is destroyed.
-    unsafe {
-        InitCommonControlsEx(&INITCOMMONCONTROLSEX {
-            dwSize: size_of::<INITCOMMONCONTROLSEX>() as u32,
-            dwICC: ICC_BAR_CLASSES,
-        });
-        // A repeated registration fails, which is fine.
-        RegisterClassW(&WNDCLASSW {
-            style: 0,
-            lpfnWndProc: Some(window_proc),
-            cbClsExtra: 0,
-            cbWndExtra: 0,
-            hInstance: GetModuleHandleW(null()),
-            hIcon: null_mut(),
-            hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-            hbrBackground: (COLOR_BTNFACE + 1) as usize as HBRUSH,
-            lpszMenuName: null(),
-            lpszClassName: name.as_ptr(),
-        });
-        let hwnd = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-            name.as_ptr(),
-            wide("").as_ptr(),
-            WS_POPUP | WS_BORDER | WS_VISIBLE,
-            at.x,
-            at.y,
-            SIZE.0,
-            SIZE.1,
-            owner,
-            null_mut(),
-            GetModuleHandleW(null()),
-            (&raw const state).cast::<c_void>(),
-        );
-        if hwnd.is_null() {
-            return;
-        }
-        let track = child(hwnd, TRACKBAR_CLASSW, "", TBS_AUTOTICKS, 0, [6, 4, 218, 30]);
-        let edit = child(
-            hwnd,
-            wide("EDIT").as_ptr(),
-            &width_text(width),
-            ES_AUTOHSCROLL as u32 | WS_BORDER,
-            ID_EDIT,
-            [10, 42, 60, 22],
-        );
-        let reset = wide("BUTTON");
-        child(
-            hwnd,
-            reset.as_ptr(),
-            "Reset",
-            BS_PUSHBUTTON as u32,
-            ID_RESET,
-            [80, 40, 70, 26],
-        );
-        state.track.set(track);
-        state.edit.set(edit);
-        SendMessageW(track, TBM_SETRANGE, 1, (MIN_POS | MAX_POS << 16) as LPARAM);
-        SendMessageW(track, TBM_SETPAGESIZE, 0, 2);
-        SendMessageW(track, TBM_SETPOS, 1, pos_from_width(width) as LPARAM);
-        SetFocus(track);
-        run_loop(hwnd, &state);
-    }
-    (state.send.borrow_mut())(Event::EditEnd);
+/// The color a `COLORREF` holds; the high byte is ignored.
+fn rgb_from_colorref(colorref: u32) -> [u8; 3] {
+    [
+        colorref as u8,
+        (colorref >> 8) as u8,
+        (colorref >> 16) as u8,
+    ]
 }
 
-/// Runs messages until the popup is destroyed. `IsDialogMessageW` gives Tab,
-/// Enter and Esc to the controls.
+/// The Choose Color dialog, full-open, with Reset added by `color_hook`.
 ///
 /// # Safety
-/// `hwnd` is the live popup of this thread.
-unsafe fn run_loop(hwnd: HWND, state: &State) {
-    // SAFETY: standard message loop on the thread that owns the window.
-    unsafe {
-        let mut msg: MSG = zeroed();
-        while !state.closed.get() {
-            match GetMessageW(&mut msg, null_mut(), 0, 0) {
-                0 => {
-                    // The app is quitting: pass WM_QUIT on, close the popup.
-                    PostQuitMessage(msg.wParam as i32);
-                    DestroyWindow(hwnd);
-                    break;
-                }
-                -1 => break,
-                _ => {}
-            }
-            if IsDialogMessageW(hwnd, &msg) == 0 {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+/// `out.owner` is the live Overlay window of this thread.
+unsafe fn choose_color(out: &mut Out, slot: usize, rgb: [u8; 3]) {
+    let mut custom = [0x00FF_FFFF_u32; 16];
+    RESET_COLOR.store(false, Ordering::Relaxed);
+    // SAFETY: all-zero is a valid CHOOSECOLORW (null pointers, no flags); the
+    // fields the dialog needs are set below, and `custom` outlives the call.
+    let (ok, chosen) = unsafe {
+        let mut choose: CHOOSECOLORW = zeroed();
+        choose.lStructSize = size_of::<CHOOSECOLORW>() as u32;
+        choose.hwndOwner = out.owner;
+        choose.rgbResult = colorref(rgb);
+        choose.lpCustColors = custom.as_mut_ptr();
+        choose.Flags = CC_RGBINIT | CC_FULLOPEN | CC_ENABLEHOOK;
+        choose.lpfnHook = Some(color_hook);
+        (ChooseColorW(&mut choose) != 0, choose.rgbResult)
+    };
+    let picked = if RESET_COLOR.swap(false, Ordering::Relaxed) {
+        match Palette::default_slot(SlotKind::Color, slot) {
+            Some(SlotValue::Color(default)) => Some(default),
+            _ => None,
         }
+    } else {
+        ok.then(|| rgb_from_colorref(chosen))
+    };
+    if let Some(rgb) = picked {
+        out.edit(Event::EditColor { slot, rgb });
     }
+}
+
+/// The hook of the Choose Color dialog: adds a "Reset" button once the dialog
+/// has its final shape, and ends the dialog when it is pressed (the slot's
+/// default is then sent by `choose_color`).
+unsafe extern "system" fn color_hook(
+    dialog: HWND,
+    message: u32,
+    wparam: WPARAM,
+    _lparam: LPARAM,
+) -> usize {
+    match message {
+        // The dialog lays itself out (full-open) after this message; wait for
+        // the posted one to see its final size.
+        WM_INITDIALOG => {
+            // SAFETY: `dialog` is the live dialog this hook belongs to.
+            unsafe { PostMessageW(dialog, WM_APP, 0, 0) };
+            0
+        }
+        // SAFETY: as above.
+        WM_APP => unsafe { add_reset(dialog) },
+        WM_COMMAND if wparam & 0xFFFF == ID_RESET_COLOR => {
+            RESET_COLOR.store(true, Ordering::Relaxed);
+            // SAFETY: ends the live dialog this hook belongs to.
+            unsafe { EndDialog(dialog, 0) };
+            1
+        }
+        _ => 0,
+    }
+}
+
+/// Grows the dialog by a strip at the bottom and puts "Reset" in it, where no
+/// control of the system dialog is.
+///
+/// # Safety
+/// `dialog` is the live Choose Color dialog of this thread.
+unsafe fn add_reset(dialog: HWND) -> usize {
+    let dpi = unsafe { GetDpiForWindow(dialog) }.max(96);
+    let strip = scaled(40, dpi);
+    // SAFETY: all-zero RECTs are valid; both calls fill them in.
+    unsafe {
+        let (mut client, mut outer): (RECT, RECT) = (zeroed(), zeroed());
+        GetClientRect(dialog, &mut client);
+        GetWindowRect(dialog, &mut outer);
+        SetWindowPos(
+            dialog,
+            core::ptr::null_mut(),
+            0,
+            0,
+            outer.right - outer.left,
+            outer.bottom - outer.top + strip,
+            SWP_NOMOVE | SWP_NOZORDER,
+        );
+        let class = wide("BUTTON");
+        child(
+            dialog,
+            class.as_ptr(),
+            "Reset",
+            BS_PUSHBUTTON as u32,
+            ID_RESET_COLOR,
+            [
+                scaled(12, dpi),
+                client.bottom + scaled(8, dpi),
+                scaled(80, dpi),
+                scaled(26, dpi),
+            ],
+        );
+    }
+    1
 }
