@@ -170,14 +170,14 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
 }
 
 #[test]
-fn letters_and_digits_select_tools_in_toolbar_order() {
-    // V/1 Select, P/2 Pen, E/3 Eraser, K/4 Laser; Excalidraw's 7 (Pen) and 0
+fn letters_select_tools() {
+    // V Select, P Pen, E Eraser, K Laser; Excalidraw's 7 (Pen) and 0
     // (Eraser) stay as aliases.
     let table = [
-        (ToolKind::Select, ['v', '1']),
-        (ToolKind::Pen, ['p', '2']),
-        (ToolKind::Eraser, ['e', '3']),
-        (ToolKind::Laser, ['k', '4']),
+        (ToolKind::Select, ['v', 'v']),
+        (ToolKind::Pen, ['p', 'p']),
+        (ToolKind::Eraser, ['e', 'e']),
+        (ToolKind::Laser, ['k', 'k']),
         (ToolKind::Pen, ['7', '7']),
         (ToolKind::Eraser, ['0', '0']),
     ];
@@ -185,7 +185,7 @@ fn letters_and_digits_select_tools_in_toolbar_order() {
     for (kind, keys) in table {
         for k in keys {
             // Start from another Tool so the key has to change something.
-            let other = if kind == ToolKind::Select { '2' } else { 'v' };
+            let other = if kind == ToolKind::Select { 'p' } else { 'v' };
             key(&mut a, Key::Char(other), false, false);
             key(&mut a, Key::Char(k), false, false);
             assert_eq!(a.view().tool, kind, "key {k}");
@@ -194,9 +194,9 @@ fn letters_and_digits_select_tools_in_toolbar_order() {
 }
 
 #[test]
-fn digits_work_on_the_first_key_after_entering_draw_mode() {
+fn tool_keys_work_on_the_first_key_after_entering_draw_mode() {
     let mut a = drawing();
-    key(&mut a, Key::Char('4'), false, false);
+    key(&mut a, Key::Char('k'), false, false);
     assert_eq!(a.view().tool, ToolKind::Laser);
 }
 
@@ -336,10 +336,8 @@ fn e_and_p_select_their_tool_from_select_and_laser() {
 #[test]
 fn the_other_tool_keys_do_not_toggle() {
     for (keys, tool) in [
-        (['v', '1'], ToolKind::Select),
-        (['2', '2'], ToolKind::Pen),
-        (['3', '3'], ToolKind::Eraser),
-        (['k', '4'], ToolKind::Laser),
+        (['v', 'v'], ToolKind::Select),
+        (['k', 'k'], ToolKind::Laser),
     ] {
         for k in keys {
             let mut a = drawing();

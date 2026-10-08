@@ -103,8 +103,8 @@ impl Ctx<'_> {
 pub(crate) trait Tool: Debug {
     fn kind(&self) -> ToolKind;
     fn icon(&self) -> &'static Icon;
-    /// Lowercase keys that select this Tool: a letter, its toolbar position
-    /// as a digit (1-4) and any Excalidraw digit.
+    /// Lowercase keys that select this Tool: a letter and any Excalidraw
+    /// digit (1-5 are colours, not Tools).
     fn keys(&self) -> &'static [char];
     /// The keys that swap this Tool for another when it is already active,
     /// and that other Tool (P and E swap Pen and Eraser).
@@ -204,6 +204,13 @@ impl Tools {
             None => {
                 self.select_by_key(key);
             }
+        }
+    }
+
+    /// Selects the first Tool of this kind.
+    pub fn select_by_kind(&mut self, kind: ToolKind) {
+        if let Some(index) = self.list.iter().position(|t| t.kind() == kind) {
+            self.active = index;
         }
     }
 

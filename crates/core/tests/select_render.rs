@@ -100,7 +100,8 @@ impl Scene {
     }
 
     fn stroke(&mut self, a: (f32, f32), b: (f32, f32), c: (f32, f32)) {
-        self.key(Key::Char('2'), false, false, "pen");
+        self.key(Key::Char('v'), false, false, "select");
+        self.key(Key::Char('p'), false, false, "pen");
         self.drag(a, b, "stroke leg 1");
         self.step(Event::PointerDown(p(c.0, c.1)), "stroke down");
         self.step(Event::PointerUp(p(c.0, c.1)), "stroke up");

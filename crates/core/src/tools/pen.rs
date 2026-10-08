@@ -35,9 +35,9 @@ impl Tool for Pen {
         &icons::PEN
     }
 
-    /// P, 2 (its place in the toolbar) and Excalidraw's 7.
+    /// P and Excalidraw's 7.
     fn keys(&self) -> &'static [char] {
-        &['p', '2', '7']
+        &['p', '7']
     }
 
     /// Pressing P or 7 on the Pen swaps to the Eraser.

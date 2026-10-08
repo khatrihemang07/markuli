@@ -85,8 +85,8 @@ impl Appearance {
         }
     }
 
-    /// This look as palette and width indices (the defaults for a look that
-    /// is not a preset, which never happens for the Pen's own Appearance).
+    /// This look as palette and width indices (the nearest width preset; the
+    /// default colour for one that is not in the palette).
     pub fn as_style(self) -> Style {
         let default = Style::default();
         Style {
@@ -94,10 +94,7 @@ impl Appearance {
                 .iter()
                 .position(|c| *c == self.color)
                 .unwrap_or(default.color),
-            width: WIDTHS
-                .iter()
-                .position(|w| (*w - self.width).abs() < f32::EPSILON)
-                .unwrap_or(default.width),
+            width: self.width_index(),
         }
     }
 
@@ -116,13 +113,35 @@ impl Appearance {
     }
 }
 
-/// Applies `control` to the selected Elements. `gesture` collects, on the
-/// first change, the style every selected Element had before it (with its Ink
-/// index): [`finish`] turns it into one operation-log entry.
+impl Appearance {
+    /// One width preset thinner, from this look's own width; stops at thin.
+    pub fn thinner(self) -> Self {
+        self.with(Control::Width(self.width_index().saturating_sub(1)))
+    }
+
+    /// One width preset bolder, from this look's own width; stops at bold.
+    pub fn bolder(self) -> Self {
+        self.with(Control::Width(self.width_index() + 1))
+    }
+
+    /// The nearest preset, so an imported odd width still steps sensibly.
+    fn width_index(self) -> usize {
+        let distance = |w: &f32| (w - self.width).abs();
+        WIDTHS
+            .iter()
+            .enumerate()
+            .min_by(|a, b| distance(a.1).total_cmp(&distance(b.1)))
+            .map_or(0, |(i, _)| i)
+    }
+}
+
+/// Applies `change` to each selected Element's own look. `gesture` collects,
+/// on the first change, the style every selected Element had before it (with
+/// its Ink index): [`finish`] turns it into one operation-log entry.
 pub(crate) fn restyle(
     ink: &mut Ink,
     ids: &[u64],
-    control: Control,
+    change: impl Fn(Appearance) -> Appearance,
     gesture: &mut Option<Vec<(usize, Appearance)>>,
     (scratch, paint, scale): (&mut Scratch, &mut Pending, f32),
 ) {
@@ -137,7 +156,7 @@ pub(crate) fn restyle(
         let Some(element) = ink.get_mut(index) else {
             continue;
         };
-        let new = old.with(control);
+        let new = change(old);
         if element.style() != new {
             damage(element.set_style(new, scratch), element, paint, scale);
         }

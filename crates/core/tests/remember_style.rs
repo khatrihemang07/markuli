@@ -26,7 +26,7 @@ fn key(a: &mut Annotator, c: char) {
 }
 
 fn stroke(a: &mut Annotator, y: f32) {
-    key(a, '2');
+    key(a, 'p');
     a.handle(Event::PointerDown(p(300.0, y)));
     a.handle(Event::PointerMove(p(350.0, y)));
     a.handle(Event::PointerUp(p(400.0, y)));
@@ -106,4 +106,16 @@ fn a_selection_restyle_does_not_change_the_reported_style() {
     pick(&mut a, Control::Color(2));
     assert_eq!(last(&a).stroke_color(), GREEN);
     assert_eq!(a.view().style, Style::default());
+}
+
+#[test]
+fn colour_and_width_keys_update_the_view_style() {
+    let mut a = session();
+    key(&mut a, '3');
+    assert_eq!(a.view().style, Style { color: 2, width: 1 });
+    key(&mut a, ']');
+    assert_eq!(a.view().style, Style { color: 2, width: 2 });
+    key(&mut a, '[');
+    key(&mut a, '[');
+    assert_eq!(a.view().style, Style { color: 2, width: 0 });
 }
