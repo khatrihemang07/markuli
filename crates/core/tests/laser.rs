@@ -120,7 +120,7 @@ fn leaving_draw_mode_drops_the_trail() {
     a.handle(Event::PointerMove(p(90.0, 100.0)));
     let view = a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert_eq!(view.next_frame, None);
-    assert!(!view.overlay_needed);
+    assert!(!view.draw_mode);
 }
 
 #[test]

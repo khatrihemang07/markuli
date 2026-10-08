@@ -32,7 +32,6 @@ enum UserEvent {
 
 /// The Overlay window and what it draws through.
 struct Overlay {
-    display: DisplayId,
     window: Window,
     presenter: Presenter,
 }
@@ -74,17 +73,14 @@ impl App {
         };
         let display = display_id(&monitor);
         let view = self.core.handle(Event::ToggleDrawMode(display));
-        let moved = self.overlay.as_ref().is_some_and(|o| o.display != display);
-        if view.draw_mode && moved {
-            // ADR-0002: one Overlay, recreated on the new display (Ink was Cleared).
-            self.overlay = None;
-        }
         self.sync(event_loop, view, Some(&monitor));
     }
 
-    /// Brings the window in line with what the core says.
+    /// Brings the window in line with what the core says: the Overlay exists
+    /// exactly while Draw Mode is on (ADR-0002), so it is always created on
+    /// the display the toggle happened on.
     fn sync(&mut self, event_loop: &ActiveEventLoop, view: View, monitor: Option<&MonitorHandle>) {
-        if !view.overlay_needed {
+        if !view.draw_mode {
             if self.overlay.take().is_some() {
                 platform::release_memory();
             }
@@ -100,13 +96,8 @@ impl App {
         let Some(overlay) = self.overlay.as_ref() else {
             return;
         };
-        overlay
-            .presenter
-            .set_click_through(&overlay.window, view.click_through());
-        if view.draw_mode {
-            overlay.window.set_cursor(cursor_icon(view.cursor));
-            overlay.window.focus_window();
-        }
+        overlay.window.set_cursor(cursor_icon(view.cursor));
+        overlay.window.focus_window();
         // First frame is painted before the window shows: no flash.
         self.redraw();
         if let Some(overlay) = self.overlay.as_ref() {
@@ -223,8 +214,8 @@ impl App {
         });
     }
 
-    /// The Clear hotkey: the core drops the Ink, and `sync` destroys the
-    /// Overlay because it reports it is no longer needed.
+    /// The Clear hotkey: the core drops the Ink and leaves Draw Mode, and
+    /// `sync` destroys the Overlay (a no-op if none exists).
     fn on_clear(&mut self, event_loop: &ActiveEventLoop) {
         let view = self.core.handle(Event::Clear);
         self.sync(event_loop, view, None);
@@ -264,7 +255,7 @@ impl App {
     fn input(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         let was_drawing = self.core.view().draw_mode;
         let view = self.core.handle(event);
-        if view.draw_mode != was_drawing || !view.overlay_needed {
+        if view.draw_mode != was_drawing {
             self.sync(event_loop, view, None);
             return;
         }
@@ -335,11 +326,7 @@ fn create_overlay(event_loop: &ActiveEventLoop, monitor: &MonitorHandle) -> Over
         .create_window(attributes)
         .expect("failed to create the Overlay window");
     let presenter = Presenter::new(&window);
-    Overlay {
-        display: display_id(monitor),
-        window,
-        presenter,
-    }
+    Overlay { window, presenter }
 }
 
 impl ApplicationHandler<UserEvent> for App {

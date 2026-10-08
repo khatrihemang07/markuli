@@ -117,7 +117,6 @@ fn clear_removes_ink_leaves_draw_mode_and_releases_the_overlay() {
     let v = a.handle(Event::Clear);
     assert!(a.ink().is_empty());
     assert!(!v.draw_mode);
-    assert!(!v.overlay_needed);
 }
 
 #[test]
@@ -125,10 +124,9 @@ fn clear_works_outside_draw_mode_too() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
     a.handle(Event::ToggleDrawMode(D1));
-    assert!(a.view().overlay_needed);
     let v = a.handle(Event::Clear);
     assert!(a.ink().is_empty());
-    assert!(!v.overlay_needed);
+    assert!(!v.draw_mode);
 }
 
 #[test]
@@ -159,21 +157,6 @@ fn clearing_empty_ink_logs_nothing() {
     a.handle(Event::ToggleDrawMode(D1));
     undo(&mut a);
     assert_eq!(a.ink().len(), 1);
-}
-
-#[test]
-fn overlay_is_needed_exactly_when_ink_exists_or_draw_mode_is_on() {
-    let mut a = Annotator::new();
-    assert!(!a.view().overlay_needed);
-    a.handle(Event::ToggleDrawMode(D1));
-    assert!(a.view().overlay_needed); // draw mode, no ink
-    stroke(&mut a, 10.0);
-    a.handle(Event::ToggleDrawMode(D1));
-    assert!(a.view().overlay_needed); // ink, no draw mode
-    a.handle(Event::ToggleDrawMode(D1));
-    undo(&mut a);
-    a.handle(Event::ToggleDrawMode(D1));
-    assert!(!a.view().overlay_needed); // neither
 }
 
 #[test]

@@ -113,9 +113,10 @@ pub enum Key {
 /// What the platform layer needs to know after each event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct View {
+    /// Draw Mode is on. The Overlay exists exactly then: Ink is shown only
+    /// in Draw Mode, so leaving it destroys the Overlay and entering it again
+    /// on the same display shows the same Ink.
     pub draw_mode: bool,
-    /// An Overlay window must exist (Draw Mode is on, or Ink is visible).
-    pub overlay_needed: bool,
     /// The display the Overlay belongs to, once Draw Mode was first entered.
     pub display: Option<DisplayId>,
     /// `render` has pixels to produce.
@@ -128,14 +129,6 @@ pub struct View {
     /// only while something animates (a visible Laser trail): wait for it,
     /// then send `Clock`. `None` means sleep until the next input.
     pub next_frame: Option<u64>,
-}
-
-impl View {
-    /// Outside Draw Mode, clicks and scrolls reach the apps underneath.
-    #[must_use]
-    pub fn click_through(&self) -> bool {
-        !self.draw_mode
-    }
 }
 
 #[derive(Debug)]

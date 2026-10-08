@@ -4,7 +4,7 @@
 //! - `monitor_under_cursor` picks the display for Draw Mode.
 //! - `config_dir`, `set_launch_at_login` and `SettingsWindow` serve Settings.
 //! - `Presenter` owns the pixel buffer and puts it on screen with per-pixel
-//!   alpha (softbuffer cannot, see the PR notes), and toggles click-through.
+//!   alpha (softbuffer cannot, see the PR notes).
 //!
 //! `cfg(target_os)` appears only here.
 

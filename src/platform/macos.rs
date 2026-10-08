@@ -245,15 +245,6 @@ impl Presenter {
         }
         CATransaction::commit();
     }
-
-    #[allow(
-        clippy::unused_self,
-        reason = "same signature as the Windows presenter"
-    )]
-    pub fn set_click_through(&self, window: &Window, click_through: bool) {
-        // Winit maps this to `setIgnoresMouseEvents`.
-        let _ = window.set_cursor_hittest(!click_through);
-    }
 }
 
 impl Drop for Presenter {

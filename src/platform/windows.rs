@@ -33,7 +33,7 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, UpdateLayeredWindowIndirect, GWL_EXSTYLE,
-    ULW_ALPHA, UPDATELAYEREDWINDOWINFO, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    ULW_ALPHA, UPDATELAYEREDWINDOWINFO, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
 };
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
 use winit::keyboard::ModifiersState;
@@ -197,22 +197,6 @@ impl Presenter {
             info.dwFlags = ULW_ALPHA;
             info.prcDirty = &dirty;
             UpdateLayeredWindowIndirect(self.hwnd, &info);
-        }
-    }
-
-    /// Flips `WS_EX_TRANSPARENT` by hand: winit's `set_cursor_hittest(true)`
-    /// would also strip `WS_EX_LAYERED`, which presentation depends on.
-    pub fn set_click_through(&self, _window: &Window, click_through: bool) {
-        // SAFETY: `hwnd` is the live window this presenter was built for.
-        unsafe {
-            let style = GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE);
-            let transparent = WS_EX_TRANSPARENT as isize;
-            let style = if click_through {
-                style | transparent
-            } else {
-                style & !transparent
-            };
-            SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, style);
         }
     }
 }

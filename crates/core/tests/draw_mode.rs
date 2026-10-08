@@ -22,7 +22,6 @@ fn starts_idle_with_no_overlay_and_leaves_nothing_to_draw() {
     let a = Annotator::new();
     let v = a.view();
     assert!(!v.draw_mode);
-    assert!(!v.overlay_needed);
     assert!(a.ink().is_empty());
 }
 
@@ -31,8 +30,6 @@ fn toggling_enters_draw_mode_on_that_display_and_captures_input() {
     let mut a = Annotator::new();
     let v = a.handle(Event::ToggleDrawMode(D1));
     assert!(v.draw_mode);
-    assert!(v.overlay_needed);
-    assert!(!v.click_through());
     assert_eq!(v.display, Some(D1));
 }
 
@@ -42,7 +39,6 @@ fn toggling_again_with_empty_ink_releases_the_overlay() {
     a.handle(Event::ToggleDrawMode(D1));
     let v = a.handle(Event::ToggleDrawMode(D1));
     assert!(!v.draw_mode);
-    assert!(!v.overlay_needed);
 }
 
 #[test]
@@ -68,17 +64,59 @@ fn pointer_events_outside_draw_mode_never_reach_ink() {
 }
 
 #[test]
-fn ink_stays_and_overlay_becomes_click_through_after_leaving_draw_mode() {
+fn ink_is_shown_only_in_draw_mode() {
     let mut a = Annotator::new();
     a.handle(Event::ToggleDrawMode(D1));
     stroke(&mut a, &[p(10.0, 10.0), p(20.0, 20.0)]);
     let v = a.handle(Event::ToggleDrawMode(D1));
     assert!(!v.draw_mode);
-    assert!(v.click_through());
-    assert!(v.overlay_needed);
+    // The Overlay goes with Draw Mode: the Ink stays in memory only.
     assert_eq!(a.ink().len(), 1);
     // Strokes are ignored again.
     stroke(&mut a, &[p(50.0, 50.0), p(60.0, 60.0)]);
+    assert_eq!(a.ink().len(), 1);
+}
+
+fn painted(a: &mut Annotator) -> usize {
+    let mut buffer = vec![0_u8; 400 * 300 * 4];
+    let mut pixmap = tiny_skia::PixmapMut::from_bytes(&mut buffer, 400, 300).unwrap();
+    a.render(&mut pixmap, markuli_core::Format::Rgba);
+    // Red Ink pixels (the toolbar and panel are not red).
+    buffer
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|px| px[0] > 200 && px[1] < 80 && px[3] > 200)
+        .count()
+}
+
+#[test]
+fn re_entering_on_the_same_display_shows_the_same_ink_and_history() {
+    let mut a = Annotator::new();
+    a.handle(Event::Resize {
+        width: 400,
+        height: 300,
+    });
+    a.handle(Event::ToggleDrawMode(D1));
+    stroke(&mut a, &[p(10.0, 200.0), p(60.0, 220.0), p(120.0, 250.0)]);
+    stroke(&mut a, &[p(10.0, 150.0), p(60.0, 170.0), p(120.0, 190.0)]);
+    let before = a.ink().clone();
+    let shown = painted(&mut a);
+    assert!(shown > 0);
+    a.handle(Event::ToggleDrawMode(D1));
+    // A new Overlay has a blank surface.
+    a.handle(Event::SurfaceReset);
+    let v = a.handle(Event::ToggleDrawMode(D1));
+    assert!(v.draw_mode && v.needs_render);
+    assert_eq!(*a.ink(), before);
+    assert_eq!(painted(&mut a), shown);
+    // The history survived too.
+    a.handle(Event::Key {
+        key: Key::Char('z'),
+        command: true,
+        shift: false,
+        alt: false,
+    });
     assert_eq!(a.ink().len(), 1);
 }
 

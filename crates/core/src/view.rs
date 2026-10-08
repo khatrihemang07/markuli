@@ -14,7 +14,6 @@ impl Annotator {
         let over_toolbar = (self.toolbar.over() || self.panel.over()) && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
-            overlay_needed: self.draw_mode || !self.ink.is_empty(),
             display: self.display,
             needs_render: self.paint.is_pending()
                 || self.toolbar.is_dirty(self.draw_mode, self.ui())
