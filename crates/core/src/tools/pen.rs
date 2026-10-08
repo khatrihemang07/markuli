@@ -6,7 +6,7 @@
 use super::{Ctx, Cursor, StyleTarget, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
-use crate::style::Style;
+use crate::style::Appearance;
 use crate::Key;
 
 /// Smallest ring diameter, logical px.
@@ -49,7 +49,7 @@ impl Tool for Pen {
     /// `strokeWidth * 4.25` and the outline is about that wide at the
     /// simulated pressure of a mouse. Never below `MIN_RING`, which would be
     /// hard to see.
-    fn cursor(&self, style: Style) -> Cursor {
+    fn cursor(&self, style: Appearance) -> Cursor {
         let width = (style.width * 4.25).round().clamp(0.0, 64.0);
         Cursor::Pen {
             diameter: MIN_RING.max(float_to_u16(width)),

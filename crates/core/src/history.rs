@@ -6,7 +6,7 @@
 
 use crate::freehand::Scratch;
 use crate::ink::{Element, Ink};
-use crate::style::Style;
+use crate::style::Appearance;
 
 #[derive(Debug)]
 enum Op {
@@ -34,7 +34,7 @@ enum Op {
     /// One style change of the Selection. Each entry is an Ink index and the
     /// style the Element is *not* at: applying and reverting swap it in, like
     /// `Move`.
-    Restyle(Vec<(usize, Style)>),
+    Restyle(Vec<(usize, Appearance)>),
 }
 
 #[derive(Debug, Default)]
@@ -69,7 +69,7 @@ impl History {
 
     /// Logs a restyle that already happened; `before` holds each restyled
     /// Element's Ink index and its style before the change.
-    pub fn record_restyle(&mut self, before: Vec<(usize, Style)>) {
+    pub fn record_restyle(&mut self, before: Vec<(usize, Appearance)>) {
         self.push(Op::Restyle(before));
     }
 

@@ -43,7 +43,7 @@ const ICON: f32 = 16.0;
 const SHADOW: [f32; 4] = [16.0, 16.0, 16.0, 24.0];
 
 /// Excalidraw's theme tokens, shared with the style panel.
-pub(crate) struct Palette {
+pub(crate) struct Tokens {
     pub island: [u8; 3],
     pub icon: [u8; 3],
     pub hover: [u8; 3],
@@ -60,7 +60,7 @@ pub(crate) struct Palette {
     pub thumb: [u8; 3],
 }
 
-const LIGHT: Palette = Palette {
+const LIGHT: Tokens = Tokens {
     island: [0xff, 0xff, 0xff],
     icon: [0x1b, 0x1b, 0x1f],
     hover: [0xf1, 0xf0, 0xff],
@@ -74,7 +74,7 @@ const LIGHT: Palette = Palette {
     thumb: [0x3d, 0x3d, 0x3d],
 };
 
-const DARK: Palette = Palette {
+const DARK: Tokens = Tokens {
     island: [0x23, 0x23, 0x29],
     icon: [0xe3, 0xe3, 0xe8],
     hover: [0x32, 0x30, 0x39],
@@ -89,7 +89,7 @@ const DARK: Palette = Palette {
 };
 
 impl Theme {
-    pub(crate) fn palette(self) -> &'static Palette {
+    pub(crate) fn tokens(self) -> &'static Tokens {
         match self {
             Theme::Light => &LIGHT,
             Theme::Dark => &DARK,
@@ -430,7 +430,7 @@ impl Chrome<'_> {
             return;
         };
         let s = l.scale;
-        let colors = toolbar.theme.palette();
+        let colors = toolbar.theme.tokens();
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         for island in Toolbar::islands(&l) {
             shadow(target, island, s, format);

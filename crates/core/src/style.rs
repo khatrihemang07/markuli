@@ -27,13 +27,13 @@ pub(crate) const WIDTHS: [f32; 3] = [1.0, 2.0, 4.0];
 pub(crate) const OPACITY_STEP: u8 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Style {
+pub(crate) struct Appearance {
     pub color: [u8; 3],
     pub width: f32,
     pub opacity: u8,
 }
 
-impl Default for Style {
+impl Default for Appearance {
     /// Excalidraw red, medium width, opaque (user story 19).
     fn default() -> Self {
         Self {
@@ -55,7 +55,7 @@ pub enum Control {
     Opacity(u8),
 }
 
-impl Style {
+impl Appearance {
     /// The style after `control` was chosen; an unknown choice changes nothing.
     pub fn with(self, control: Control) -> Self {
         match control {
@@ -82,7 +82,7 @@ pub(crate) fn restyle(
     ink: &mut Ink,
     ids: &[u64],
     control: Control,
-    gesture: &mut Option<Vec<(usize, Style)>>,
+    gesture: &mut Option<Vec<(usize, Appearance)>>,
     (scratch, paint, scale): (&mut Scratch, &mut Pending, f32),
 ) {
     let before = gesture.get_or_insert_with(|| {
@@ -116,7 +116,7 @@ pub(crate) fn damage(
 }
 
 /// Ends a restyle gesture: logs it when it changed anything.
-pub(crate) fn finish(gesture: Option<Vec<(usize, Style)>>, ink: &Ink, history: &mut History) {
+pub(crate) fn finish(gesture: Option<Vec<(usize, Appearance)>>, ink: &Ink, history: &mut History) {
     let Some(mut before) = gesture else { return };
     before.retain(|&(i, s)| ink.elements().get(i).is_some_and(|e| e.style() != s));
     if !before.is_empty() {

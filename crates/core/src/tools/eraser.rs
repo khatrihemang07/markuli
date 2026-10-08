@@ -10,7 +10,7 @@
 use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
-use crate::style::Style;
+use crate::style::Appearance;
 use crate::Key;
 
 /// Excalidraw's `DEFAULT_COLLISION_THRESHOLD` (2 * 4 - epsilon), in logical px.
@@ -57,7 +57,7 @@ impl Tool for Eraser {
         Some((&['e', '0'], ToolKind::Pen))
     }
 
-    fn cursor(&self, _: Style) -> Cursor {
+    fn cursor(&self, _: Appearance) -> Cursor {
         Cursor::Eraser {
             diameter: ERASER_DIAMETER,
         }

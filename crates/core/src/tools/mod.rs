@@ -17,7 +17,7 @@ use crate::ink::{Element, Ink, Point, Rect};
 use crate::laser::Laser;
 use crate::render::Pending;
 use crate::selection::Selection;
-use crate::style::Style;
+use crate::style::Appearance;
 use crate::Key;
 use std::fmt::Debug;
 
@@ -76,7 +76,7 @@ pub(crate) struct Ctx<'a> {
     /// Shift is held.
     pub shift: bool,
     /// The style of the next Strokes.
-    pub style: Style,
+    pub style: Appearance,
 }
 
 impl Ctx<'_> {
@@ -112,7 +112,7 @@ pub(crate) trait Tool: Debug {
         None
     }
     /// The cursor over the canvas; `style` is the style of the next Strokes.
-    fn cursor(&self, style: Style) -> Cursor;
+    fn cursor(&self, style: Appearance) -> Cursor;
     /// What the style panel applies to while this Tool is active.
     fn styles(&self) -> StyleTarget {
         StyleTarget::None
@@ -238,7 +238,7 @@ mod tests {
         fn keys(&self) -> &'static [char] {
             &['k', '9']
         }
-        fn cursor(&self, _: Style) -> Cursor {
+        fn cursor(&self, _: Appearance) -> Cursor {
             Cursor::Arrow
         }
         fn pointer_down(&mut self, _: &mut Ctx<'_>, _: Point) {}

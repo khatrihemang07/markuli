@@ -28,8 +28,8 @@ use laser::Laser;
 use panel::Panel;
 pub use render::{Damage, Format};
 use selection::Selection;
+use style::Appearance;
 pub use style::Control;
-use style::Style;
 use toolbar::Toolbar;
 pub use toolbar::{Button, Theme};
 use tools::Tools;
@@ -150,10 +150,10 @@ pub struct Annotator {
     tools: Tools,
     toolbar: Toolbar,
     /// The style of the next Strokes, set by the style panel.
-    style: Style,
+    style: Appearance,
     panel: Panel,
-    /// Style of the selected Elements before the panel gesture in progress.
-    restyling: Option<Vec<(usize, Style)>>,
+    /// Appearance of the selected Elements before the panel gesture in progress.
+    restyling: Option<Vec<(usize, Appearance)>>,
 }
 
 impl Default for Annotator {
@@ -174,7 +174,7 @@ impl Default for Annotator {
             next_id: 1,
             tools: Tools::new(),
             toolbar: Toolbar::default(),
-            style: Style::default(),
+            style: Appearance::default(),
             panel: Panel::default(),
             restyling: None,
         }

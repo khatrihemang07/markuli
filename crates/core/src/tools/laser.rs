@@ -6,7 +6,7 @@
 use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::Point;
-use crate::style::Style;
+use crate::style::Appearance;
 use crate::Key;
 
 #[derive(Debug, Default)]
@@ -28,7 +28,7 @@ impl Tool for LaserTool {
         &['k', '4']
     }
 
-    fn cursor(&self, _: Style) -> Cursor {
+    fn cursor(&self, _: Appearance) -> Cursor {
         Cursor::Laser
     }
 

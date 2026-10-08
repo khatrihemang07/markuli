@@ -1,7 +1,7 @@
 //! Ink and its Elements.
 
 use crate::freehand::Scratch;
-use crate::style::Style;
+use crate::style::Appearance;
 
 /// A position, in pixels, origin top-left. Pointer events carry physical
 /// pixels; an Element's points are logical (physical / scale factor), like
@@ -53,7 +53,7 @@ pub struct Element {
 impl Element {
     /// A new Element whose first point is `at` (logical). A missing pressure,
     /// or exactly 0.5, means simulated (Excalidraw: `event.pressure === 0.5`).
-    pub(crate) fn start(id: u64, at: Point, pressure: Option<f32>, style: Style) -> Self {
+    pub(crate) fn start(id: u64, at: Point, pressure: Option<f32>, style: Appearance) -> Self {
         let simulate_pressure = pressure.is_none_or(|p| (p - 0.5).abs() < f32::EPSILON);
         Self {
             id,
@@ -247,8 +247,8 @@ impl Element {
         self.version
     }
 
-    pub(crate) fn style(&self) -> Style {
-        Style {
+    pub(crate) fn style(&self) -> Appearance {
+        Appearance {
             color: self.stroke_color,
             width: self.stroke_width,
             opacity: self.opacity,
@@ -258,7 +258,7 @@ impl Element {
     /// Restyles the Element. A new width changes the geometry, so the cached
     /// outline is recomputed (a committed Element's, with `last`). Returns the
     /// element-local box covering the old and the new look.
-    pub(crate) fn set_style(&mut self, style: Style, scratch: &mut Scratch) -> Option<Rect> {
+    pub(crate) fn set_style(&mut self, style: Appearance, scratch: &mut Scratch) -> Option<Rect> {
         let old = self.bounds;
         #[allow(clippy::float_cmp, reason = "widths are picked from a fixed list")]
         let resized = style.width != self.stroke_width;

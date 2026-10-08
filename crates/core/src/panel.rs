@@ -312,7 +312,7 @@ impl Panel {
     }
 
     pub fn paint(&self, view: PanelView, target: &mut Canvas<'_, '_>, format: Format) {
-        let (s, colors) = (self.scale, self.theme.palette());
+        let (s, colors) = (self.scale, self.theme.tokens());
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         shadow(target, self.area(), s, format);
         fill_rounded(target, self.area(), RADIUS * s, &solid(colors.island));
@@ -378,7 +378,7 @@ impl Panel {
     }
 
     fn paint_slider(&self, opacity: u8, target: &mut Canvas<'_, '_>, format: Format) {
-        let (s, colors) = (self.scale, self.theme.palette());
+        let (s, colors) = (self.scale, self.theme.tokens());
         let solid = |rgb: [u8; 3]| solid_paint(rgb, 1.0, format);
         let zone = self.slider();
         let cy = zone.y + zone.h / 2.0;
