@@ -13,7 +13,6 @@ pub enum SettingsEvent {
     Record(Binding, String),
     LaunchAtLogin(bool),
     /// A radio button in Settings chose where the Toolbar sits.
-    #[allow(dead_code, reason = "only the macOS window sends it; Windows follows")]
     Toolbar(ToolbarPosition),
     /// The recorder started (`true`) or stopped (`false`) listening for a
     /// combo; Markuli's own hotkeys are released meanwhile.

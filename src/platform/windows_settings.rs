@@ -18,7 +18,7 @@ use crate::hotkeys::Binding;
 use crate::settings::{emit, SettingsEvent};
 use core::ffi::c_void;
 use core::ptr::{null, null_mut};
-use markuli_core::Config;
+use markuli_core::{Config, ToolbarPosition};
 use std::cell::Cell;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{GetStockObject, COLOR_BTNFACE, DEFAULT_GUI_FONT, HBRUSH};
@@ -26,21 +26,30 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, CreateWindowExW, DefWindowProcW, DestroyWindow, GetSystemMetrics,
     GetWindowLongPtrW, IsWindow, LoadCursorW, RegisterClassW, SendMessageW, SetForegroundWindow,
-    SetWindowLongPtrW, ShowWindow, BM_GETCHECK, BM_SETCHECK, BN_CLICKED,
-    BS_AUTOCHECKBOX, BS_PUSHBUTTON, CREATESTRUCTW, GWLP_USERDATA, IDC_ARROW, SM_CXSCREEN,
+    SetWindowLongPtrW, ShowWindow, BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BS_AUTOCHECKBOX,
+    BS_AUTORADIOBUTTON, BS_PUSHBUTTON, CREATESTRUCTW, GWLP_USERDATA, IDC_ARROW, SM_CXSCREEN,
     SM_CYSCREEN, SW_SHOW, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_KEYDOWN, WM_NCCREATE, WM_NCDESTROY,
-    WM_SETFONT, WM_SYSKEYDOWN, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_OVERLAPPED, WS_SYSMENU,
-    WS_TABSTOP, WS_VISIBLE,
+    WM_SETFONT, WM_SYSKEYDOWN, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_GROUP, WS_OVERLAPPED,
+    WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
 };
 
 const CLASS: &str = "MarkuliSettings";
 const ID_TOGGLE: usize = 101;
 const ID_CLEAR: usize = 102;
 const ID_LOGIN: usize = 103;
+/// The Toolbar radio buttons, in order; a button's id is `ID_POSITION + index`.
+const ID_POSITION: usize = 104;
+const ID_LAST_POSITION: usize = ID_POSITION + 3;
+const POSITIONS: [(&str, ToolbarPosition); 4] = [
+    ("Top", ToolbarPosition::Top),
+    ("Bottom", ToolbarPosition::Bottom),
+    ("Left", ToolbarPosition::Left),
+    ("Right", ToolbarPosition::Right),
+];
 /// `BM_GETCHECK` results (defined in the controls header; not worth a feature flag).
 const BST_UNCHECKED: u32 = 0;
 const BST_CHECKED: u32 = 1;
-const CLIENT: (i32, i32) = (400, 190);
+const CLIENT: (i32, i32) = (400, 230);
 
 /// Per-window state, owned by the window (freed in `WM_NCDESTROY`).
 struct State {
@@ -85,6 +94,30 @@ fn control(parent: HWND, class: &str, text: &str, style: u32, id: usize, rect: [
     }
 }
 
+/// The "Toolbar" row: a label and four radio buttons, `current` one on.
+/// `WS_GROUP` on the first makes the four exclude each other.
+fn add_toolbar_row(hwnd: HWND, current: ToolbarPosition) {
+    control(hwnd, "STATIC", "Toolbar", 0, 0, [20, 144, 80, 20]);
+    for (index, (title, position)) in POSITIONS.into_iter().enumerate() {
+        let group = if index == 0 { WS_GROUP } else { 0 };
+        let radio = control(
+            hwnd,
+            "BUTTON",
+            title,
+            BS_AUTORADIOBUTTON as u32 | WS_TABSTOP | group,
+            ID_POSITION + index,
+            [110 + 66 * index as i32, 140, 64, 24],
+        );
+        let check = if position == current {
+            BST_CHECKED
+        } else {
+            BST_UNCHECKED
+        };
+        // SAFETY: `radio` was just created.
+        unsafe { SendMessageW(radio, BM_SETCHECK, check as WPARAM, 0) };
+    }
+}
+
 fn create_controls(hwnd: HWND, state: &State) {
     let config = &state.initial;
     control(hwnd, "STATIC", "Toggle Draw Mode", 0, 0, [20, 24, 160, 20]);
@@ -121,10 +154,12 @@ fn create_controls(hwnd: HWND, state: &State) {
     // SAFETY: `login` was just created.
     unsafe { SendMessageW(login, BM_SETCHECK, check as WPARAM, 0) };
     state.login.set(login);
+    add_toolbar_row(hwnd, config.toolbar);
+    // WS_GROUP ends the radio group before it.
     state
         .recorder
         .message
-        .set(control(hwnd, "STATIC", "", 0, 0, [20, 140, 360, 40]));
+        .set(control(hwnd, "STATIC", "", WS_GROUP, 0, [20, 180, 360, 40]));
 }
 
 unsafe extern "system" fn window_proc(
@@ -157,6 +192,9 @@ unsafe extern "system" fn window_proc(
                         let checked = unsafe { SendMessageW(state.login.get(), BM_GETCHECK, 0, 0) }
                             == BST_CHECKED as LRESULT;
                         emit(SettingsEvent::LaunchAtLogin(checked));
+                    }
+                    ID_POSITION..=ID_LAST_POSITION => {
+                        emit(SettingsEvent::Toolbar(POSITIONS[id - ID_POSITION].1));
                     }
                     _ => {}
                 }
