@@ -1,36 +1,30 @@
 //! The pictures of the drawing cursors.
 //!
-//! The core says which cursor to show and how big (`Cursor`, logical px); this
-//! module draws it at the display's scale, so rings stay crisp on a 2x display.
-//! It is rebuilt only when the cursor or the scale changes, never per pointer
-//! move. The hotspot is the middle of the (odd-sized, square) image.
+//! The core says which cursor to show (`Cursor`: kind, brush diameter, color
+//! in logical px); this module draws it at the display's scale, so it stays
+//! crisp on a 2x display. It is rebuilt only when the cursor or the scale
+//! changes, never per pointer move. The designs are the ones picked in the
+//! pointer lab: Pen "Marker nib" (P10), Eraser "Eraser block" (E3), Laser
+//! "Ring + dot" (L2). Each picture has its own hotspot pixel.
 
 use markuli_core::Cursor;
-use tiny_skia::{
-    Color, FillRule, GradientStop, Paint, PathBuilder, Pixmap, Point, RadialGradient, SpreadMode,
-    Stroke, Transform,
-};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform};
 
-/// A cursor picture: premultiplied RGBA, `size` x `size` pixels, the hotspot
-/// at its centre pixel.
+/// A cursor picture: premultiplied RGBA, `size` x `size` pixels, with the
+/// hotspot at pixel (`hot_x`, `hot_y`); the drawing point is that pixel's centre.
 pub struct Image {
     pub rgba: Vec<u8>,
     pub size: u32,
+    pub hot_x: u32,
+    pub hot_y: u32,
 }
 
-impl Image {
-    pub fn hotspot(&self) -> u32 {
-        self.size / 2
-    }
-}
-
-/// Line thickness of the rings, logical px.
-const LINE: f32 = 1.5;
-/// Contrast outline on each side of a line, logical px.
-const OUTLINE: f32 = 1.0;
-/// Laser glow radius and dot radius, logical px.
-const GLOW: f32 = 9.0;
-const DOT: f32 = 3.0;
+/// Dark outline of the icons, as in the lab.
+const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
+const WHITE: [u8; 3] = [255; 3];
+const LASER_RED: [u8; 3] = [0xff, 0x2b, 0x2b];
+/// How far the icons reach up and to the right of the hotspot, logical px.
+const ICON_REACH: f32 = 25.0;
 
 /// The picture for `cursor` at `scale` physical px per logical px; `None` for
 /// the system arrow.
@@ -43,63 +37,88 @@ pub fn render(cursor: Cursor, scale: f32) -> Option<Image> {
     match cursor {
         Cursor::Arrow => None,
         Cursor::Pen { diameter, color } => {
-            let radius = f32::from(diameter) * s / 2.0;
-            // The ring's outer edge is the stroke's edge.
-            let ring = radius - LINE * s / 2.0;
-            let outline = contrast(color);
-            let mut canvas = Canvas::new(radius + OUTLINE * s);
-            canvas.ring(ring, LINE * s, OUTLINE * s, color, 1.0, outline);
-            canvas.dot(1.25 * s, OUTLINE * s, color, outline);
+            let d = f32::from(diameter);
+            // Room left of and below the hotspot for the dot and its white edge.
+            let mut canvas = Canvas::corner((d / 2.0 + 2.0).min(30.0), s);
+            // The dot is the stroke's footprint, centred on the drawing point;
+            // the marker is drawn over it.
+            canvas.disc(d / 2.0 + 1.0, WHITE, 0.95);
+            canvas.disc(d / 2.0, color, 1.0);
+            canvas.pen(color, nib_half_width(d));
             Some(canvas.finish())
         }
-        Cursor::Eraser { diameter } => {
-            let radius = f32::from(diameter) * s / 2.0;
-            let mut canvas = Canvas::new(radius + LINE * s / 2.0 + OUTLINE * s);
-            canvas.ring(radius, LINE * s, OUTLINE * s, [255; 3], 1.0, [0; 3]);
+        Cursor::Eraser { .. } => {
+            let mut canvas = Canvas::corner(6.0, s);
+            canvas.eraser();
             Some(canvas.finish())
         }
         Cursor::Laser => {
-            let mut canvas = Canvas::new(GLOW * s);
-            canvas.glow(GLOW * s, [255, 32, 32]);
-            canvas.dot(DOT * s, 0.0, [255, 32, 32], [255; 3]);
+            let mut canvas = Canvas::centred(9.0, s);
+            canvas.ring(6.0, 1.8, LASER_RED);
+            canvas.disc(3.0, WHITE, 0.95);
+            canvas.disc(2.0, LASER_RED, 1.0);
             Some(canvas.finish())
         }
     }
 }
 
-/// White outline for dark colors, black for light ones.
-fn contrast([r, g, b]: [u8; 3]) -> [u8; 3] {
-    let luma = 0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b);
-    if luma < 140.0 {
-        [255; 3]
-    } else {
-        [0; 3]
-    }
+/// Half the width of the marker's tip: thin (diameter 6), medium (9) and bold
+/// (17) strokes get a visibly thin, medium and wide chisel.
+fn nib_half_width(diameter: f32) -> f32 {
+    (0.9 + (diameter - 6.0) * 0.28).clamp(0.9, 4.0)
 }
 
 struct Canvas {
     pixmap: Pixmap,
-    centre: f32,
+    /// The hotspot pixel.
+    hot: (u32, u32),
+    scale: f32,
 }
 
 impl Canvas {
-    /// A square canvas whose centre is the middle of the centre pixel, big
-    /// enough for `extent` px around it.
-    fn new(extent: f32) -> Self {
-        let half = extent.ceil().clamp(4.0, 120.0);
+    /// Hotspot `pad` logical px from the left and bottom edges, the icon
+    /// reaching up and to the right.
+    fn corner(pad: f32, scale: f32) -> Self {
+        Self::new(pad, ICON_REACH, scale, false)
+    }
+
+    /// Hotspot in the middle, `extent` logical px to every edge.
+    fn centred(extent: f32, scale: f32) -> Self {
+        Self::new(extent, extent, scale, true)
+    }
+
+    fn new(before: f32, after: f32, scale: f32, centred: bool) -> Self {
+        let to_px = |v: f32| (v * scale).ceil().clamp(1.0, 240.0);
+        let (before, after) = (to_px(before), to_px(after));
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,
-            reason = "4..=120"
+            reason = "at most 481"
         )]
-        let size = 2 * (half as u32 + 1) + 1;
-        #[allow(clippy::cast_precision_loss, reason = "at most 243")]
-        let centre = size as f32 / 2.0;
+        let (size, hot) = ((before + after + 1.0) as u32, before as u32);
+        let hot_y = if centred { hot } else { size - 1 - hot };
         Self {
-            // A size of at least 9 is never zero.
-            pixmap: Pixmap::new(size, size).unwrap_or_else(|| Pixmap::new(9, 9).expect("9x9")),
-            centre,
+            // A size of at least 3 is never zero.
+            pixmap: Pixmap::new(size, size).unwrap_or_else(|| Pixmap::new(3, 3).expect("3x3")),
+            hot: (hot, hot_y),
+            scale,
         }
+    }
+
+    /// Centre of the hotspot pixel, physical px.
+    #[allow(clippy::cast_precision_loss, reason = "at most 481")]
+    fn at(&self) -> (f32, f32) {
+        (self.hot.0 as f32 + 0.5, self.hot.1 as f32 + 0.5)
+    }
+
+    /// Logical px, origin at the hotspot, y down.
+    fn plain(&self) -> Transform {
+        Transform::from_translate(self.at().0, self.at().1).pre_scale(self.scale, self.scale)
+    }
+
+    /// The same, turned 45 degrees so that +x points up and to the right.
+    fn tilted(&self) -> Transform {
+        self.plain().pre_rotate(-45.0)
     }
 
     fn paint(rgb: [u8; 3], alpha: f32) -> Paint<'static> {
@@ -111,100 +130,113 @@ impl Canvas {
         paint
     }
 
-    /// A ring of centre-line `radius` and `width`, with `outline` px of
-    /// `outline_color` on both sides.
-    fn ring(
-        &mut self,
-        radius: f32,
-        width: f32,
-        outline: f32,
-        color: [u8; 3],
-        alpha: f32,
-        outline_color: [u8; 3],
-    ) {
-        let Some(path) = PathBuilder::from_circle(self.centre, self.centre, radius) else {
-            return;
-        };
-        let line = |w| Stroke {
-            width: w,
-            ..Stroke::default()
-        };
-        self.pixmap.stroke_path(
-            &path,
-            &Self::paint(outline_color, 0.9),
-            &line(width + 2.0 * outline),
-            Transform::identity(),
-            None,
-        );
-        self.pixmap.stroke_path(
-            &path,
-            &Self::paint(color, alpha),
-            &line(width),
-            Transform::identity(),
-            None,
-        );
+    fn fill(&mut self, path: &tiny_skia::Path, rgb: [u8; 3], alpha: f32, to: Transform) {
+        self.pixmap
+            .fill_path(path, &Self::paint(rgb, alpha), FillRule::Winding, to, None);
     }
 
-    fn dot(&mut self, radius: f32, outline: f32, color: [u8; 3], outline_color: [u8; 3]) {
-        for (r, rgb) in [(radius + outline, outline_color), (radius, color)] {
-            if r <= 0.0 {
-                continue;
-            }
-            if let Some(path) = PathBuilder::from_circle(self.centre, self.centre, r) {
-                let alpha = if rgb == color { 1.0 } else { 0.9 };
-                self.pixmap.fill_path(
-                    &path,
-                    &Self::paint(rgb, alpha),
-                    FillRule::Winding,
-                    Transform::identity(),
-                    None,
-                );
-            }
+    fn line(
+        &mut self,
+        path: &tiny_skia::Path,
+        rgb: [u8; 3],
+        alpha: f32,
+        width: f32,
+        to: Transform,
+    ) {
+        let stroke = Stroke {
+            width,
+            line_join: tiny_skia::LineJoin::Round,
+            ..Stroke::default()
+        };
+        self.pixmap
+            .stroke_path(path, &Self::paint(rgb, alpha), &stroke, to, None);
+    }
+
+    /// A filled circle of `radius` logical px on the hotspot.
+    fn disc(&mut self, radius: f32, rgb: [u8; 3], alpha: f32) {
+        if let Some(path) = PathBuilder::from_circle(0.0, 0.0, radius) {
+            self.fill(&path, rgb, alpha, self.plain());
         }
     }
 
-    /// A soft glow fading from `color` at the middle to nothing at `radius`.
-    fn glow(&mut self, radius: f32, [r, g, b]: [u8; 3]) {
-        let at = Point::from_xy(self.centre, self.centre);
-        let stop = |t, a| GradientStop::new(t, Color::from_rgba8(r, g, b, a));
-        let shader = RadialGradient::new(
-            at,
-            0.0,
-            at,
-            radius,
-            vec![stop(0.0, 200), stop(0.35, 110), stop(0.7, 35), stop(1.0, 0)],
-            SpreadMode::Pad,
-            Transform::identity(),
-        );
-        let (Some(shader), Some(path)) = (
-            shader,
-            PathBuilder::from_circle(self.centre, self.centre, radius),
-        ) else {
-            return;
-        };
-        let paint = Paint {
-            shader,
-            anti_alias: true,
-            ..Paint::default()
-        };
-        self.pixmap.fill_path(
-            &path,
-            &paint,
-            FillRule::Winding,
-            Transform::identity(),
-            None,
-        );
+    /// A ring of centre-line `radius` and `width` with a white halo 1 px
+    /// wider on each side.
+    fn ring(&mut self, radius: f32, width: f32, rgb: [u8; 3]) {
+        if let Some(path) = PathBuilder::from_circle(0.0, 0.0, radius) {
+            let to = self.plain();
+            self.line(&path, WHITE, 0.95, width + 2.0, to);
+            self.line(&path, rgb, 1.0, width, to);
+        }
+    }
+
+    /// Fills and outlines a (rounded) rectangle in the tilted frame.
+    fn block(&mut self, rect: (f32, f32, f32, f32), radius: f32, rgb: [u8; 3]) {
+        if let Some(path) = rounded_rect(rect, radius) {
+            let to = self.tilted();
+            self.fill(&path, rgb, 1.0, to);
+            self.line(&path, INK, 1.0, 1.2, to);
+        }
+    }
+
+    /// Marker nib: the chisel tip is on the hotspot, in the stroke color.
+    fn pen(&mut self, color: [u8; 3], tip: f32) {
+        let mut b = PathBuilder::new();
+        b.move_to(0.0, -tip);
+        b.line_to(6.0, -4.0);
+        b.line_to(6.0, 4.0);
+        b.line_to(0.0, tip);
+        b.close();
+        if let Some(path) = b.finish() {
+            let to = self.tilted();
+            self.fill(&path, color, 1.0, to);
+            self.line(&path, INK, 1.2, 1.2, to);
+        }
+        self.block((6.0, -4.5, 22.0, 9.0), 2.0, [0x2a, 0x2a, 0x33]);
+        if let Some(band) = rounded_rect((10.0, -4.5, 3.0, 9.0), 0.0) {
+            let to = self.tilted();
+            self.fill(&band, color, 1.0, to);
+        }
+    }
+
+    /// Eraser block: its white end's edge touches the hotspot.
+    fn eraser(&mut self) {
+        self.block((0.0, -6.0, 10.0, 12.0), 2.0, WHITE);
+        self.block((10.0, -6.0, 14.0, 12.0), 2.0, [0xf7, 0xa1, 0xad]);
     }
 
     fn finish(self) -> Image {
         Image {
             size: self.pixmap.width(),
             rgba: self.pixmap.take(),
+            hot_x: self.hot.0,
+            hot_y: self.hot.1,
         }
     }
 }
 
+/// A rectangle (x, y, w, h) with corners of `r`.
+#[allow(clippy::many_single_char_names, reason = "rectangle geometry")]
+fn rounded_rect((x, y, w, h): (f32, f32, f32, f32), r: f32) -> Option<tiny_skia::Path> {
+    let mut b = PathBuilder::new();
+    b.move_to(x + r, y);
+    b.line_to(x + w - r, y);
+    b.quad_to(x + w, y, x + w, y + r);
+    b.line_to(x + w, y + h - r);
+    b.quad_to(x + w, y + h, x + w - r, y + h);
+    b.line_to(x + r, y + h);
+    b.quad_to(x, y + h, x, y + h - r);
+    b.line_to(x, y + r);
+    b.quad_to(x, y, x + r, y);
+    b.close();
+    b.finish()
+}
+
 #[cfg(test)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "pixel arithmetic in tests"
+)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -243,46 +275,165 @@ mod tests {
     #[test]
     fn cursor_pictures_match_their_goldens() {
         let pen = |diameter, color| Cursor::Pen { diameter, color };
-        golden("cursor_pen_medium_red_2x", pen(9, RED), 2.0);
-        golden("cursor_pen_thin_blue_2x", pen(6, BLUE), 2.0);
-        golden("cursor_pen_bold_black_2x", pen(17, BLACK), 2.0);
-        golden("cursor_pen_medium_red_1x", pen(9, RED), 1.0);
-        golden("cursor_eraser_2x", Cursor::Eraser { diameter: 16 }, 2.0);
-        golden("cursor_laser_2x", Cursor::Laser, 2.0);
+        for (scale, tag) in [(1.0, "1x"), (2.0, "2x")] {
+            golden(&format!("cursor_pen_thin_blue_{tag}"), pen(6, BLUE), scale);
+            golden(&format!("cursor_pen_medium_red_{tag}"), pen(9, RED), scale);
+            golden(
+                &format!("cursor_pen_bold_black_{tag}"),
+                pen(17, BLACK),
+                scale,
+            );
+            golden(&format!("cursor_pen_bold_red_{tag}"), pen(17, RED), scale);
+            golden(
+                &format!("cursor_eraser_{tag}"),
+                Cursor::Eraser { diameter: 16 },
+                scale,
+            );
+            golden(&format!("cursor_laser_{tag}"), Cursor::Laser, scale);
+        }
+    }
+
+    fn alpha(image: &Image, x: i64, y: i64) -> u8 {
+        let size = i64::from(image.size);
+        if x < 0 || y < 0 || x >= size || y >= size {
+            return 0;
+        }
+        image.rgba[usize::try_from((y * size + x) * 4 + 3).expect("index")]
+    }
+
+    fn pixel(image: &Image, x: i64, y: i64) -> [u8; 4] {
+        let at = usize::try_from((y * i64::from(image.size) + x) * 4).expect("index");
+        [
+            image.rgba[at],
+            image.rgba[at + 1],
+            image.rgba[at + 2],
+            image.rgba[at + 3],
+        ]
     }
 
     #[test]
-    fn the_arrow_is_the_system_cursor_and_every_picture_is_centred_on_its_hotspot() {
+    fn the_arrow_is_the_system_cursor_and_every_hotspot_is_inside_its_picture() {
         assert!(render(Cursor::Arrow, 2.0).is_none());
-        for cursor in [
-            Cursor::Pen {
-                diameter: 9,
-                color: RED,
-            },
-            Cursor::Eraser { diameter: 16 },
-            Cursor::Laser,
-        ] {
-            let image = render(cursor, 2.0).expect("picture");
-            assert_eq!(image.size % 2, 1, "odd size: a centre pixel exists");
-            assert_eq!(image.hotspot() * 2 + 1, image.size);
+        for scale in [1.0, 2.0] {
+            for cursor in [
+                Cursor::Pen {
+                    diameter: 17,
+                    color: RED,
+                },
+                Cursor::Eraser { diameter: 16 },
+                Cursor::Laser,
+            ] {
+                let image = render(cursor, scale).expect("picture");
+                assert!(image.hot_x < image.size && image.hot_y < image.size);
+            }
         }
     }
 
     #[test]
-    fn the_pen_ring_is_as_wide_as_the_stroke() {
-        // 17 logical px at 2x: the ring reaches 17 px from the centre, its outline 2 more.
-        let image = render(
-            Cursor::Pen {
-                diameter: 17,
-                color: BLACK,
-            },
-            2.0,
-        )
-        .expect("picture");
-        let row = image.hotspot() as usize;
-        let at = |x: usize| image.rgba[(row * image.size as usize + x) * 4 + 3];
-        let centre = image.hotspot() as usize;
-        assert_eq!(at(centre + 20), 0, "nothing beyond the outline");
-        assert!(at(centre + 16) > 0, "the ring reaches the stroke's edge");
+    fn the_pen_dot_is_exactly_the_brush_diameter_centred_on_the_hotspot() {
+        // The nib points up and right from the hotspot, so the dot is
+        // measured to the left and below it.
+        for (diameter, scale) in [(6_u16, 2.0_f32), (9, 2.0), (17, 2.0), (17, 1.0), (9, 1.0)] {
+            let image = render(
+                Cursor::Pen {
+                    diameter,
+                    color: BLUE,
+                },
+                scale,
+            )
+            .expect("picture");
+            let (hx, hy) = (i64::from(image.hot_x), i64::from(image.hot_y));
+            let reach = f64::from(f32::from(diameter) * scale) / 2.0;
+            let inner = (reach - 0.5).floor() as i64;
+            // Up to the brush radius the dot is solid, in the stroke colour.
+            for (dx, dy) in [(-inner, 0), (0, inner), (-(inner * 7 / 10), inner * 7 / 10)] {
+                let [r, g, b, a] = pixel(&image, hx + dx, hy + dy);
+                assert_eq!(a, 255, "{diameter}@{scale}: solid at ({dx},{dy})");
+                assert_eq!([r, g, b], BLUE, "{diameter}@{scale}: colour");
+            }
+            // Just beyond it comes the white edge (at most 1 logical px), then nothing.
+            let edge = pixel(
+                &image,
+                hx - (reach + f64::from(scale) / 2.0).round() as i64,
+                hy,
+            );
+            assert!(
+                edge[3] > 0 && edge[0] > 200,
+                "{diameter}@{scale}: white edge"
+            );
+            let past = (reach + f64::from(scale) + 2.0).ceil() as i64;
+            assert_eq!(alpha(&image, hx - past, hy), 0, "nothing past the edge");
+            assert_eq!(alpha(&image, hx, hy + past), 0, "nothing past the edge");
+            // The whole dot and its edge fit in the picture.
+            assert!(hx >= past - 1 && i64::from(image.size) - hy >= past, "fits");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::many_single_char_names, reason = "pixel geometry")]
+    fn the_pen_nib_widens_with_the_stroke() {
+        // Across the chisel just past the tip, the dark outlines of its two
+        // sides are further apart the bolder the stroke.
+        let span = |diameter| {
+            let image = render(
+                Cursor::Pen {
+                    diameter,
+                    color: [0, 255, 0],
+                },
+                2.0,
+            )
+            .expect("picture");
+            let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+            for step in -120..=120 {
+                let v = f64::from(step) * 0.05;
+                let (x, y) = (
+                    f64::from(image.hot_x)
+                        + 0.5
+                        + (1.0 + v) * std::f64::consts::FRAC_1_SQRT_2 * 2.0,
+                    f64::from(image.hot_y)
+                        + 0.5
+                        + (v - 1.0) * std::f64::consts::FRAC_1_SQRT_2 * 2.0,
+                );
+                let [r, g, b, a] = pixel(&image, x.floor() as i64, y.floor() as i64);
+                if a == 255 && r < 90 && g < 90 && b < 90 {
+                    lo = lo.min(v);
+                    hi = hi.max(v);
+                }
+            }
+            hi - lo
+        };
+        let (thin, medium, bold) = (span(6), span(9), span(17));
+        assert!(
+            thin + 0.5 < medium && medium + 1.0 < bold,
+            "{thin} {medium} {bold}"
+        );
+    }
+
+    #[test]
+    fn the_eraser_and_laser_touch_the_hotspot() {
+        let eraser = render(Cursor::Eraser { diameter: 16 }, 2.0).expect("picture");
+        // The contact edge is on the hotspot, the block lies up and to the right.
+        assert!(alpha(&eraser, i64::from(eraser.hot_x), i64::from(eraser.hot_y)) > 0);
+        assert_eq!(alpha(&eraser, 0, i64::from(eraser.size) - 1), 0);
+        // Within the 8 px reach of the hit-test: the edge's ends are 6 px away.
+        let reach = 8.0 * 2.0;
+        let mut worst = 0.0_f64;
+        for y in 0..i64::from(eraser.size) {
+            for x in 0..i64::from(eraser.size) {
+                let (dx, dy) = (x - i64::from(eraser.hot_x), y - i64::from(eraser.hot_y));
+                if alpha(&eraser, x, y) > 0 && dx <= 0 && dy >= 0 {
+                    worst = worst.max(((dx * dx + dy * dy) as f64).sqrt());
+                }
+            }
+        }
+        assert!(
+            worst <= reach,
+            "the back of the contact edge is {worst}px away"
+        );
+        let laser = render(Cursor::Laser, 2.0).expect("picture");
+        let (hx, hy) = (i64::from(laser.hot_x), i64::from(laser.hot_y));
+        assert_eq!(pixel(&laser, hx, hy)[0], 255);
+        assert_eq!(alpha(&laser, hx - 12, hy), 255, "ring left of the centre");
+        assert_eq!(hx * 2 + 1, i64::from(laser.size), "laser is centred");
     }
 }

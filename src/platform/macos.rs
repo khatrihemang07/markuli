@@ -162,11 +162,12 @@ fn cursor_from(image: &crate::cursor::Image, scale: f64) -> Option<Retained<NSCu
     rep.setSize(NSSize::new(points, points));
     let picture = NSImage::initWithSize(NSImage::alloc(), NSSize::new(points, points));
     picture.addRepresentation(&rep);
-    let hot = (f64::from(image.hotspot()) + 0.5) / scale;
+    let hot_x = (f64::from(image.hot_x) + 0.5) / scale;
+    let hot_y = (f64::from(image.hot_y) + 0.5) / scale;
     Some(NSCursor::initWithImage_hotSpot(
         NSCursor::alloc(),
         &picture,
-        NSPoint::new(hot, hot),
+        NSPoint::new(hot_x, hot_y),
     ))
 }
 

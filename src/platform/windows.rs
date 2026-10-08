@@ -65,8 +65,8 @@ impl Shape {
                     }
                 }
             }
-            let (size, hot) = (image.size as u16, image.hotspot() as u16);
-            winit::window::CustomCursor::from_rgba(rgba, size, size, hot, hot).ok()
+            let (size, hot_x, hot_y) = (image.size as u16, image.hot_x as u16, image.hot_y as u16);
+            winit::window::CustomCursor::from_rgba(rgba, size, size, hot_x, hot_y).ok()
         });
         Self(match custom {
             Some(source) => event_loop.create_custom_cursor(source).into(),
