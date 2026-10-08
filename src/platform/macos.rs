@@ -142,11 +142,16 @@ impl Presenter {
         ns_window.setOpaque(false);
         ns_window.setHasShadow(false);
 
-        // SAFETY: plain property messages on a live NSView.
-        let layer: Retained<CALayer> = unsafe {
+        // A layer-hosting view: our own layer, set before `wantsLayer`. A
+        // view-owned layer gets its contents reset by AppKit's first display
+        // pass (after the window shows, and on appearance changes), which
+        // wiped the first frame until the next present.
+        let layer = CALayer::new();
+        // SAFETY: plain property messages on a live NSView with a live layer.
+        unsafe {
+            let _: () = msg_send![&*view, setLayer: &*layer];
             let _: () = msg_send![&*view, setWantsLayer: Bool::YES];
-            msg_send![&*view, layer]
-        };
+        }
         layer.setContentsScale(window.scale_factor());
 
         let size = window.inner_size();
