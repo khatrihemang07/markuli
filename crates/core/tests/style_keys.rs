@@ -263,3 +263,20 @@ fn alt_blocks_digits_but_not_brackets() {
     assert_eq!(last(&a).stroke_color(), RED);
     assert_eq!(last(&a).stroke_width(), 4.0);
 }
+
+#[test]
+fn shift_plus_a_digit_is_ignored() {
+    // On AZERTY the digits are shifted; they must not pick a color.
+    let mut a = session();
+    key(&mut a, 'e');
+    a.handle(Event::Key {
+        key: Key::Char('4'),
+        command: false,
+        shift: true,
+        alt: false,
+    });
+    assert_eq!(tool(&a), ToolKind::Eraser, "no hand-over to the Pen");
+    key(&mut a, 'p');
+    stroke(&mut a, 200.0);
+    assert_eq!(last(&a).stroke_color(), RED, "the Style is unchanged");
+}

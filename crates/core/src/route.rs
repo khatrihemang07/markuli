@@ -150,8 +150,8 @@ impl Annotator {
     fn activate(&mut self, button: Button) {
         match button {
             Button::Tool(index) => self.switch_tool(|tools| tools.select(index)),
-            Button::Color(i) => self.choose_by_key(|look| look.with(Control::Color(i))),
-            Button::Width(i) => self.choose_by_key(|look| look.with(Control::Width(i))),
+            Button::Color(i) => self.choose_by_key(|appearance| appearance.with(Control::Color(i))),
+            Button::Width(i) => self.choose_by_key(|appearance| appearance.with(Control::Width(i))),
             Button::Undo => self.undo(),
             Button::Redo => self.redo(),
             Button::Clear => self.clear(),
@@ -179,9 +179,13 @@ impl Annotator {
                 self.selection.select_all(&self.ink);
             }
             (Key::Char('c'), true, false) => self.copy(),
-            (Key::Char(c @ '1'..='5'), false, _) if !alt => {
-                let index = usize::from(u8::try_from(c).unwrap_or(b'1') - b'1');
-                self.choose_by_key(|look| look.with(Control::Color(index)));
+            // Shift+digit stays ignored: on AZERTY the digits are shifted.
+            (Key::Char(c @ '1'..='5'), false, false) if !alt => {
+                let index = c
+                    .to_digit(10)
+                    .and_then(|d| usize::try_from(d.checked_sub(1)?).ok())
+                    .unwrap_or(0);
+                self.choose_by_key(|appearance| appearance.with(Control::Color(index)));
             }
             (Key::Char('['), false, _) => self.choose_by_key(Appearance::thinner),
             (Key::Char(']'), false, _) => self.choose_by_key(Appearance::bolder),
