@@ -1,8 +1,8 @@
 //! Seam 1: the editable Palette through the annotator interface only.
 
 use markuli_core::{
-    Annotator, Button, DisplayId, EditRequest, Element, Event, Key, Palette, Point, SlotKind,
-    SlotValue, Style, ToolKind,
+    Annotator, Button, DisplayId, EditRequest, Element, Event, Key, Palette, Point, Side, SlotKind,
+    SlotValue, Style, ToolKind, ToolbarPosition,
 };
 
 fn p(x: f32, y: f32) -> Point {
@@ -387,6 +387,7 @@ fn a_secondary_click_never_draws_or_changes_the_tool() {
     key(&mut a, 'e');
     let at = center(&a, Button::Color(3));
     secondary(&mut a, at);
+    a.handle(Event::EditEnd);
     secondary(&mut a, p(300.0, 300.0));
     assert_eq!(a.view().tool, ToolKind::Eraser);
     assert_eq!(a.view().style, Style::default());
@@ -407,4 +408,137 @@ fn a_secondary_click_outside_draw_mode_does_nothing() {
         height: 600,
     });
     assert!(secondary(&mut a, p(10.0, 10.0)).is_none());
+}
+
+fn ink_count(a: &Annotator) -> usize {
+    a.ink().elements().len()
+}
+
+fn open_editor(a: &mut Annotator) {
+    let at = center(a, Button::Color(2));
+    assert!(secondary(a, at).is_some());
+}
+
+#[test]
+fn the_click_that_dismisses_an_editor_never_draws() {
+    let mut a = session();
+    open_editor(&mut a);
+    a.handle(Event::PointerDown(p(300.0, 300.0)));
+    a.handle(Event::PointerMove(p(350.0, 320.0)));
+    a.handle(Event::PointerUp(p(400.0, 340.0)));
+    assert_eq!(ink_count(&a), 0);
+    // The edit is over: the next click draws.
+    stroke(&mut a, 200.0);
+    assert_eq!(ink_count(&a), 1);
+}
+
+#[test]
+fn the_dismissing_click_may_land_before_or_after_edit_end() {
+    let mut a = session();
+    open_editor(&mut a);
+    a.handle(Event::PointerDown(p(300.0, 300.0)));
+    a.handle(Event::EditEnd);
+    a.handle(Event::PointerMove(p(350.0, 300.0)));
+    a.handle(Event::PointerUp(p(400.0, 300.0)));
+    assert_eq!(ink_count(&a), 0);
+    stroke(&mut a, 200.0);
+    assert_eq!(ink_count(&a), 1);
+}
+
+#[test]
+fn a_closed_editor_swallows_nothing() {
+    let mut a = session();
+    open_editor(&mut a);
+    a.handle(Event::EditEnd);
+    stroke(&mut a, 200.0);
+    assert_eq!(ink_count(&a), 1);
+}
+
+#[test]
+fn editing_with_a_value_change_still_swallows_the_dismissing_click() {
+    let mut a = session();
+    open_editor(&mut a);
+    edit_color(&mut a, 2, TEAL);
+    a.handle(Event::PointerDown(p(300.0, 300.0)));
+    a.handle(Event::PointerUp(p(300.0, 300.0)));
+    assert_eq!(ink_count(&a), 0);
+}
+
+#[test]
+fn a_dismissing_click_on_a_toolbar_button_does_not_activate_it() {
+    let mut a = session();
+    open_editor(&mut a);
+    let pen_before = a.view().tool;
+    let at = center(&a, Button::Tool(2));
+    a.handle(Event::PointerDown(at));
+    a.handle(Event::PointerUp(at));
+    assert_eq!(a.view().tool, pen_before);
+}
+
+fn side_of(position: ToolbarPosition, width: u32, height: u32) -> Side {
+    let mut a = Annotator::new();
+    a.handle(Event::Resize { width, height });
+    a.handle(Event::ToolbarPosition(position));
+    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
+    let at = center(&a, Button::Width(1));
+    secondary(&mut a, at).expect("a width request").side
+}
+
+#[test]
+fn the_editor_opens_on_the_side_facing_away_from_the_toolbar() {
+    assert_eq!(side_of(ToolbarPosition::Top, 1200, 800), Side::Below);
+    assert_eq!(side_of(ToolbarPosition::Bottom, 1200, 800), Side::Above);
+    assert_eq!(side_of(ToolbarPosition::Left, 1200, 800), Side::Right);
+    assert_eq!(side_of(ToolbarPosition::Right, 1200, 800), Side::Left);
+}
+
+#[test]
+fn a_column_that_does_not_fit_falls_back_to_the_top_row_side() {
+    assert_eq!(side_of(ToolbarPosition::Left, 1200, 300), Side::Below);
+    assert_eq!(side_of(ToolbarPosition::Right, 1200, 300), Side::Below);
+}
+
+#[test]
+fn width_text_drops_a_useless_fraction() {
+    assert_eq!(Palette::width_text(2.0), "2");
+    assert_eq!(Palette::width_text(2.5), "2.5");
+    assert_eq!(Palette::width_text(0.5), "0.5");
+}
+
+#[test]
+fn typed_widths_snap_and_clamp() {
+    assert_eq!(Palette::parse_width(" 3 "), Some(3.0));
+    assert_eq!(Palette::parse_width("2.3"), Some(2.5));
+    assert_eq!(Palette::parse_width("2,5"), Some(2.5));
+    assert_eq!(Palette::parse_width("0"), Some(0.5));
+    assert_eq!(Palette::parse_width("57"), Some(20.0));
+}
+
+#[test]
+fn typed_junk_is_not_a_width() {
+    for junk in ["", "abc", "inf", "NaN", "-"] {
+        assert_eq!(Palette::parse_width(junk), None, "{junk:?}");
+    }
+}
+
+#[test]
+fn the_default_of_every_slot_is_what_reset_restores() {
+    let mut a = session();
+    for slot in 0..5 {
+        edit_color(&mut a, slot, TEAL);
+        let Some(SlotValue::Color(rgb)) = Palette::default_slot(SlotKind::Color, slot) else {
+            panic!("a default color");
+        };
+        edit_color(&mut a, slot, rgb);
+    }
+    for slot in 0..3 {
+        edit_width(&mut a, slot, 9.0);
+        let Some(SlotValue::Width(width)) = Palette::default_slot(SlotKind::Width, slot) else {
+            panic!("a default width");
+        };
+        edit_width(&mut a, slot, width);
+    }
+    assert_eq!(a.view().palette, Palette::default());
+    assert_eq!(Palette::default_slot(SlotKind::Color, 5), None);
+    assert_eq!(Palette::default_slot(SlotKind::Width, 3), None);
 }

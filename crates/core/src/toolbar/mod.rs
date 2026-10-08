@@ -16,7 +16,7 @@ mod paint;
 mod theme;
 
 use crate::ink::Point;
-use crate::palette::{Anchor, Palette};
+use crate::palette::{Anchor, Palette, Side};
 use crate::tools::Tools;
 use layout::Layout;
 
@@ -188,7 +188,7 @@ impl Toolbar {
     }
 
     /// The color or width button at `at` and where it is, for an edit request.
-    pub fn palette_button_at(&self, at: Point, tools: usize) -> Option<(Button, Anchor)> {
+    pub fn palette_button_at(&self, at: Point, tools: usize) -> Option<(Button, Anchor, Side)> {
         let l = self.layout(tools)?;
         let i = (0..layout::count(tools)).find(|&i| l.button_rect(i).contains(at))?;
         let button = layout::button(i, tools);
@@ -201,6 +201,7 @@ impl Toolbar {
                 w: r.w,
                 h: r.h,
             },
+            l.side(),
         ))
     }
 

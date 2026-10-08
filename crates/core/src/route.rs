@@ -6,8 +6,8 @@ use crate::style;
 use crate::style::Appearance;
 use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
 use crate::{
-    excalidraw, Annotator, Button, Choice, DisplayId, EditRequest, Element, Event, Ink, Key, Point,
-    SlotKind, SlotValue, View,
+    excalidraw, Annotator, Button, Choice, DisplayId, EditRequest, Editor, Element, Event, Ink,
+    Key, Point, SlotKind, SlotValue, View,
 };
 
 impl Annotator {
@@ -47,7 +47,12 @@ impl Annotator {
                     self.edit_slot(SlotKind::Width, slot, Choice::Width(slot));
                 }
             }
-            Event::EditEnd => self.finish_restyle(),
+            Event::EditEnd => {
+                if self.editor == Editor::Open {
+                    self.editor = Editor::Closed;
+                }
+                self.finish_restyle();
+            }
             Event::SecondaryClick(at) if self.draw_mode => self.secondary_click(at),
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
@@ -60,6 +65,14 @@ impl Annotator {
                 self.toolbar.set_scale(scale);
                 self.paint.full();
             }
+            Event::PointerDown(_) if self.draw_mode && self.editor == Editor::Open => {
+                self.finish_restyle();
+                self.editor = Editor::Dismissing;
+            }
+            Event::PointerUp(_) if self.editor == Editor::Dismissing => {
+                self.editor = Editor::Closed;
+            }
+            Event::PointerMove(_) if self.editor == Editor::Dismissing => {}
             Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
             Event::PointerMove(at) if self.draw_mode => self.pointer_move(at),
             Event::PointerUp(at) if self.draw_mode => self.pointer_up(at),
@@ -135,7 +148,8 @@ impl Annotator {
 
     /// A secondary click: on a color or width button, ask for its editor.
     fn secondary_click(&mut self, at: Point) {
-        let Some((button, anchor)) = self.toolbar.palette_button_at(at, self.tools.len()) else {
+        let Some((button, anchor, side)) = self.toolbar.palette_button_at(at, self.tools.len())
+        else {
             return;
         };
         let (kind, index, value) = match button {
@@ -155,8 +169,12 @@ impl Annotator {
             kind,
             index,
             anchor,
+            side,
             value,
         });
+        if self.edit.is_some() {
+            self.editor = Editor::Open;
+        }
     }
 
     /// The active Tool with what it may change.
@@ -316,6 +334,7 @@ impl Annotator {
 
     fn toggle(&mut self, display: DisplayId) {
         self.finish_gesture();
+        self.editor = Editor::Closed;
         self.toolbar.forget_pointer();
         self.selection.clear();
         if self.draw_mode {

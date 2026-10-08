@@ -25,7 +25,7 @@ use freehand::Scratch;
 use history::History;
 pub use ink::{Element, Ink, Point};
 use laser::Laser;
-pub use palette::{Anchor, EditRequest, Palette, SlotKind, SlotValue, MAX_WIDTH, MIN_WIDTH};
+pub use palette::{Anchor, EditRequest, Palette, Side, SlotKind, SlotValue, MAX_WIDTH, MIN_WIDTH};
 pub use render::{Damage, Format};
 use selection::Selection;
 use style::Appearance;
@@ -89,7 +89,12 @@ pub enum Event {
         slot: usize,
         width: f32,
     },
-    /// The editor closed: the next edit is a new undo step.
+    /// The editor closed: the next edit is a new undo step. While an editor
+    /// is open (from [`View::edit`] until this event) the first
+    /// [`Event::PointerDown`] is the click that dismisses it: the core ends the
+    /// edit as this event would and swallows that press, its moves and its
+    /// release, so a dismissing click never draws. The platform still sends
+    /// this event when an editor closes.
     EditEnd,
     /// A secondary click (right button, or Control+left on macOS) at this
     /// position. On a color or width button it sets [`View::edit`]; anywhere
@@ -167,6 +172,18 @@ pub struct View {
     pub next_frame: Option<u64>,
 }
 
+/// Whether a Palette editor is open, as far as the core can tell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Editor {
+    Closed,
+    /// From the [`View::edit`] that asked for it until [`Event::EditEnd`] or
+    /// the first press, which dismisses it.
+    Open,
+    /// The press that dismissed an editor is in flight: its moves and release
+    /// are swallowed too, so it never draws.
+    Dismissing,
+}
+
 #[derive(Debug)]
 pub struct Annotator {
     ink: Ink,
@@ -192,6 +209,7 @@ pub struct Annotator {
     style: Appearance,
     /// Set by a secondary click on a Palette button, until the next event.
     edit: Option<EditRequest>,
+    editor: Editor,
     /// The slot whose edits are being coalesced into one restyle.
     editing: Option<(SlotKind, usize)>,
     /// The Appearance of the selected Elements before the restyle in progress.
@@ -220,6 +238,7 @@ impl Default for Annotator {
             slots: Style::default(),
             style: Appearance::default(),
             edit: None,
+            editor: Editor::Closed,
             editing: None,
             restyling: None,
         }

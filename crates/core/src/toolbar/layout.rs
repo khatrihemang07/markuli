@@ -3,7 +3,7 @@
 
 use super::Button;
 use crate::ink::Point;
-use crate::palette::{COLORS, WIDTHS};
+use crate::palette::{Side, COLORS, WIDTHS};
 
 /// Logical pixel metrics from Excalidraw's CSS.
 const PAD: f32 = 4.0;
@@ -133,6 +133,8 @@ impl Insets {
 pub(super) struct Layout {
     /// Physical position of the bounding box's top-left corner.
     origin: (f32, f32),
+    /// Where the Toolbar really sits (a column that does not fit is a row).
+    position: ToolbarPosition,
     vertical: bool,
     pub scale: f32,
     sizes: [usize; ISLANDS],
@@ -177,9 +179,20 @@ impl Layout {
         };
         Self {
             origin,
+            position,
             vertical: matches!(position, ToolbarPosition::Left | ToolbarPosition::Right),
             scale,
             sizes,
+        }
+    }
+
+    /// The side of a button an editor opens on: facing away from the edge.
+    pub fn side(&self) -> Side {
+        match self.position {
+            ToolbarPosition::Top => Side::Below,
+            ToolbarPosition::Bottom => Side::Above,
+            ToolbarPosition::Left => Side::Right,
+            ToolbarPosition::Right => Side::Left,
         }
     }
 

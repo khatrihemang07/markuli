@@ -45,6 +45,40 @@ impl Palette {
             .then(|| ((width * 2.0).round() / 2.0).clamp(MIN_WIDTH, MAX_WIDTH))
     }
 
+    /// What Reset restores for a slot; `None` for an out-of-range slot.
+    #[must_use]
+    pub fn default_slot(kind: SlotKind, index: usize) -> Option<SlotValue> {
+        match kind {
+            SlotKind::Color => Self::DEFAULT
+                .colors
+                .get(index)
+                .copied()
+                .map(SlotValue::Color),
+            SlotKind::Width => Self::DEFAULT
+                .widths
+                .get(index)
+                .copied()
+                .map(SlotValue::Width),
+        }
+    }
+
+    /// A width typed by the user: snapped and clamped as a slot value; a
+    /// comma counts as the decimal point. `None` when it is not a number.
+    #[must_use]
+    pub fn parse_width(text: &str) -> Option<f32> {
+        Self::snap_width(text.trim().replace(',', ".").parse().ok()?)
+    }
+
+    /// A width as the editors show it: `2` and `2.5`, never `2.0`.
+    #[must_use]
+    pub fn width_text(width: f32) -> String {
+        if width.fract() == 0.0 {
+            format!("{width:.0}")
+        } else {
+            format!("{width:.1}")
+        }
+    }
+
     /// This Palette with every width made a valid slot value; one that is not
     /// finite takes the default of its slot.
     pub(crate) fn sanitized(mut self) -> Self {
@@ -75,6 +109,16 @@ pub enum SlotValue {
     Width(f32),
 }
 
+/// The side of a button an editor opens on: the one facing away from the
+/// Toolbar's edge, so the editor never covers the rest of the Toolbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Below,
+    Above,
+    Left,
+    Right,
+}
+
 /// A rectangle in physical pixels of the Overlay.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anchor {
@@ -91,6 +135,8 @@ pub struct EditRequest {
     pub kind: SlotKind,
     pub index: usize,
     pub anchor: Anchor,
+    /// Where the editor opens relative to `anchor`.
+    pub side: Side,
     /// What the slot holds now.
     pub value: SlotValue,
 }
