@@ -360,11 +360,11 @@ mod tests {
             let (hx, hy) = (i64::from(image.hot_x), i64::from(image.hot_y));
             let reach = f64::from(f32::from(diameter) * scale) / 2.0;
             let inner = (reach - 0.5).floor() as i64;
-            // Up to the brush radius the dot is solid, in the stroke colour.
+            // Up to the brush radius the dot is solid, in the stroke color.
             for (dx, dy) in [(-inner, 0), (0, inner), (-(inner * 7 / 10), inner * 7 / 10)] {
                 let [r, g, b, a] = pixel(&image, hx + dx, hy + dy);
                 assert_eq!(a, 255, "{diameter}@{scale}: solid at ({dx},{dy})");
-                assert_eq!([r, g, b], BLUE, "{diameter}@{scale}: colour");
+                assert_eq!([r, g, b], BLUE, "{diameter}@{scale}: color");
             }
             // Just beyond it comes the white edge (at most 1 logical px), then nothing.
             let edge = pixel(

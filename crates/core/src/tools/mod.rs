@@ -48,7 +48,7 @@ pub enum ToolKind {
     Laser,
 }
 
-/// What the colour and width buttons do while a Tool is active.
+/// What the color and width buttons do while a Tool is active.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StyleTarget {
     /// The Tool draws nothing styled: the buttons are dimmed, and a click
@@ -105,7 +105,7 @@ pub(crate) trait Tool: Debug {
     fn kind(&self) -> ToolKind;
     fn icon(&self) -> &'static Icon;
     /// Lowercase keys that select this Tool: a letter and any Excalidraw
-    /// digit (1-5 are colours, not Tools).
+    /// digit (1-5 are colors, not Tools).
     fn keys(&self) -> &'static [char];
     /// The keys that swap this Tool for another when it is already active,
     /// and that other Tool (P and E swap Pen and Eraser).
@@ -114,7 +114,7 @@ pub(crate) trait Tool: Debug {
     }
     /// The cursor over the canvas; `style` is the style of the next Strokes.
     fn cursor(&self, style: Appearance) -> Cursor;
-    /// What the colour and width buttons apply to while this Tool is active.
+    /// What the color and width buttons apply to while this Tool is active.
     fn styles(&self) -> StyleTarget {
         StyleTarget::None
     }

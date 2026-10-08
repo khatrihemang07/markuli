@@ -69,7 +69,7 @@ impl Area {
     }
 }
 
-/// Colours and widths in the row: the palette and the width presets.
+/// Colors and widths in the row: the palette and the width presets.
 pub(super) const COLORS: usize = 5;
 pub(super) const WIDTHS: usize = 3;
 /// Undo, redo, Clear.
@@ -129,7 +129,7 @@ impl Insets {
 }
 
 /// The toolbar's geometry for one Overlay size and Tool count: four islands
-/// (Tools, colours, widths, actions) in one row or column.
+/// (Tools, colors, widths, actions) in one row or column.
 pub(super) struct Layout {
     /// Physical position of the bounding box's top-left corner.
     origin: (f32, f32),
@@ -236,7 +236,7 @@ impl Layout {
     }
 }
 
-/// The i-th button of a toolbar with `tools` Tools: Tools, colours, widths,
+/// The i-th button of a toolbar with `tools` Tools: Tools, colors, widths,
 /// then undo, redo and Clear.
 pub(super) fn button(i: usize, tools: usize) -> Button {
     let Some(i) = i.checked_sub(tools) else {

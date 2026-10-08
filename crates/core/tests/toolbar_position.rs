@@ -45,7 +45,7 @@ fn render(a: &mut Annotator, pm: &mut Pixmap) {
 fn centers(a: &Annotator) -> Vec<Point> {
     let mut all = vec![];
     all.extend((0..4).map(|i| a.button_center(Button::Tool(i)).expect("tool")));
-    all.extend((0..5).map(|i| a.button_center(Button::Color(i)).expect("colour")));
+    all.extend((0..5).map(|i| a.button_center(Button::Color(i)).expect("color")));
     all.extend((0..3).map(|i| a.button_center(Button::Width(i)).expect("width")));
     all.extend(
         [Button::Undo, Button::Redo, Button::Clear].map(|b| a.button_center(b).expect("action")),

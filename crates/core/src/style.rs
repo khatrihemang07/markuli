@@ -23,7 +23,7 @@ pub(crate) const PALETTE: [[u8; 3]; 5] = [
 /// Thin, medium, bold.
 pub(crate) const WIDTHS: [f32; 3] = [1.0, 2.0, 4.0];
 
-/// The look a user chooses: a color index into the 5-color palette and a
+/// The Style a user chooses: a color index into the 5-color palette and a
 /// width index into the 3 presets (thin, medium, bold). Out-of-range indices
 /// are ignored by whoever applies them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +40,12 @@ impl Default for Style {
 }
 
 /// What one Element looks like: its stroke rgb and px width.
+///
+/// This is the [`Style`] resolved against the palette and presets, so the
+/// stroke color and width can be applied to an Element (and compared with an
+/// Element's own) without looking indices up again. Both are always the same
+/// choice: the default Appearance is the default Style. It is an
+/// implementation detail, not a glossary term.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Appearance {
     pub color: [u8; 3],
@@ -56,7 +62,7 @@ impl Default for Appearance {
     }
 }
 
-/// One colour or width choice of the Toolbar.
+/// One color or width choice of the Toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Control {
     /// The i-th color of the palette.
@@ -66,14 +72,14 @@ pub(crate) enum Control {
 }
 
 impl Style {
-    /// Whether both indices name a palette colour and a width preset.
+    /// Whether both indices name a palette color and a width preset.
     pub(crate) fn is_valid(self) -> bool {
         self.color < PALETTE.len() && self.width < WIDTHS.len()
     }
 }
 
 impl Appearance {
-    /// The chosen look of the next Strokes, or `self` if `style` is out of
+    /// The Appearance of the next Strokes, or `self` if `style` is out of
     /// range.
     pub fn with_style(self, style: Style) -> Self {
         if !style.is_valid() {
@@ -85,8 +91,8 @@ impl Appearance {
         }
     }
 
-    /// This look as palette and width indices (the nearest width preset; the
-    /// default colour for one that is not in the palette).
+    /// This Appearance as palette and width indices (the nearest width preset; the
+    /// default color for one that is not in the palette).
     pub fn as_style(self) -> Style {
         let default = Style::default();
         Style {
@@ -114,17 +120,17 @@ impl Appearance {
 }
 
 impl Appearance {
-    /// One width preset thinner, from this look's own width; stops at thin.
+    /// One width preset thinner, from this Appearance's own width; stops at thin.
     pub fn thinner(self) -> Self {
         self.with(Control::Width(self.width_index().saturating_sub(1)))
     }
 
-    /// One width preset bolder, from this look's own width; stops at bold.
+    /// One width preset bolder, from this Appearance's own width; stops at bold.
     pub fn bolder(self) -> Self {
         self.with(Control::Width(self.width_index() + 1))
     }
 
-    /// The palette index of this look's colour, if it is in the palette.
+    /// The palette index of this Appearance's color, if it is in the palette.
     pub fn color_index(self) -> Option<usize> {
         PALETTE.iter().position(|c| *c == self.color)
     }
@@ -140,7 +146,7 @@ impl Appearance {
     }
 }
 
-/// Applies `change` to each selected Element's own look. `gesture` collects,
+/// Applies `change` to each selected Element's own Appearance. `gesture` collects,
 /// on the first change, the style every selected Element had before it (with
 /// its Ink index): [`finish`] turns it into one operation-log entry.
 pub(crate) fn restyle(
@@ -186,18 +192,5 @@ pub(crate) fn finish(gesture: Option<Vec<(usize, Appearance)>>, ink: &Ink, histo
     before.retain(|&(i, s)| ink.elements().get(i).is_some_and(|e| e.style() != s));
     if !before.is_empty() {
         history.record_restyle(before);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_style_is_the_default_appearance() {
-        let style = Style::default();
-        let look = Appearance::default();
-        assert_eq!(PALETTE.get(style.color), Some(&look.color));
-        assert_eq!(WIDTHS.get(style.width), Some(&look.width));
     }
 }

@@ -4,9 +4,9 @@
 //! Element gets a solid 1 px rectangle around the box of its input points,
 //! 4 px outside it; two or more also get a dashed 1 px rectangle (2 on, 2 off)
 //! around their common box. The drag box is filled `rgba(0, 0, 200, 0.04)` and
-//! outlined in the selection colour. Deviations: no resize or rotation handles
-//! (the spec excludes them), and in the dark theme the colour is the lightened
-//! post-filter `#a8a5ff` because Markuli has no canvas colour filter.
+//! outlined in the selection color. Deviations: no resize or rotation handles
+//! (the spec excludes them), and in the dark theme the color is the lightened
+//! post-filter `#a8a5ff` because Markuli has no canvas color filter.
 //!
 //! Painting is never incremental: [`Selection::flush`] marks the old and new
 //! overlay areas as damage, and the renderer redraws that whole area (Ink,
@@ -181,11 +181,11 @@ impl Selection {
     /// Paints the overlay. The caller has already redrawn the whole of
     /// [`Selection::shown`] from the Ink.
     pub fn paint(&self, ink: &Ink, target: &mut Canvas<'_, '_>, scale: f32, format: Format) {
-        let colour = match self.theme {
+        let color = match self.theme {
             Theme::Light => LIGHT,
             Theme::Dark => DARK,
         };
-        let line = stroke_paint(colour, 1.0, format);
+        let line = stroke_paint(color, 1.0, format);
         let width = scale.round().max(1.0);
         let solid = Stroke {
             width,

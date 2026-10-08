@@ -1,4 +1,4 @@
-//! Seam 1: the Toolbar colour and width buttons with a Selection: restyle, undo, copy, redraw.
+//! Seam 1: the Toolbar color and width buttons with a Selection: restyle, undo, copy, redraw.
 
 use markuli_core::{Annotator, Button, DisplayId, Event, Format, Key, Point};
 
@@ -93,7 +93,7 @@ fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
     pick(&mut a, Button::Width(0));
     for (i, selected) in [true, false, true].into_iter().enumerate() {
         let e = &a.ink().elements()[i];
-        assert_eq!(e.stroke_color() == BLUE, selected, "colour of {i}");
+        assert_eq!(e.stroke_color() == BLUE, selected, "color of {i}");
         assert_eq!((e.stroke_width() - 1.0).abs() < f32::EPSILON, selected);
     }
     // The next Strokes keep their own style.

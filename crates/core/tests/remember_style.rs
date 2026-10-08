@@ -108,7 +108,7 @@ fn a_selection_restyle_does_not_change_the_reported_style() {
 }
 
 #[test]
-fn colour_and_width_keys_update_the_view_style() {
+fn color_and_width_keys_update_the_view_style() {
     let mut a = session();
     key(&mut a, '3');
     assert_eq!(a.view().style, Style { color: 2, width: 1 });
@@ -117,4 +117,17 @@ fn colour_and_width_keys_update_the_view_style() {
     key(&mut a, '[');
     key(&mut a, '[');
     assert_eq!(a.view().style, Style { color: 2, width: 0 });
+}
+
+#[test]
+fn the_default_style_draws_what_a_fresh_session_draws() {
+    let mut fresh = session();
+    stroke(&mut fresh, 100.0);
+    let mut a = session();
+    a.handle(Event::Style(Style::default()));
+    stroke(&mut a, 100.0);
+    assert_eq!(last(&a).stroke_color(), [0xe0, 0x31, 0x31]);
+    assert!((last(&a).stroke_width() - 2.0).abs() < f32::EPSILON);
+    assert_eq!(last(&a).stroke_color(), last(&fresh).stroke_color());
+    assert!((last(&a).stroke_width() - last(&fresh).stroke_width()).abs() < f32::EPSILON);
 }

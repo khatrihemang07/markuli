@@ -95,7 +95,7 @@ fn stylus_pressure_sets_thickness() {
 }
 
 #[test]
-fn opacity_and_colour_come_from_the_element_defaults() {
+fn opacity_and_color_come_from_the_element_defaults() {
     let (mut a, mut pm) = scene();
     stroke(&mut a, &mut pm, &line(50.0, 2.0), |_| None);
     let i = ((50.0 * SCALE) as u32 * W + (80.0 * SCALE) as u32) as usize * 4;

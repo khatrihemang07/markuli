@@ -1,4 +1,4 @@
-//! Seam 1: the colour and width buttons of the one Toolbar row, through events.
+//! Seam 1: the color and width buttons of the one Toolbar row, through events.
 
 use markuli_core::{Annotator, Button, Cursor, DisplayId, Event, Format, Key, Point, ToolKind};
 use tiny_skia::Pixmap;
@@ -58,7 +58,7 @@ const TOOLS: [(char, ToolKind); 4] = [
 ];
 
 #[test]
-fn a_click_on_a_colour_or_width_does_what_its_key_does_for_every_tool() {
+fn a_click_on_a_color_or_width_does_what_its_key_does_for_every_tool() {
     let choices = [
         (Button::Color(3), '4'),
         (Button::Color(0), '1'),
@@ -160,7 +160,7 @@ fn moving_within_one_button_causes_no_damage() {
 }
 
 #[test]
-fn the_cursor_is_an_arrow_over_colour_and_width_buttons() {
+fn the_cursor_is_an_arrow_over_color_and_width_buttons() {
     let mut a = drawing();
     for b in [Button::Color(1), Button::Width(2)] {
         a.handle(Event::PointerMove(p(10.0, 300.0)));
@@ -179,7 +179,7 @@ fn row() -> impl Iterator<Item = Button> {
 }
 
 #[test]
-fn the_row_is_tools_colours_widths_then_undo_redo_clear() {
+fn the_row_is_tools_colors_widths_then_undo_redo_clear() {
     let a = drawing();
     let order: Vec<Point> = row().map(|b| center(&a, b)).collect();
     assert_eq!(order.len(), 15);

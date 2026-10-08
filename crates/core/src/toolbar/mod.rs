@@ -1,8 +1,8 @@
 //! The Excalidraw-style toolbar: state and hit-testing.
 //!
 //! One row (top or bottom) or column (left or right) of the Overlay, in Draw Mode only, in four
-//! islands: the Tool buttons, the five colours, the three widths, then undo,
-//! redo and Clear. Metrics and colours are
+//! islands: the Tool buttons, the five colors, the three widths, then undo,
+//! redo and Clear. Metrics and colors are
 //! Excalidraw's stock theme (`theme.scss`, `ToolIcon.scss`, `Island.scss`),
 //! in logical pixels times the Overlay's scale factor. Deviation: the shadow
 //! is a stack of rounded rectangles instead of a blur, and there is no
@@ -27,7 +27,7 @@ pub use theme::Theme;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Button {
     Tool(usize),
-    /// The i-th colour of the palette.
+    /// The i-th color of the palette.
     Color(usize),
     /// The i-th width: thin, medium, bold.
     Width(usize),
@@ -47,11 +47,11 @@ pub(crate) struct UiState {
     pub can_undo: bool,
     pub can_redo: bool,
     pub has_ink: bool,
-    /// The chosen colour and width (palette and preset indices); `None` when
+    /// The chosen color and width (palette and preset indices); `None` when
     /// a Selection mixes values.
     pub color: Option<usize>,
     pub width: Option<usize>,
-    /// The active Tool styles nothing: colours and widths are shown dimmed
+    /// The active Tool styles nothing: colors and widths are shown dimmed
     /// (a click still works: it hands over to the Pen).
     pub dimmed: bool,
 }

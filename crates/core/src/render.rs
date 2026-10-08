@@ -23,7 +23,7 @@ use tiny_skia::{
 };
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
-/// layered-window DIBs are BGRA, so colours are swapped at paint time and
+/// layered-window DIBs are BGRA, so colors are swapped at paint time and
 /// the buffer needs no conversion pass.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {

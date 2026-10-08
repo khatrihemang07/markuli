@@ -128,7 +128,7 @@ pub struct View {
     pub cursor: Cursor,
     /// The active Tool.
     pub tool: ToolKind,
-    /// The Pen's Style (colour and width indices). A Selection restyle does
+    /// The Pen's Style (color and width indices). A Selection restyle does
     /// not change it. The platform saves it when it changes.
     pub style: Style,
     /// The time (same clock as [`Event::Clock`]) the next frame is due. Set
@@ -154,9 +154,10 @@ pub struct Annotator {
     next_id: u64,
     tools: Tools,
     toolbar: Toolbar,
-    /// The style of the next Strokes, set by the colour and width buttons.
+    /// The Style of the next Strokes (resolved to an Appearance), set by the
+    /// color and width buttons.
     style: Appearance,
-    /// Appearance of the selected Elements before the restyle in progress.
+    /// The Appearance of the selected Elements before the restyle in progress.
     restyling: Option<Vec<(usize, Appearance)>>,
 }
 

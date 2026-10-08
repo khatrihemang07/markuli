@@ -1,6 +1,6 @@
 //! Seam 1, pixels out: the toolbar against golden images.
 //!
-//! Each scene is composited over a page colour so the PNGs are easy to look
+//! Each scene is composited over a page color so the PNGs are easy to look
 //! at. Regenerate after an intended change with `UPDATE_GOLDEN=1 cargo test`
 //! and look at the PNGs in `tests/golden/` before committing them.
 
@@ -248,7 +248,7 @@ fn toolbar_highlights_nothing_for_a_selection_of_mixed_values() {
 }
 
 #[test]
-fn toolbar_dims_colours_and_widths_for_the_eraser() {
+fn toolbar_dims_colors_and_widths_for_the_eraser() {
     let mut a = scene(Theme::Dark, 1.0);
     stroke(&mut a);
     key(&mut a, 'e');
@@ -256,7 +256,7 @@ fn toolbar_dims_colours_and_widths_for_the_eraser() {
 }
 
 #[test]
-fn toolbar_highlights_the_chosen_colour_and_width_in_both_themes() {
+fn toolbar_highlights_the_chosen_color_and_width_in_both_themes() {
     for (theme, page, name) in [
         (Theme::Light, WHITE_PAGE, "toolbar_light_blue_bold"),
         (Theme::Dark, dark_page(), "toolbar_dark_blue_bold"),

@@ -1,4 +1,4 @@
-//! Painting the toolbar: island fills, button backgrounds, icons, colour
+//! Painting the toolbar: island fills, button backgrounds, icons, color
 //! swatches and width lines.
 
 use super::layout::{self, Area};
@@ -16,7 +16,7 @@ const ICON: f32 = 16.0;
 const SWATCH: f32 = 22.0;
 /// Line thickness of the three width buttons' icons.
 const ICON_LINES: [f32; 3] = [1.5, 3.0, 4.5];
-/// How much of its colour a dimmed swatch keeps.
+/// How much of its color a dimmed swatch keeps.
 const DIMMED: f32 = 0.35;
 
 /// The pieces every button is painted from.
@@ -121,7 +121,7 @@ impl Brush<'_> {
         icons::draw(target, icon, at, &solid_paint(ink, 1.0, self.format));
     }
 
-    /// A palette colour in a bordered square; the chosen one gets a ring.
+    /// A palette color in a bordered square; the chosen one gets a ring.
     fn swatch(
         &self,
         target: &mut Canvas<'_, '_>,

@@ -1,4 +1,4 @@
-//! Seam 1: colour and width keys (1-5, `[`, `]`) through the annotator interface.
+//! Seam 1: color and width keys (1-5, `[`, `]`) through the annotator interface.
 
 use markuli_core::{Annotator, Button, DisplayId, Element, Event, Key, Point, ToolKind};
 
@@ -61,7 +61,7 @@ fn widths(a: &Annotator) -> Vec<f32> {
 }
 
 #[test]
-fn each_digit_sets_the_colour_of_the_next_stroke() {
+fn each_digit_sets_the_color_of_the_next_stroke() {
     let mut a = session();
     for (i, color) in PALETTE.iter().enumerate() {
         key(&mut a, char::from(b'1' + u8::try_from(i).expect("small")));
@@ -100,7 +100,7 @@ fn brackets_step_the_width_and_stop_at_the_ends() {
 }
 
 #[test]
-fn a_colour_key_from_another_tool_switches_to_the_pen() {
+fn a_color_key_from_another_tool_switches_to_the_pen() {
     for from in ['e', 'k', 'v'] {
         let mut a = session();
         key(&mut a, from);
@@ -189,7 +189,7 @@ fn digits_no_longer_choose_tools_but_seven_and_zero_still_toggle() {
     assert_eq!(
         tool(&a),
         ToolKind::Pen,
-        "4 is a colour, it does not pick the Laser"
+        "4 is a color, it does not pick the Laser"
     );
     key(&mut a, '7');
     assert_eq!(tool(&a), ToolKind::Eraser);

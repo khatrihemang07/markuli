@@ -31,7 +31,7 @@ fn drawing() -> (Annotator, Pixmap) {
 }
 
 #[test]
-fn a_stroke_paints_opaque_ink_colour_along_its_path_only() {
+fn a_stroke_paints_opaque_ink_color_along_its_path_only() {
     let (mut a, mut pm) = drawing();
     render(&mut a, &mut pm, Format::Rgba);
     a.handle(Event::PointerDown(p(10.0, 50.0)));
