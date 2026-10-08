@@ -48,7 +48,7 @@ objc2-quartz-core = { version = "0.3", default-features = false, features = ["st
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", default-features = false, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_DataExchange", "Win32_System_Memory"] }
+windows-sys = { version = "0.61", default-features = false, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_UI_Controls", "Win32_UI_Controls_Dialogs"] }
 
 [profile.release]
 opt-level = "s"

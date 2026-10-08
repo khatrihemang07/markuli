@@ -4,6 +4,8 @@
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
 mod cursor;
+#[cfg(any(windows, test))]
+mod editor;
 mod hotkeys;
 mod platform;
 mod settings;
@@ -22,6 +24,7 @@ use winit::event::{ElementState, KeyEvent, MouseButton, StartCause, TouchPhase, 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
+use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Theme as OsTheme, Window, WindowId};
 
 /// Wake-ups sent from the hotkey and menu callbacks, so the loop never polls.
@@ -309,10 +312,23 @@ impl App {
         }
     }
 
-    /// A right click, or Control+click on macOS. The pickers that answer
-    /// `View::edit` come later; for now the core only reports the request.
+    /// A right click, or Control+click on macOS. On a Palette button the
+    /// core reports `View::edit` and the platform editor runs until closed.
     fn secondary_click(&mut self, event_loop: &ActiveEventLoop) {
         self.input(event_loop, Event::SecondaryClick(self.cursor));
+        let Some(request) = self.core.view().edit else {
+            return;
+        };
+        // The raw handle is Copy, so the editor does not borrow the Overlay
+        // while its edits come back through `input`.
+        let owner = self
+            .overlay
+            .as_ref()
+            .and_then(|overlay| overlay.window.window_handle().ok())
+            .map(|handle| handle.as_raw());
+        if let Some(owner) = owner {
+            platform::open_editor(request, owner, &mut |event| self.input(event_loop, event));
+        }
     }
 
     /// Feeds an input event to the core and applies what changed: Draw Mode
