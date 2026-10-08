@@ -173,3 +173,48 @@ fn moving_within_the_same_swatch_changes_nothing_and_reports_no_damage() {
     let view = a.handle(Event::PointerMove(centre(&a, Control::Color(2))));
     assert!(view.needs_render);
 }
+
+#[test]
+fn the_pen_cursor_is_a_ring_as_wide_as_the_stroke_in_the_stroke_color() {
+    let mut a = session();
+    // Excalidraw's freedraw size is 4.25 x the stroke width (1, 2, 4), so the
+    // default medium Pen is 8.5 logical px wide, rounded to 9.
+    assert_eq!(
+        a.view().cursor,
+        markuli_core::Cursor::Pen {
+            diameter: 9,
+            color: RED
+        }
+    );
+    let pick = |a: &mut Annotator, c: Control| {
+        let at = a.panel_center(c).expect("the panel is shown");
+        a.handle(Event::PointerDown(at));
+        a.handle(Event::PointerUp(at));
+        a.handle(Event::PointerMove(p(10.0, 200.0)));
+    };
+    pick(&mut a, Control::Width(2));
+    assert_eq!(
+        a.view().cursor,
+        markuli_core::Cursor::Pen {
+            diameter: 17,
+            color: RED
+        }
+    );
+    pick(&mut a, Control::Width(0));
+    // The thinnest stroke would be 4 px: a ring that small is hard to see.
+    assert_eq!(
+        a.view().cursor,
+        markuli_core::Cursor::Pen {
+            diameter: 6,
+            color: RED
+        }
+    );
+    pick(&mut a, Control::Color(3));
+    assert_eq!(
+        a.view().cursor,
+        markuli_core::Cursor::Pen {
+            diameter: 6,
+            color: [0x19, 0x71, 0xc2]
+        }
+    );
+}

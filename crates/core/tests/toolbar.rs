@@ -203,11 +203,24 @@ fn digits_work_on_the_first_key_after_entering_draw_mode() {
 fn the_cursor_is_an_arrow_over_the_toolbar_and_the_tools_own_elsewhere() {
     let mut a = drawing();
     let pen = center(&a, PEN);
-    assert_eq!(a.view().cursor, Cursor::Crosshair);
+    let ring = a.view().cursor;
+    assert!(matches!(ring, Cursor::Pen { .. }));
     a.handle(Event::PointerMove(pen));
     assert_eq!(a.view().cursor, Cursor::Arrow);
     a.handle(Event::PointerMove(p(10.0, 200.0)));
-    assert_eq!(a.view().cursor, Cursor::Crosshair);
+    assert_eq!(a.view().cursor, ring);
+}
+
+#[test]
+fn eraser_laser_and_select_have_their_own_cursors() {
+    let mut a = drawing();
+    key(&mut a, Key::Char('e'), false, false);
+    // The Eraser hits Elements within 8 logical px of its centre.
+    assert_eq!(a.view().cursor, Cursor::Eraser { diameter: 16 });
+    key(&mut a, Key::Char('k'), false, false);
+    assert_eq!(a.view().cursor, Cursor::Laser);
+    key(&mut a, Key::Char('v'), false, false);
+    assert_eq!(a.view().cursor, Cursor::Arrow);
 }
 
 #[test]

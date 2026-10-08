@@ -3,6 +3,7 @@
 //! This file is the event-loop glue: OS events become core events, core
 //! `View` state becomes window calls. Logic belongs in `markuli-core`.
 
+mod cursor;
 mod hotkeys;
 mod platform;
 mod settings;
@@ -21,7 +22,7 @@ use winit::event::{ElementState, KeyEvent, MouseButton, StartCause, TouchPhase, 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
-use winit::window::{CursorIcon, Theme as OsTheme, Window, WindowId};
+use winit::window::{Theme as OsTheme, Window, WindowId};
 
 /// Wake-ups sent from the hotkey and menu callbacks, so the loop never polls.
 enum UserEvent {
@@ -34,6 +35,8 @@ enum UserEvent {
 struct Overlay {
     window: Window,
     presenter: Presenter,
+    /// The mouse cursor shown over the canvas (picture built on change only).
+    cursor: platform::Shape,
 }
 
 struct App {
@@ -103,10 +106,10 @@ impl App {
             self.send_surface(platform::top_inset(monitor));
             self.core.handle(Event::SurfaceReset);
         }
-        let Some(overlay) = self.overlay.as_ref() else {
+        if self.overlay.is_none() {
             return;
-        };
-        overlay.window.set_cursor(cursor_icon(view.cursor));
+        }
+        self.show_cursor(event_loop, view.cursor);
         // First frame is painted before the window shows: no flash.
         self.redraw();
         if let Some(overlay) = self.overlay.as_ref() {
@@ -116,6 +119,21 @@ impl App {
             // Overlay to be the key window, or no key reaches it.
             overlay.window.focus_window();
         }
+    }
+
+    /// Makes `cursor` the one over the canvas. Called only when the core's
+    /// choice (Tool, color, width) or the scale changes, never per move: the
+    /// picture is drawn here, once.
+    fn show_cursor(&mut self, event_loop: &ActiveEventLoop, cursor: Cursor) {
+        self.cursor_shape = cursor;
+        let Some(overlay) = self.overlay.as_mut() else {
+            return;
+        };
+        let scale = overlay.window.scale_factor();
+        #[allow(clippy::cast_possible_truncation, reason = "scale factors are small")]
+        let image = cursor::render(cursor, scale as f32);
+        overlay.cursor = platform::Shape::new(event_loop, image.as_ref(), scale);
+        overlay.cursor.set(&overlay.window);
     }
 
     /// Tells the core the new Overlay's size and the OS theme. winit reads the
@@ -280,10 +298,7 @@ impl App {
             return;
         }
         if view.cursor != self.cursor_shape {
-            self.cursor_shape = view.cursor;
-            if let Some(overlay) = self.overlay.as_ref() {
-                overlay.window.set_cursor(cursor_icon(view.cursor));
-            }
+            self.show_cursor(event_loop, view.cursor);
         }
         if view.needs_render {
             self.redraw();
@@ -295,13 +310,6 @@ fn theme_of(theme: Option<OsTheme>) -> Theme {
     match theme {
         Some(OsTheme::Dark) => Theme::Dark,
         _ => Theme::Light,
-    }
-}
-
-fn cursor_icon(cursor: Cursor) -> CursorIcon {
-    match cursor {
-        Cursor::Arrow => CursorIcon::Default,
-        Cursor::Crosshair => CursorIcon::Crosshair,
     }
 }
 
@@ -346,7 +354,12 @@ fn create_overlay(event_loop: &ActiveEventLoop, monitor: &MonitorHandle) -> Over
         .create_window(attributes)
         .expect("failed to create the Overlay window");
     let presenter = Presenter::new(&window);
-    Overlay { window, presenter }
+    let cursor = platform::Shape::new(event_loop, None, scale);
+    Overlay {
+        window,
+        presenter,
+        cursor,
+    }
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -431,6 +444,9 @@ impl ApplicationHandler<UserEvent> for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = point(position);
+                if let Some(overlay) = self.overlay.as_ref() {
+                    overlay.cursor.keep(&overlay.window);
+                }
                 self.core.handle(self.clock());
                 self.core.handle(Event::Pressure(platform::pen_pressure()));
                 self.input(event_loop, Event::PointerMove(self.cursor));
@@ -542,7 +558,7 @@ fn main() {
         overlay: None,
         previous: None,
         cursor: Point { x: 0.0, y: 0.0 },
-        cursor_shape: Cursor::Crosshair,
+        cursor_shape: Cursor::Arrow,
         hotkeys,
         config,
         settings: None,

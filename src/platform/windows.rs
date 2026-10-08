@@ -48,6 +48,41 @@ pub const FORMAT: Format = Format::Bgra;
 /// How the Super modifier reads in the UI.
 pub const LOGO_KEY_NAME: &str = "Win";
 
+/// A mouse cursor for the Overlay: the system arrow, or a picture (winit
+/// builds the `HCURSOR`; cursor pixels are device pixels on Windows).
+pub struct Shape(winit::window::Cursor);
+
+impl Shape {
+    pub fn new(event_loop: &ActiveEventLoop, image: Option<&crate::cursor::Image>, _: f64) -> Self {
+        let custom = image.and_then(|image| {
+            // winit wants straight alpha; the picture is premultiplied.
+            let mut rgba = image.rgba.clone();
+            for px in rgba.as_chunks_mut::<4>().0 {
+                let a = u16::from(px[3]);
+                if a != 0 && a != 255 {
+                    for c in &mut px[..3] {
+                        *c = (u16::from(*c) * 255 / a).min(255) as u8;
+                    }
+                }
+            }
+            let (size, hot) = (image.size as u16, image.hotspot() as u16);
+            winit::window::CustomCursor::from_rgba(rgba, size, size, hot, hot).ok()
+        });
+        Self(match custom {
+            Some(source) => event_loop.create_custom_cursor(source).into(),
+            None => winit::window::CursorIcon::Default.into(),
+        })
+    }
+
+    pub fn set(&self, window: &Window) {
+        window.set_cursor(self.0.clone());
+    }
+
+    /// Windows keeps the cursor on its own.
+    #[allow(clippy::unused_self, reason = "same interface as macOS")]
+    pub fn keep(&self, _: &Window) {}
+}
+
 /// Windows gives the focus back to the previous window by itself when the
 /// Overlay (never active, see `window_attributes`) goes away.
 pub struct Previous;

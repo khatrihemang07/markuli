@@ -32,13 +32,17 @@ global-hotkey = { version = "0.8", default-features = false }
 # Tray icon and its Quit menu.
 tray-icon = { version = "0.26", default-features = false }
 
+[dev-dependencies]
+# PNG read/write for the cursor golden images; tests only, never linked into the app.
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # The macOS platform layer (overlay window, IOSurface layer, Settings window,
 # clipboard) talks to AppKit directly; winit exposes none of it. The objc2-*
 # crates below are the typed bindings, each limited to the classes used, with
 # default features off. Replacing them means hand-written msg_send FFI.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSEvent", "NSScreen", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSApplication", "NSButton", "NSControl", "NSTextField", "NSColor", "NSCell", "NSText", "NSPasteboard", "NSRunningApplication", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSEvent", "NSScreen", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSApplication", "NSButton", "NSControl", "NSTextField", "NSColor", "NSCell", "NSText", "NSPasteboard", "NSRunningApplication", "NSWorkspace", "NSCursor", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSArray", "NSString", "NSObject", "NSDictionary", "NSValue"] }
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "CALayer", "CATransaction"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }

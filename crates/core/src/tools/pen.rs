@@ -6,7 +6,20 @@
 use super::{Ctx, Cursor, StyleTarget, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
+use crate::style::Style;
 use crate::Key;
+
+/// Smallest ring diameter, logical px.
+const MIN_RING: u16 = 6;
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped to 0..=64 by the caller"
+)]
+fn float_to_u16(v: f32) -> u16 {
+    v as u16
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Pen {
@@ -27,8 +40,16 @@ impl Tool for Pen {
         &['p', '2', '7']
     }
 
-    fn cursor(&self) -> Cursor {
-        Cursor::Crosshair
+    /// A ring as wide as the Stroke: Excalidraw's freedraw `size` is
+    /// `strokeWidth * 4.25` and the outline is about that wide at the
+    /// simulated pressure of a mouse. Never below `MIN_RING`, which would be
+    /// hard to see.
+    fn cursor(&self, style: Style) -> Cursor {
+        let width = (style.width * 4.25).round().clamp(0.0, 64.0);
+        Cursor::Pen {
+            diameter: MIN_RING.max(float_to_u16(width)),
+            color: style.color,
+        }
     }
 
     fn styles(&self) -> StyleTarget {

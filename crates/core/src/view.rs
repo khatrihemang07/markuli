@@ -19,7 +19,7 @@ impl Annotator {
                 || self.toolbar.is_dirty(self.draw_mode, self.ui())
                 || self.panel.is_dirty(self.panel_view()),
             cursor: match self.tools.get(self.tools.active()) {
-                Some(tool) if !over_toolbar => tool.cursor(),
+                Some(tool) if !over_toolbar => tool.cursor(self.style),
                 _ => Cursor::Arrow,
             },
             tool: self.tools.active_kind(),

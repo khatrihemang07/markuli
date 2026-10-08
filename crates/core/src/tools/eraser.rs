@@ -10,10 +10,14 @@
 use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Element, Point};
+use crate::style::Style;
 use crate::Key;
 
 /// Excalidraw's `DEFAULT_COLLISION_THRESHOLD` (2 * 4 - epsilon), in logical px.
 const THRESHOLD: f32 = 8.0 - 0.00001;
+
+/// The cursor circle: the reach `THRESHOLD`, both sides, in logical px.
+const ERASER_DIAMETER: u16 = 16;
 
 #[derive(Debug, Default)]
 pub(crate) struct Eraser {
@@ -48,8 +52,10 @@ impl Tool for Eraser {
         &['e', '3', '0']
     }
 
-    fn cursor(&self) -> Cursor {
-        Cursor::Crosshair
+    fn cursor(&self, _: Style) -> Cursor {
+        Cursor::Eraser {
+            diameter: ERASER_DIAMETER,
+        }
     }
 
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {

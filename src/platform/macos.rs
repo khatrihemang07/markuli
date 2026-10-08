@@ -3,14 +3,15 @@
 use markuli_core::{Damage, Format};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
-use objc2::{msg_send, sel, MainThreadMarker};
+use objc2::{msg_send, sel, AnyThread, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationOptions, NSEvent, NSEventSubtype, NSEventType,
-    NSPasteboard, NSPasteboardTypeString, NSRunningApplication, NSScreen, NSScreenSaverWindowLevel,
-    NSView, NSWindowCollectionBehavior, NSWorkspace,
+    NSApplication, NSApplicationActivationOptions, NSBitmapImageRep, NSCursor,
+    NSDeviceRGBColorSpace, NSEvent, NSEventSubtype, NSEventType, NSImage, NSPasteboard,
+    NSPasteboardTypeString, NSRunningApplication, NSScreen, NSScreenSaverWindowLevel, NSView,
+    NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{ns_string, NSDictionary, NSNumber, NSString};
+use objc2_foundation::{ns_string, NSDictionary, NSNumber, NSPoint, NSSize, NSString};
 use objc2_quartz_core::{CALayer, CATransaction};
 use std::ffi::c_void;
 use std::path::PathBuf;
@@ -100,6 +101,73 @@ pub fn top_inset(monitor: &MonitorHandle) -> u32 {
     )]
     let physical = (points * scale).round() as u32;
     physical
+}
+
+/// A mouse cursor for the Overlay: the system arrow, or a picture.
+///
+/// winit's custom cursors take image pixels as points, so on a 2x display a
+/// 2x picture would show twice as large; an `NSCursor` of our own has the size
+/// in points and the 2x pixels, so rings stay crisp.
+pub struct Shape(Retained<NSCursor>);
+
+impl Shape {
+    pub fn new(_: &ActiveEventLoop, image: Option<&crate::cursor::Image>, scale: f64) -> Self {
+        Self(
+            image
+                .and_then(|i| cursor_from(i, scale))
+                .unwrap_or_else(NSCursor::arrowCursor),
+        )
+    }
+
+    /// Makes it the cursor now.
+    pub fn set(&self, _: &Window) {
+        self.0.set();
+    }
+
+    /// Called on every pointer move: `AppKit` may have put another cursor back
+    /// (entering the window, the app being activated).
+    pub fn keep(&self, window: &Window) {
+        self.set(window);
+    }
+}
+
+fn cursor_from(image: &crate::cursor::Image, scale: f64) -> Option<Retained<NSCursor>> {
+    let pixels = isize::try_from(image.size).ok()?;
+    // SAFETY: a fresh bitmap that owns its own buffer (null planes); the
+    // arguments describe 8-bit RGBA, tightly packed.
+    let rep = unsafe {
+        NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
+            NSBitmapImageRep::alloc(),
+            ptr::null_mut(),
+            pixels,
+            pixels,
+            8,
+            4,
+            true,
+            false,
+            NSDeviceRGBColorSpace,
+            pixels * 4,
+            32,
+        )
+    }?;
+    // SAFETY: the bitmap has `size * size * 4` bytes of its own, which is
+    // `image.rgba.len()`, and nothing else touches them yet. The data is
+    // premultiplied, which is what a bitmap without the non-premultiplied
+    // flag expects.
+    unsafe {
+        core::slice::from_raw_parts_mut(rep.bitmapData(), image.rgba.len())
+            .copy_from_slice(&image.rgba);
+    }
+    let points = f64::from(image.size) / scale;
+    rep.setSize(NSSize::new(points, points));
+    let picture = NSImage::initWithSize(NSImage::alloc(), NSSize::new(points, points));
+    picture.addRepresentation(&rep);
+    let hot = (f64::from(image.hotspot()) + 0.5) / scale;
+    Some(NSCursor::initWithImage_hotSpot(
+        NSCursor::alloc(),
+        &picture,
+        NSPoint::new(hot, hot),
+    ))
 }
 
 /// The app that was frontmost before the Overlay took the focus.
@@ -226,6 +294,9 @@ impl Presenter {
         ns_window.setLevel(NSScreenSaverWindowLevel);
         ns_window.setOpaque(false);
         ns_window.setHasShadow(false);
+        // The Overlay sets its own cursor (`Shape`); winit's cursor rect would
+        // put its stock cursor back whenever AppKit refreshes the rects.
+        ns_window.disableCursorRects();
 
         // A layer-hosting view: our own layer, set before `wantsLayer`. A
         // view-owned layer gets its contents reset by AppKit's first display

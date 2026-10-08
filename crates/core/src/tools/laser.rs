@@ -6,6 +6,7 @@
 use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::Point;
+use crate::style::Style;
 use crate::Key;
 
 #[derive(Debug, Default)]
@@ -27,8 +28,8 @@ impl Tool for LaserTool {
         &['k', '4']
     }
 
-    fn cursor(&self) -> Cursor {
-        Cursor::Crosshair
+    fn cursor(&self, _: Style) -> Cursor {
+        Cursor::Laser
     }
 
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {

@@ -13,6 +13,7 @@ use super::{Ctx, Cursor, StyleTarget, Tool, ToolKind};
 use crate::icons::{self, Icon};
 use crate::ink::{Point, Rect};
 use crate::selection::{encloses, normalized};
+use crate::style::Style;
 use crate::Key;
 
 /// Excalidraw's `DEFAULT_COLLISION_THRESHOLD`, logical pixels.
@@ -58,7 +59,7 @@ impl Tool for Select {
         &['v', '1']
     }
 
-    fn cursor(&self) -> Cursor {
+    fn cursor(&self, _: Style) -> Cursor {
         Cursor::Arrow
     }
 

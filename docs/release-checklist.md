@@ -37,6 +37,7 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 - [ ] With a real mouse, every Stroke appears while it is drawn, not only the first one (ADR-0003). Screenshots read the surface memory and can look right while the screen is stale: check with your eyes.
 - [ ] The Clear hotkey (`Alt+1`) and the toolbar Clear button remove all Ink and stay in Draw Mode; Cmd/Ctrl+Z brings the Ink back. Outside Draw Mode `Alt+1` clears the hidden Ink and no Overlay appears (7).
 - [ ] Leaving Draw Mode gives the focus back to the app and window that had it: type at once, without a click (B1). Tool keys work right after entering, with no click: `V`/`1` Select, `P`/`2` Pen, `E`/`3` Eraser, `K`/`4` Laser (`7` Pen and `0` Eraser still work); after another app took focus, one click on the Overlay brings them back. The toolbar shows no number hints.
+- [ ] The cursor shows what the Tool does: Pen = a ring as wide as the stroke in the current color with a center dot (changes with the style panel's color and width), Eraser = a white hollow circle, Laser = a red dot with a glow, Select and the toolbar = the system arrow. Crisp on a Retina display. Pressing `P`, `E`, `V` or `K` again keeps the Tool (no toggling back).
 - [ ] Hovering the style panel and toolbar in Draw Mode never makes them blink (ADR-0003: each damaged region is composed off-screen and copied once).
 - [ ] Toggling on a second display moves the Overlay there and starts with no Ink (8).
 - [ ] The Overlay is absent from the Dock/taskbar, Alt-Tab / Cmd-Tab and Mission Control (9).

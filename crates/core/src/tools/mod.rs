@@ -21,11 +21,21 @@ use crate::style::Style;
 use crate::Key;
 use std::fmt::Debug;
 
-/// The mouse cursor shape the platform layer should show.
+/// The mouse cursor the platform layer should show.
+///
+/// The core decides what the cursor shows (a drawing Tool's cursor says what
+/// it will do), the platform layer draws it. Sizes are logical pixels: the
+/// platform multiplies them by the display scale.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cursor {
+    /// The system arrow.
     Arrow,
-    Crosshair,
+    /// A ring as wide as the Stroke the Pen draws, in its color.
+    Pen { diameter: u16, color: [u8; 3] },
+    /// A hollow circle as wide as the Eraser's reach.
+    Eraser { diameter: u16 },
+    /// A small red dot with a soft glow.
+    Laser,
 }
 
 /// Which Tool is active, for the platform layer and tests (the registry
@@ -96,7 +106,8 @@ pub(crate) trait Tool: Debug {
     /// Lowercase keys that select this Tool: a letter, its toolbar position
     /// as a digit (1-4) and any Excalidraw digit.
     fn keys(&self) -> &'static [char];
-    fn cursor(&self) -> Cursor;
+    /// The cursor over the canvas; `style` is the style of the next Strokes.
+    fn cursor(&self, style: Style) -> Cursor;
     /// What the style panel applies to while this Tool is active.
     fn styles(&self) -> StyleTarget {
         StyleTarget::None
@@ -205,7 +216,7 @@ mod tests {
         fn keys(&self) -> &'static [char] {
             &['k', '9']
         }
-        fn cursor(&self) -> Cursor {
+        fn cursor(&self, _: Style) -> Cursor {
             Cursor::Arrow
         }
         fn pointer_down(&mut self, _: &mut Ctx<'_>, _: Point) {}
