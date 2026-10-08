@@ -66,13 +66,25 @@ impl Area {
     }
 }
 
-/// The toolbar's geometry for one Overlay size and Tool count.
+/// Colours and widths in the row: the palette and the width presets.
+pub(super) const COLORS: usize = 5;
+pub(super) const WIDTHS: usize = 3;
+/// Undo, redo, Clear.
+const ACTIONS: usize = 3;
+const ISLANDS: usize = 4;
+
+/// Buttons in the row for `tools` Tools.
+pub(super) fn count(tools: usize) -> usize {
+    tools + COLORS + WIDTHS + ACTIONS
+}
+
+/// The toolbar's geometry for one Overlay size and Tool count: four islands
+/// (Tools, colours, widths, actions) in one row.
 pub(super) struct Layout {
     x0: f32,
     top: f32,
     pub scale: f32,
-    tools: usize,
-    first_width: f32,
+    sizes: [usize; ISLANDS],
 }
 
 fn island_width(n: usize) -> f32 {
@@ -83,61 +95,87 @@ impl Layout {
     /// `width` is the Overlay width in physical pixels, `top` the physical
     /// pixels at the top that belong to the OS.
     pub fn new(width: f32, scale: f32, top: f32, tools: usize) -> Self {
-        let first_width = island_width(tools);
-        let total = first_width + ISLAND_GAP + island_width(3);
+        let sizes = [tools, COLORS, WIDTHS, ACTIONS];
+        let total: f32 = sizes.iter().map(|&n| island_width(n)).sum::<f32>()
+            + ISLAND_GAP * to_f32_usize(ISLANDS - 1);
         Self {
             x0: ((width / scale - total) / 2.0).max(0.0),
             top,
             scale,
-            tools,
-            first_width,
+            sizes,
         }
     }
 
+    /// Logical x of the left edge of island `g`.
+    fn island_x(&self, g: usize) -> f32 {
+        let before = self.sizes.iter().take(g);
+        self.x0 + before.map(|&n| island_width(n) + ISLAND_GAP).sum::<f32>()
+    }
+
     pub fn button_rect(&self, i: usize) -> Area {
-        let (offset, j) = if i < self.tools {
-            (PAD, i)
-        } else {
-            (self.first_width + ISLAND_GAP + PAD, i - self.tools)
-        };
+        let (mut g, mut j) = (0, i);
+        while g + 1 < ISLANDS && j >= self.sizes[g] {
+            j -= self.sizes[g];
+            g += 1;
+        }
         let s = self.scale;
         Area {
-            x: (self.x0 + offset + to_f32_usize(j) * (BUTTON + GAP)) * s,
+            x: (self.island_x(g) + PAD + to_f32_usize(j) * (BUTTON + GAP)) * s,
             y: (TOP + PAD) * s + self.top,
             w: BUTTON * s,
             h: BUTTON * s,
         }
     }
 
-    pub fn islands(&self) -> [Area; 2] {
+    pub fn islands(&self) -> [Area; ISLANDS] {
         let s = self.scale;
         let height = (2.0 * PAD + BUTTON) * s;
-        let island = |x: f32, n: usize| Area {
-            x: x * s,
+        std::array::from_fn(|g| Area {
+            x: self.island_x(g) * s,
             y: TOP * s + self.top,
-            w: island_width(n) * s,
+            w: island_width(self.sizes[g]) * s,
             h: height,
-        };
-        [
-            island(self.x0, self.tools),
-            island(self.x0 + self.first_width + ISLAND_GAP, 3),
-        ]
+        })
     }
 
     /// Islands plus shadow: the area a repaint covers.
     pub fn region(&self) -> Area {
-        let [a, b] = self.islands();
-        a.union(&b).grow(SHADOW.map(|v| v * self.scale))
+        let [first, rest @ ..] = self.islands();
+        rest.iter()
+            .fold(first, |all, r| all.union(r))
+            .grow(SHADOW.map(|v| v * self.scale))
     }
 }
 
-/// The i-th button of a toolbar with `tools` Tools.
+/// The i-th button of a toolbar with `tools` Tools: Tools, colours, widths,
+/// then undo, redo and Clear.
 pub(super) fn button(i: usize, tools: usize) -> Button {
-    match i.checked_sub(tools) {
-        None => Button::Tool(i),
-        Some(0) => Button::Undo,
-        Some(1) => Button::Redo,
-        Some(_) => Button::Clear,
+    let Some(i) = i.checked_sub(tools) else {
+        return Button::Tool(i);
+    };
+    match i {
+        0..COLORS => Button::Color(i),
+        _ => match i - COLORS {
+            j @ 0..WIDTHS => Button::Width(j),
+            j => match j - WIDTHS {
+                0 => Button::Undo,
+                1 => Button::Redo,
+                _ => Button::Clear,
+            },
+        },
+    }
+}
+
+/// The position of `button` in the row, if there is such a button.
+#[cfg(feature = "test-support")]
+pub(super) fn index_of(button: Button, tools: usize) -> Option<usize> {
+    match button {
+        Button::Tool(i) => (i < tools).then_some(i),
+        Button::Color(i) => (i < COLORS).then_some(tools + i),
+        Button::Width(i) => (i < WIDTHS).then_some(tools + COLORS + i),
+        Button::Undo => Some(tools + COLORS + WIDTHS),
+        Button::Redo => Some(tools + COLORS + WIDTHS + 1),
+        Button::Clear => Some(tools + COLORS + WIDTHS + 2),
     }
 }
 

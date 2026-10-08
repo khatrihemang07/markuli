@@ -1,7 +1,6 @@
 //! Event routing: how each [`Event`] changes the Annotator's state, and the
 //! gestures behind pointer, key and toolbar input.
 
-use crate::panel::Press;
 use crate::style;
 use crate::style::Appearance;
 use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
@@ -17,18 +16,15 @@ impl Annotator {
             Event::SurfaceReset => self.paint.full(),
             Event::Resize { width, height } => {
                 self.toolbar.resize(width, height);
-                self.panel.resize(width, height);
                 self.paint.full();
             }
             Event::Insets { top } => {
                 self.toolbar.set_top(top);
-                self.panel.set_top(top);
                 self.paint.full();
             }
             Event::Style(style) => self.style = self.style.with_style(style),
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
-                self.panel.theme = theme;
                 self.selection.set_theme(theme);
             }
             Event::Modifiers { shift } => self.shift = shift,
@@ -36,7 +32,6 @@ impl Annotator {
             Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
                 self.scale = scale;
                 self.toolbar.set_scale(scale);
-                self.panel.set_scale(scale);
                 self.paint.full();
             }
             Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
@@ -56,7 +51,7 @@ impl Annotator {
         self.view()
     }
 
-    /// A style choice, from a key or a panel click. The active Tool's
+    /// A style choice, from a key or a Toolbar click. The active Tool's
     /// [`StyleTarget`] decides, never its kind: a Selection is restyled, the
     /// next Strokes take the Style, and a Tool with neither hands over to the
     /// Pen first.
@@ -78,13 +73,13 @@ impl Annotator {
         }
     }
 
-    /// A key is a single action: the restyle is logged right away.
+    /// A key or click is a single action: the restyle is logged right away.
     fn choose_by_key(&mut self, change: impl Fn(Appearance) -> Appearance) {
         self.choose(change);
         self.finish_restyle();
     }
 
-    /// The panel gesture ended: a restyle becomes one operation-log entry.
+    /// A choice is a single action: a restyle becomes one operation-log entry.
     fn finish_restyle(&mut self) {
         style::finish(self.restyling.take(), &self.ink, &mut self.history);
     }
@@ -116,7 +111,6 @@ impl Annotator {
         let (tool, mut ctx) = self.tool();
         tool.finish(&mut ctx);
         self.finish_restyle();
-        self.panel.release();
     }
 
     fn pointer_down(&mut self, at: Point) {
@@ -124,38 +118,20 @@ impl Annotator {
         if self.toolbar.press_at(at, self.tools.len()) {
             return;
         }
-        if self.panel_view().is_some() {
-            match self.panel.press_at(at) {
-                Press::Miss => {}
-                Press::Dead => return,
-                Press::Control(control) => {
-                    self.choose(|look| look.with(control));
-                    return;
-                }
-            }
-        }
         let (tool, mut ctx) = self.tool();
         tool.pointer_down(&mut ctx, at);
     }
 
     fn pointer_move(&mut self, at: Point) {
         self.toolbar.hover_at(at, self.tools.len());
-        if self.panel.pressing() || self.panel_view().is_some() {
-            self.panel.hover_at(at);
-        } else {
-            self.panel.forget_pointer();
-        }
-        if !self.toolbar.pressing() && !self.panel.pressing() {
+        if !self.toolbar.pressing() {
             let (tool, mut ctx) = self.tool();
             tool.pointer_move(&mut ctx, at);
         }
     }
 
     fn pointer_up(&mut self, at: Point) {
-        if self.panel.pressing() {
-            self.panel.release();
-            self.finish_restyle();
-        } else if self.toolbar.pressing() {
+        if self.toolbar.pressing() {
             if let Some(button) = self.toolbar.release_at(at, self.tools.len()) {
                 self.activate(button);
             }
@@ -170,6 +146,8 @@ impl Annotator {
     fn activate(&mut self, button: Button) {
         match button {
             Button::Tool(index) => self.switch_tool(|tools| tools.select(index)),
+            Button::Color(i) => self.choose_by_key(|look| look.with(Control::Color(i))),
+            Button::Width(i) => self.choose_by_key(|look| look.with(Control::Width(i))),
             Button::Undo => self.undo(),
             Button::Redo => self.redo(),
             Button::Clear => self.clear(),
@@ -184,7 +162,7 @@ impl Annotator {
         match (key, command, shift) {
             // Undo, redo and switching wait for the Stroke to end: it is not
             // logged yet.
-            (Key::Char(_), _, _) if self.tool_busy() || self.panel.pressing() => {}
+            (Key::Char(_), _, _) if self.tool_busy() => {}
             // A style choice would change the Style under the press.
             (Key::Char('1'..='5' | '[' | ']'), false, _) if self.toolbar.pressing() => {}
             (Key::Char('z'), true, false) => self.undo(),
@@ -259,7 +237,6 @@ impl Annotator {
     fn toggle(&mut self, display: DisplayId) {
         self.finish_gesture();
         self.toolbar.forget_pointer();
-        self.panel.forget_pointer();
         self.selection.clear();
         if self.draw_mode {
             self.draw_mode = false;

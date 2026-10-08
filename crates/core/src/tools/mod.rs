@@ -48,14 +48,15 @@ pub enum ToolKind {
     Laser,
 }
 
-/// What the style panel does while a Tool is active.
+/// What the colour and width buttons do while a Tool is active.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StyleTarget {
-    /// No panel: the Tool draws nothing styled.
+    /// The Tool draws nothing styled: the buttons are dimmed, and a click
+    /// hands over to the Pen.
     None,
-    /// The panel styles the Strokes the Tool draws next.
+    /// The buttons style the Strokes the Tool draws next.
     NextStrokes,
-    /// The panel styles the Selection, and shows only when there is one.
+    /// The buttons style the Selection when there is one.
     Selection,
 }
 
@@ -113,7 +114,7 @@ pub(crate) trait Tool: Debug {
     }
     /// The cursor over the canvas; `style` is the style of the next Strokes.
     fn cursor(&self, style: Appearance) -> Cursor;
-    /// What the style panel applies to while this Tool is active.
+    /// What the colour and width buttons apply to while this Tool is active.
     fn styles(&self) -> StyleTarget {
         StyleTarget::None
     }

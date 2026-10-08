@@ -32,21 +32,22 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 
 - [ ] Default hotkey `Alt+`` enters Draw Mode on the display under the cursor (1, 2). Try with the cursor on each display.
 - [ ] The Overlay is ready immediately; the first Stroke is not lost (3).
-- [ ] The same hotkey leaves Draw Mode: the toolbar, style panel and Ink all disappear at once, on the real display, not just in a screenshot (4, 5). Entering Draw Mode again on the same display shows the same Ink and undo history.
+- [ ] The same hotkey leaves Draw Mode: the Toolbar and Ink all disappear at once, on the real display, not just in a screenshot (4, 5). Entering Draw Mode again on the same display shows the same Ink and undo history.
 - [ ] Outside Draw Mode there is no Overlay: clicks, scrolls and keystrokes reach the app underneath (6).
 - [ ] With a real mouse, every Stroke appears while it is drawn, not only the first one (ADR-0003). Screenshots read the surface memory and can look right while the screen is stale: check with your eyes.
 - [ ] The Clear hotkey (`Alt+1`) and the toolbar Clear button remove all Ink and stay in Draw Mode; Cmd/Ctrl+Z brings the Ink back. Outside Draw Mode `Alt+1` clears the hidden Ink and no Overlay appears (7).
 - [ ] Leaving Draw Mode gives the focus back to the app and window that had it: type at once, without a click (B1). Tool keys work right after entering, with no click: `V` Select, `P` Pen, `E` Eraser, `K` Laser (`7` Pen and `0` Eraser still work; digits `1`-`4` no longer choose Tools); after another app took focus, one click on the Overlay brings them back. The toolbar shows no number hints.
-- [ ] The cursor shows what the Tool does: Pen = a marker whose nib is in the current color and widens thin/medium/bold, with a dot exactly as wide as the stroke under its tip (a stroke starts exactly under the dot; both follow the style panel), Eraser = a pink and white eraser block touching the pointer with its corner, Laser = a red ring with a center dot, Select and the toolbar = the system arrow. Crisp on a Retina display. `P` and `E` (and `7`, `0`) toggle between Pen and Eraser (the key of the active Tool switches to the other); `V` and `K` only select; toolbar clicks never toggle.
+- [ ] The cursor shows what the Tool does: Pen = a marker whose nib is in the current color and widens thin/medium/bold, with a dot exactly as wide as the stroke under its tip (a stroke starts exactly under the dot; both follow the chosen colour and width), Eraser = a pink and white eraser block touching the pointer with its corner, Laser = a red ring with a center dot, Select and the toolbar = the system arrow. Crisp on a Retina display. `P` and `E` (and `7`, `0`) toggle between Pen and Eraser (the key of the active Tool switches to the other); `V` and `K` only select; toolbar clicks never toggle.
 - [ ] Style keys: `1`-`5` pick black, red, green, blue, yellow and `[`/`]` step thin/medium/bold (stopping at the ends); `6`, `8`, `9` do nothing. From Eraser, Laser or an empty Select they switch to the Pen; with a Selection they restyle it as one undo step and leave the Style alone. They are ignored mid-Stroke, with Cmd/Ctrl held, and (digits only) with Alt held; `[`/`]` still work with Alt/Option.
-- [ ] Hovering the style panel and toolbar in Draw Mode never makes them blink (ADR-0003: each damaged region is composed off-screen and copied once).
+- [ ] One Toolbar row, in this order: Tools, 5 colours, 3 widths, undo/redo/Clear, about 580 px wide and centred; it never moves or resizes when the Tool or Selection changes. The current colour and width are highlighted (neither for a Selection with mixed values). With the Eraser, Laser or an empty Select the colours and widths look dimmed but a click still works, like its key (it switches to the Pen). A press on any Toolbar button never starts a Stroke; the cursor is the arrow over it. There is no separate style panel, at any window width.
+- [ ] Hovering the Toolbar in Draw Mode never makes it blink (ADR-0003: each damaged region is composed off-screen and copied once).
 - [ ] Toggling on a second display moves the Overlay there and starts with no Ink (8).
 - [ ] The Overlay is absent from the Dock/taskbar, Alt-Tab / Cmd-Tab and Mission Control (9).
 - [ ] macOS: toggling over a full-screen app does not create or switch Spaces (10).
 - [ ] The Overlay is above normal windows (11).
 - [ ] The Overlay covers the display and Ink lines up with what is under the cursor, including the menu bar / taskbar areas, on a Retina or scaled (125%, 150%) display (12).
 - [ ] Esc in Draw Mode never clears Ink (13).
-- [ ] Pen, style panel, Eraser, Laser, Select, toolbar, undo/redo and copy to Excalidraw: check against their own tickets (stories 14-43).
+- [ ] Pen, Eraser, Laser, Select, toolbar, undo/redo and copy to Excalidraw: check against their own tickets (stories 14-43).
 
 ## 3. Settings (stories 44-50)
 
@@ -59,7 +60,7 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 - [ ] Choosing the Clear combo for Toggle (or the reverse) is refused with a message.
 - [ ] Quit and relaunch: the new hotkeys, and the launch-at-login checkbox, are remembered (49). The `config` file is plain `key=value` and holds nothing else; edit it to garbage and relaunch: the app still starts with defaults.
 - [ ] Launch at login: tick the box, **log out and in (or reboot)**: Markuli is running (46). macOS: `~/Library/LaunchAgents/com.markuli.app.plist` exists. Windows: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `Markuli` value. Untick: the file / value is gone and Markuli no longer starts.
-- [ ] Style is remembered: in Draw Mode pick a colour and a width (Pen), leave Draw Mode, quit and relaunch, enter Draw Mode: the style panel and the next Stroke use them. The `config` file gains `color=<0..4>` and `width=<0..2>`; set `color=9` by hand and relaunch: red (the default) is used. The file is rewritten only when the style changes (check its modified time while only drawing).
+- [ ] Style is remembered: in Draw Mode pick a colour and a width (Pen), leave Draw Mode, quit and relaunch, enter Draw Mode: the Toolbar highlights them and the next Stroke uses them. The `config` file gains `color=<0..4>` and `width=<0..2>`; set `color=9` by hand and relaunch: red (the default) is used. The file is rewritten only when the style changes (check its modified time while only drawing).
 - [ ] Close Settings: the window is gone and memory is back at the idle level of section 1 (50).
 
 ## 4. Privacy and permissions (story 55)

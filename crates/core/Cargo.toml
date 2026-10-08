@@ -8,8 +8,7 @@ publish = false
 workspace = true
 
 [features]
-# Layout locators (`button_center`, `panel_center`) for tests that click the
-# toolbar and style panel. Enabled only through the dev-dependency below, so
+# The layout locator (`button_center`) for tests that click the Toolbar. Enabled only through the dev-dependency below, so
 # release builds do not contain them (standards rule 2).
 test-support = []
 

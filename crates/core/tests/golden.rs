@@ -8,7 +8,8 @@ use markuli_core::{Annotator, Button, DisplayId, Event, Format, Key, Point, Them
 use std::path::PathBuf;
 use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
 
-const W: u32 = 360;
+/// Wide enough for the one-row Toolbar (about 580 logical px).
+const W: u32 = 640;
 const H: u32 = 150;
 
 fn p(x: f32, y: f32) -> Point {
@@ -90,13 +91,13 @@ fn dark_page() -> Color {
 
 #[test]
 fn toolbar_light_theme() {
-    let mut a = scene(Theme::Light, 2.0);
+    let mut a = scene(Theme::Light, 1.0);
     check("toolbar_light", &image(&mut a, WHITE_PAGE));
 }
 
 #[test]
 fn toolbar_dark_theme() {
-    let mut a = scene(Theme::Dark, 2.0);
+    let mut a = scene(Theme::Dark, 1.0);
     check("toolbar_dark", &image(&mut a, dark_page()));
 }
 
@@ -216,4 +217,47 @@ fn eraser_drag_draws_the_marked_stroke_faded() {
     a.handle(Event::PointerDown(p(120.0, 100.0)));
     a.handle(Event::PointerMove(p(122.0, 101.0)));
     check("eraser_pending", &image(&mut a, WHITE_PAGE));
+}
+
+#[test]
+fn toolbar_highlights_nothing_for_a_selection_of_mixed_values() {
+    let mut a = scene(Theme::Light, 1.0);
+    // A red medium stroke, then a blue bold one; both selected.
+    a.handle(Event::PointerDown(p(30.0, 80.0)));
+    a.handle(Event::PointerMove(p(80.0, 110.0)));
+    a.handle(Event::PointerUp(p(130.0, 85.0)));
+    key(&mut a, '4');
+    key(&mut a, ']');
+    a.handle(Event::PointerDown(p(200.0, 120.0)));
+    a.handle(Event::PointerMove(p(250.0, 90.0)));
+    a.handle(Event::PointerUp(p(320.0, 130.0)));
+    key(&mut a, 'v');
+    a.handle(Event::PointerDown(p(80.0, 110.0)));
+    a.handle(Event::PointerUp(p(80.0, 110.0)));
+    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::PointerDown(p(250.0, 90.0)));
+    a.handle(Event::PointerUp(p(250.0, 90.0)));
+    assert_eq!(a.selection().len(), 2);
+    check("toolbar_light_mixed_selection", &image(&mut a, WHITE_PAGE));
+}
+
+#[test]
+fn toolbar_dims_colours_and_widths_for_the_eraser() {
+    let mut a = scene(Theme::Dark, 1.0);
+    stroke(&mut a);
+    key(&mut a, 'e');
+    check("toolbar_dark_eraser_dimmed", &image(&mut a, dark_page()));
+}
+
+#[test]
+fn toolbar_highlights_the_chosen_colour_and_width_in_both_themes() {
+    for (theme, page, name) in [
+        (Theme::Light, WHITE_PAGE, "toolbar_light_blue_bold"),
+        (Theme::Dark, dark_page(), "toolbar_dark_blue_bold"),
+    ] {
+        let mut a = scene(theme, 1.0);
+        key(&mut a, '4');
+        key(&mut a, ']');
+        check(name, &image(&mut a, page));
+    }
 }

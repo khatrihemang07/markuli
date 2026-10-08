@@ -1,4 +1,4 @@
-//! Theme tokens and the shapes the toolbar and the style panel share:
+//! Theme tokens and the shapes the toolbar paints with:
 //! shadow, solid paints and rounded rectangles.
 
 use super::layout::Area;
@@ -16,7 +16,7 @@ pub enum Theme {
     Dark,
 }
 
-/// Excalidraw's theme tokens, shared with the style panel.
+/// Excalidraw's theme tokens, for the whole row.
 pub(crate) struct Tokens {
     pub island: [u8; 3],
     pub icon: [u8; 3],

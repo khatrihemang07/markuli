@@ -70,8 +70,9 @@ fn alpha(buf: &[u8], at: Point) -> u8 {
 fn the_toolbar_is_drawn_in_draw_mode_and_hidden_outside_it() {
     let mut a = drawing();
     let pen = center(&a, PEN);
-    // Centred at the top of the Overlay.
-    assert!((pen.x - W as f32 / 2.0).abs() < 200.0 && pen.y < 80.0);
+    // The row (about 580 px) is centred at the top of the Overlay.
+    let (first, last) = (center(&a, Button::Tool(0)), center(&a, Button::Clear));
+    assert!((f32::midpoint(first.x, last.x) - W as f32 / 2.0).abs() < 1.0 && pen.y < 80.0);
     assert_eq!(alpha(&pixels(&mut a), pen), 255);
 
     stroke(&mut a, 20.0); // Ink keeps the Overlay alive after leaving Draw Mode.

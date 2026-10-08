@@ -1,7 +1,8 @@
 //! The Excalidraw-style toolbar: state and hit-testing.
 //!
-//! Two islands at the top centre of the Overlay, in Draw Mode only: the
-//! Tool buttons, then undo, redo and Clear. Metrics and colours are
+//! One row at the top centre of the Overlay, in Draw Mode only, in four
+//! islands: the Tool buttons, the five colours, the three widths, then undo,
+//! redo and Clear. Metrics and colours are
 //! Excalidraw's stock theme (`theme.scss`, `ToolIcon.scss`, `Island.scss`),
 //! in logical pixels times the Overlay's scale factor. Deviation: the shadow
 //! is a stack of rounded rectangles instead of a blur, and there is no
@@ -15,19 +16,20 @@ mod paint;
 mod theme;
 
 use crate::ink::Point;
-use crate::panel::{Panel, PanelView};
-use crate::render::{Canvas, Format};
 use crate::tools::Tools;
 use layout::Layout;
 
 pub(crate) use layout::Area;
 pub use theme::Theme;
-pub(crate) use theme::{fill_rounded, rounded_rect, shadow, solid_paint};
 
 /// A toolbar button. `Tool(i)` is the i-th registered Tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Button {
     Tool(usize),
+    /// The i-th colour of the palette.
+    Color(usize),
+    /// The i-th width: thin, medium, bold.
+    Width(usize),
     Undo,
     Redo,
     Clear,
@@ -35,11 +37,22 @@ pub enum Button {
 
 /// What decides how the toolbar looks besides the Toolbar's own state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "a plain snapshot of independent button states, compared whole"
+)]
 pub(crate) struct UiState {
     pub active: usize,
     pub can_undo: bool,
     pub can_redo: bool,
     pub has_ink: bool,
+    /// The chosen colour and width (palette and preset indices); `None` when
+    /// a Selection mixes values.
+    pub color: Option<usize>,
+    pub width: Option<usize>,
+    /// The active Tool styles nothing: colours and widths are shown dimmed
+    /// (a click still works: it hands over to the Pen).
+    pub dimmed: bool,
 }
 
 /// Everything painted last time; a difference means a repaint is due.
@@ -146,7 +159,7 @@ impl Toolbar {
 
     pub fn hit(&self, at: Point, tools: usize) -> Option<Hit> {
         let l = self.layout(tools)?;
-        for i in 0..tools + 3 {
+        for i in 0..layout::count(tools) {
             if l.button_rect(i).contains(at) {
                 return Some(Hit::Button(layout::button(i, tools)));
             }
@@ -160,14 +173,7 @@ impl Toolbar {
     #[cfg(feature = "test-support")]
     pub fn center_of(&self, button: Button, tools: usize) -> Option<Point> {
         let l = self.layout(tools)?;
-        let i = match button {
-            Button::Tool(i) if i < tools => i,
-            Button::Tool(_) => return None,
-            Button::Undo => tools,
-            Button::Redo => tools + 1,
-            Button::Clear => tools + 2,
-        };
-        let r = l.button_rect(i);
+        let r = l.button_rect(layout::index_of(button, tools)?);
         Some(Point {
             x: r.x + r.w / 2.0,
             y: r.y + r.h / 2.0,
@@ -199,33 +205,9 @@ pub(crate) struct Chrome<'a> {
     pub tools: &'a Tools,
     pub visible: bool,
     pub ui: UiState,
-    /// The style panel, and what it shows (`None`: hidden).
-    pub panel: &'a mut Panel,
-    pub panel_view: Option<PanelView>,
 }
 
 impl Chrome<'_> {
-    /// Where the style panel is on screen right now, if it is shown.
-    pub fn panel_region(&self) -> Option<Area> {
-        self.panel_view.map(|_| self.panel.region())
-    }
-
-    /// The region the style panel painted last (to clear it when it moves
-    /// away or changes).
-    pub fn panel_shown(&self) -> Option<Area> {
-        self.panel.shown()
-    }
-
-    pub fn panel_dirty(&self) -> bool {
-        self.panel.is_dirty(self.panel_view)
-    }
-
-    pub fn paint_panel(&self, target: &mut Canvas<'_, '_>, format: Format) {
-        if let Some(view) = self.panel_view {
-            self.panel.paint(view, target, format);
-        }
-    }
-
     /// Where the toolbar is on screen right now, if it is shown.
     pub fn region(&self) -> Option<Area> {
         if self.visible {
@@ -242,6 +224,5 @@ impl Chrome<'_> {
     /// Records what is now on screen.
     pub fn done(&mut self) {
         self.toolbar.painted = self.toolbar.look(self.visible, self.ui);
-        self.panel.done(self.panel_view);
     }
 }

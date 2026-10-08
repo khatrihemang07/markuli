@@ -1,4 +1,4 @@
-//! Seam 1: the toolbar and the style panel lay out below the display's top
+//! Seam 1: the Toolbar lays out below the display's top
 //! inset (macOS menu bar and notch, Windows work area), while Ink can still be
 //! drawn anywhere.
 
@@ -10,7 +10,7 @@
     reason = "test pixel coordinates are small and positive"
 )]
 
-use markuli_core::{Annotator, Button, Control, DisplayId, Event, Format, Point};
+use markuli_core::{Annotator, Button, DisplayId, Event, Format, Point};
 use tiny_skia::Pixmap;
 
 const W: u32 = 1600;
@@ -47,13 +47,16 @@ fn top_alpha(pm: &Pixmap, rows: u32) -> u8 {
 }
 
 #[test]
-fn toolbar_and_panel_sit_below_the_inset() {
+fn toolbar_sits_below_the_inset() {
     for (scale, inset) in [(1.0, 37_u32), (2.0, 74)] {
         let mut a = scene(scale, inset);
         let bar = a.button_center(Button::Tool(1)).expect("toolbar").y;
-        let swatch = a.panel_center(Control::Color(0)).expect("panel").y;
+        let swatch = a.button_center(Button::Color(0)).expect("toolbar").y;
         assert!(bar > inset as f32 + 16.0 * scale, "toolbar at {bar}");
-        assert!(swatch > bar, "panel at {swatch} under the toolbar at {bar}");
+        assert!(
+            (swatch - bar).abs() < f32::EPSILON,
+            "one row: {swatch} vs {bar}"
+        );
         // Nothing of the chrome (shadows included) is painted in the inset:
         // only the 1/255 hit-test backdrop.
         let pm = render(&mut a);

@@ -81,7 +81,7 @@ fn painted(a: &mut Annotator) -> usize {
     let mut buffer = vec![0_u8; 400 * 300 * 4];
     let mut pixmap = tiny_skia::PixmapMut::from_bytes(&mut buffer, 400, 300).unwrap();
     a.render(&mut pixmap, markuli_core::Format::Rgba);
-    // Red Ink pixels (the toolbar and panel are not red).
+    // Red Ink pixels (the Toolbar is not red).
     buffer
         .as_chunks::<4>()
         .0

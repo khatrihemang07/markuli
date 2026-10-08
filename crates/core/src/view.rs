@@ -1,23 +1,21 @@
 //! What the Annotator tells the outside: the [`View`], read access to Ink and
 //! Selection, the copy text, and rendering to pixels.
 
-use crate::panel::PanelView;
 use crate::toolbar::{Chrome, UiState};
 use crate::tools::{StyleTarget, Tool};
 use crate::{render, Annotator, Cursor, Damage, Element, Format, Ink, View};
 #[cfg(feature = "test-support")]
-use crate::{Button, Control, Point};
+use crate::{Button, Point};
 
 impl Annotator {
     #[must_use]
     pub fn view(&self) -> View {
-        let over_toolbar = (self.toolbar.over() || self.panel.over()) && !self.tool_busy();
+        let over_toolbar = self.toolbar.over() && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
             display: self.display,
             needs_render: self.paint.is_pending()
-                || self.toolbar.is_dirty(self.draw_mode, self.ui())
-                || self.panel.is_dirty(self.panel_view()),
+                || self.toolbar.is_dirty(self.draw_mode, self.ui()),
             cursor: match self.tools.get(self.tools.active()) {
                 Some(tool) if !over_toolbar => tool.cursor(self.style),
                 _ => Cursor::Arrow,
@@ -58,14 +56,6 @@ impl Annotator {
         self.toolbar.center_of(button, self.tools.len())
     }
 
-    /// The centre of a style panel control in Overlay pixels; `None` while the panel is hidden.
-    /// It shows for the Pen and, with a Selection, for the Select Tool.
-    #[cfg(feature = "test-support")]
-    #[must_use]
-    pub fn panel_center(&self, control: Control) -> Option<Point> {
-        self.panel_view().map(|_| self.panel.center_of(control))
-    }
-
     /// Draws what changed since the last call into `target` (premultiplied
     /// pixels, `format` channel order) and returns the changed region.
     pub fn render(
@@ -73,14 +63,11 @@ impl Annotator {
         target: &mut tiny_skia::PixmapMut<'_>,
         format: Format,
     ) -> Option<Damage> {
-        let panel_view = self.panel_view();
         let chrome = Chrome {
             visible: self.draw_mode,
             ui: self.ui(),
             toolbar: &mut self.toolbar,
             tools: &self.tools,
-            panel_view,
-            panel: &mut self.panel,
         };
         render::render(
             &self.ink,
@@ -96,7 +83,11 @@ impl Annotator {
     }
 
     pub(super) fn ui(&self) -> UiState {
+        let (color, width, dimmed) = self.chosen_style();
         UiState {
+            color,
+            width,
+            dimmed,
             active: self.tools.active(),
             can_undo: self.history.can_undo(),
             can_redo: self.history.can_redo(),
@@ -104,40 +95,39 @@ impl Annotator {
         }
     }
 
-    /// What the style panel shows, or `None` while it is hidden: in Draw Mode,
-    /// for the Pen (the style of the next Strokes) and for the Select Tool
-    /// once something is selected (the Selection's style).
-    pub(super) fn panel_view(&self) -> Option<PanelView> {
-        if !self.draw_mode || !self.panel.fits() {
-            return None;
-        }
+    /// The chosen colour and width the Toolbar highlights, and whether the
+    /// active Tool leaves them dimmed. With a Selection they are the
+    /// Selection's own values, `None` where it mixes them; otherwise the Pen's
+    /// Style (a dimmed Tool shows it too: a click then switches to the Pen).
+    fn chosen_style(&self) -> (Option<usize>, Option<usize>, bool) {
         let target = self.tools.get(self.tools.active()).map(Tool::styles);
+        let own = (
+            self.style.color_index(),
+            Some(self.style.width_index()),
+            false,
+        );
         match target {
-            Some(StyleTarget::NextStrokes) => Some(PanelView {
-                color: Some(self.style.color),
-                width: Some(self.style.width),
-            }),
+            Some(StyleTarget::NextStrokes) => own,
             Some(StyleTarget::Selection) if !self.selection.is_empty() => {
                 let chosen = self
                     .ink
                     .elements()
                     .iter()
                     .filter(|e| self.selection.contains(e.id()));
-                chosen.map(Element::style).fold(None, |view, s| {
-                    Some(match view {
-                        None => PanelView {
-                            color: Some(s.color),
-                            width: Some(s.width),
-                        },
-                        Some(v) => PanelView {
-                            color: v.color.filter(|&c| c == s.color),
-                            #[allow(clippy::float_cmp, reason = "widths come from a fixed list")]
-                            width: v.width.filter(|&w| w == s.width),
-                        },
-                    })
-                })
+                let mut looks = chosen.map(Element::style);
+                let Some(first) = looks.next() else {
+                    return (own.0, own.1, false);
+                };
+                let first = (first.color_index(), Some(first.width_index()));
+                let (color, width) = looks.fold(first, |(c, w), s| {
+                    (
+                        c.filter(|&c| s.color_index() == Some(c)),
+                        w.filter(|&w| s.width_index() == w),
+                    )
+                });
+                (color, width, false)
             }
-            _ => None,
+            _ => (own.0, own.1, true),
         }
     }
 }

@@ -56,9 +56,9 @@ impl Default for Appearance {
     }
 }
 
-/// One choice in the style panel.
+/// One colour or width choice of the Toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Control {
+pub(crate) enum Control {
     /// The i-th color of the palette.
     Color(usize),
     /// The i-th width: thin, medium, bold.
@@ -124,8 +124,13 @@ impl Appearance {
         self.with(Control::Width(self.width_index() + 1))
     }
 
+    /// The palette index of this look's colour, if it is in the palette.
+    pub fn color_index(self) -> Option<usize> {
+        PALETTE.iter().position(|c| *c == self.color)
+    }
+
     /// The nearest preset, so an imported odd width still steps sensibly.
-    fn width_index(self) -> usize {
+    pub fn width_index(self) -> usize {
         let distance = |w: &f32| (w - self.width).abs();
         WIDTHS
             .iter()

@@ -4,7 +4,7 @@
 //! only fills it. Between full redraws, only the damaged region is redrawn
 //! (standards rule 7): the region is cleared and every Element touching it is
 //! filled again. Every layer of the frame (backdrop, Ink, Laser, Selection,
-//! toolbar, style panel) is composed in a small reused scratch pixmap, one band
+//! toolbar) is composed in a small reused scratch pixmap, one band
 //! at a time, and each finished band is copied into the caller's buffer in one
 //! pass, so the buffer never holds a half-painted frame (ADR-0003). Nothing in
 //! here allocates once warm (rule 8).
@@ -194,24 +194,8 @@ pub fn render(
         }
         _ => {}
     }
-    // The style panel is repainted whole too: when it changed, the area it
-    // left and the area it takes are damage.
-    let panel = chrome.panel_region();
-    if chrome.panel_dirty() {
-        for area in [chrome.panel_shown(), panel].into_iter().flatten() {
-            pending.add_physical(area.to_bounds());
-        }
-    }
-    // Regions that overlap one another must be redrawn together, or a shadow
-    // would stack on itself; two passes reach every overlap of two regions.
-    for _ in 0..2 {
-        for r in [region, panel].into_iter().flatten() {
-            if pending.touches(r.to_bounds()) {
-                pending.add_physical(r.to_bounds());
-            }
-        }
-        grow_to_overlay(pending, selection);
-    }
+    // The toolbar region may have brought in more damage for the Selection.
+    grow_to_overlay(pending, selection);
     let Some(damage) = pending.take_damage(target.width(), target.height()) else {
         chrome.done();
         return None;
@@ -254,7 +238,7 @@ fn overlaps(a: Rect, b: Rect) -> bool {
 }
 
 /// What a frame is made of, bottom to top: backdrop, Ink and Laser, Selection
-/// overlay, then (chrome, below) the toolbar and the style panel.
+/// overlay, then (chrome, below) the toolbar.
 struct Layers<'a> {
     ink: &'a Ink,
     laser: &'a Laser,
@@ -269,7 +253,7 @@ struct Layers<'a> {
 ///
 /// The target is what the screen shows (on macOS the displayed `IOSurface`), and
 /// the compositor reads it at any moment. Painting layer after layer into it
-/// let a sample catch the band cleared and the toolbar or style panel not yet
+/// let a sample catch the band cleared and the toolbar not yet
 /// painted: a flicker while hovering them (ADR-0003). Here each target pixel
 /// is written once, with its final value, so no partial layer state is ever
 /// visible.
@@ -316,9 +300,6 @@ fn compose_band(
     }
     if chrome.region().is_some_and(|r| r.intersects(&this)) {
         chrome.paint(&mut canvas, format);
-    }
-    if chrome.panel_region().is_some_and(|r| r.intersects(&this)) {
-        chrome.paint_panel(&mut canvas, format);
     }
     let stride = target.width() as usize * 4;
     let data = target.data_mut();

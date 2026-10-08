@@ -154,9 +154,9 @@ fn shift_click_adds_and_removes_from_the_selection() {
 #[test]
 fn dragging_on_empty_space_selects_the_elements_inside_the_box() {
     let (mut a, first, _) = two_strokes();
-    drag(&mut a, (150.0, 50.0), (350.0, 200.0));
+    drag(&mut a, (150.0, 80.0), (350.0, 200.0));
     assert_eq!(a.selection(), [first]);
-    drag(&mut a, (150.0, 50.0), (350.0, 400.0));
+    drag(&mut a, (150.0, 80.0), (350.0, 400.0));
     assert_eq!(a.selection().len(), 2);
 }
 

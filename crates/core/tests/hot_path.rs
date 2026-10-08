@@ -121,6 +121,23 @@ fn pointer_moves_do_not_allocate_and_render_allocates_nothing_that_scales() {
         a.render(&mut pm.as_mut(), Format::Rgba);
     }
     assert_alloc_free("select move", &mut a, &mut pm, |i| drag(40 + i));
+    a.handle(Event::PointerUp(drag(140)));
+
+    // Hovering along the Toolbar row (fixed-size hit-testing only).
+    a.handle(Event::Resize {
+        width: 1200,
+        height: 800,
+    });
+    a.render(&mut pm.as_mut(), Format::Rgba);
+    let along = |i: u16| Point {
+        x: 300.0 + f32::from(i) * 4.0,
+        y: 36.0,
+    };
+    for i in 0..40 {
+        a.handle(Event::PointerMove(along(i)));
+        a.render(&mut pm.as_mut(), Format::Rgba);
+    }
+    assert_alloc_free("toolbar hover", &mut a, &mut pm, |i| along(40 + i % 40));
 }
 
 /// 100 pointer moves of the active Tool: `handle` must not allocate and

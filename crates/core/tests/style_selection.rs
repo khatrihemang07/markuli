@@ -1,6 +1,6 @@
-//! Seam 1: the style panel with a Selection: restyle, undo, copy, redraw.
+//! Seam 1: the Toolbar colour and width buttons with a Selection: restyle, undo, copy, redraw.
 
-use markuli_core::{Annotator, Control, DisplayId, Event, Format, Key, Point};
+use markuli_core::{Annotator, Button, DisplayId, Event, Format, Key, Point};
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }
@@ -50,11 +50,11 @@ fn stroke(a: &mut Annotator, y: f32) {
     a.handle(Event::PointerUp(p(400.0, y)));
 }
 
-fn centre(a: &Annotator, control: Control) -> Point {
-    a.panel_center(control).expect("the panel is shown")
+fn centre(a: &Annotator, control: Button) -> Point {
+    a.button_center(control).expect("the toolbar is shown")
 }
 
-fn pick(a: &mut Annotator, control: Control) {
+fn pick(a: &mut Annotator, control: Button) {
     click(a, centre(a, control));
 }
 
@@ -89,8 +89,8 @@ fn first_and_third_selected() -> Annotator {
 fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
     let mut a = first_and_third_selected();
     assert_eq!(a.selection().len(), 2);
-    pick(&mut a, Control::Color(3));
-    pick(&mut a, Control::Width(0));
+    pick(&mut a, Button::Color(3));
+    pick(&mut a, Button::Width(0));
     for (i, selected) in [true, false, true].into_iter().enumerate() {
         let e = &a.ink().elements()[i];
         assert_eq!(e.stroke_color() == BLUE, selected, "colour of {i}");
@@ -105,8 +105,8 @@ fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
 #[test]
 fn a_restyle_is_one_undo_step_per_choice_and_redo_applies_it_again() {
     let mut a = first_and_third_selected();
-    pick(&mut a, Control::Color(3));
-    pick(&mut a, Control::Color(2));
+    pick(&mut a, Button::Color(3));
+    pick(&mut a, Button::Color(2));
     assert_eq!(colors(&a), [GREEN, RED, GREEN]);
     command(&mut a, 'z', false);
     assert_eq!(colors(&a), [BLUE, RED, BLUE]);
@@ -121,8 +121,8 @@ fn a_restyle_is_one_undo_step_per_choice_and_redo_applies_it_again() {
 #[test]
 fn choosing_what_is_already_set_logs_nothing() {
     let mut a = first_and_third_selected();
-    pick(&mut a, Control::Color(1));
-    pick(&mut a, Control::Width(1));
+    pick(&mut a, Button::Color(1));
+    pick(&mut a, Button::Width(1));
     command(&mut a, 'z', false);
     assert_eq!(
         a.ink().len(),
@@ -135,16 +135,16 @@ fn choosing_what_is_already_set_logs_nothing() {
 fn the_selection_survives_a_restyle() {
     let mut a = first_and_third_selected();
     let before = a.selection().to_vec();
-    pick(&mut a, Control::Width(2));
+    pick(&mut a, Button::Width(2));
     assert_eq!(a.selection(), before);
-    assert!(a.panel_center(Control::Color(0)).is_some());
+    assert!(a.button_center(Button::Color(0)).is_some());
 }
 
 #[test]
 fn copied_excalidraw_json_reflects_the_restyled_values() {
     let mut a = first_and_third_selected();
-    pick(&mut a, Control::Color(4));
-    pick(&mut a, Control::Width(2));
+    pick(&mut a, Button::Color(4));
+    pick(&mut a, Button::Width(2));
     command(&mut a, 'c', false);
     let text = a.take_copy().expect("something is selected");
     let doc: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
@@ -173,7 +173,7 @@ fn render(a: &mut Annotator, buf: &mut [u8]) {
 }
 
 /// Reddish pixels in the rows around `y` of the stroke area (x 280..420),
-/// clear of the panel.
+/// clear of the Toolbar.
 fn inked(buf: &[u8], y: usize) -> usize {
     (y - 30..y + 30)
         .flat_map(|row| (280..420).map(move |x| (row * W as usize + x) * 4))
@@ -192,7 +192,7 @@ fn a_new_width_redraws_the_stroke_and_undo_gives_back_the_old_pixels() {
     let medium = screen.clone();
 
     // Incremental redraws into the same buffer, like the real Overlay.
-    pick(&mut a, Control::Width(2));
+    pick(&mut a, Button::Width(2));
     render(&mut a, &mut screen);
     assert!(
         inked(&screen, 100) * 2 > inked(&medium, 100) * 3,
@@ -200,7 +200,7 @@ fn a_new_width_redraws_the_stroke_and_undo_gives_back_the_old_pixels() {
         inked(&screen, 100),
         inked(&medium, 100)
     );
-    pick(&mut a, Control::Width(0));
+    pick(&mut a, Button::Width(0));
     render(&mut a, &mut screen);
     assert!(
         inked(&screen, 100) < inked(&medium, 100),

@@ -10,7 +10,6 @@ mod history;
 mod icons;
 mod ink;
 pub mod laser;
-mod panel;
 mod render;
 mod route;
 mod selection;
@@ -25,11 +24,11 @@ use freehand::Scratch;
 use history::History;
 pub use ink::{Element, Ink, Point};
 use laser::Laser;
-use panel::Panel;
 pub use render::{Damage, Format};
 use selection::Selection;
 use style::Appearance;
-pub use style::{Control, Style};
+use style::Control;
+pub use style::Style;
 use toolbar::Toolbar;
 pub use toolbar::{Button, Theme};
 use tools::Tools;
@@ -64,7 +63,7 @@ pub enum Event {
     },
     /// Height in physical pixels of the area at the top of the Overlay that
     /// belongs to the OS (macOS menu bar and notch, Windows work area). The
-    /// toolbar and style panel are laid out below it; Ink can still go there.
+    /// toolbar is laid out below it; Ink can still go there.
     Insets {
         top: u32,
     },
@@ -155,10 +154,9 @@ pub struct Annotator {
     next_id: u64,
     tools: Tools,
     toolbar: Toolbar,
-    /// The style of the next Strokes, set by the style panel.
+    /// The style of the next Strokes, set by the colour and width buttons.
     style: Appearance,
-    panel: Panel,
-    /// Appearance of the selected Elements before the panel gesture in progress.
+    /// Appearance of the selected Elements before the restyle in progress.
     restyling: Option<Vec<(usize, Appearance)>>,
 }
 
@@ -181,7 +179,6 @@ impl Default for Annotator {
             tools: Tools::new(),
             toolbar: Toolbar::default(),
             style: Appearance::default(),
-            panel: Panel::default(),
             restyling: None,
         }
     }

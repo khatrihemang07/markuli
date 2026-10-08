@@ -1,6 +1,6 @@
 //! Seam: the remembered Style through the annotator interface only.
 
-use markuli_core::{Annotator, Control, DisplayId, Element, Event, Key, Point, Style};
+use markuli_core::{Annotator, Button, DisplayId, Element, Event, Key, Point, Style};
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }
@@ -31,8 +31,8 @@ fn stroke(a: &mut Annotator, y: f32) {
     a.handle(Event::PointerUp(p(400.0, y)));
 }
 
-fn pick(a: &mut Annotator, control: Control) {
-    let at = a.panel_center(control).expect("the panel is shown");
+fn pick(a: &mut Annotator, control: Button) {
+    let at = a.button_center(control).expect("the toolbar is shown");
     a.handle(Event::PointerDown(at));
     a.handle(Event::PointerUp(at));
 }
@@ -76,9 +76,9 @@ fn out_of_range_indices_are_ignored() {
 #[test]
 fn the_view_reports_the_style_after_a_click() {
     let mut a = session();
-    pick(&mut a, Control::Color(2));
+    pick(&mut a, Button::Color(2));
     assert_eq!(a.view().style, Style { color: 2, width: 1 });
-    pick(&mut a, Control::Width(0));
+    pick(&mut a, Button::Width(0));
     assert_eq!(a.view().style, Style { color: 2, width: 0 });
     stroke(&mut a, 100.0);
     assert_eq!(last(&a).stroke_color(), GREEN);
@@ -87,8 +87,8 @@ fn the_view_reports_the_style_after_a_click() {
 #[test]
 fn the_style_survives_leaving_and_reentering_draw_mode() {
     let mut a = session();
-    pick(&mut a, Control::Color(3));
-    pick(&mut a, Control::Width(2));
+    pick(&mut a, Button::Color(3));
+    pick(&mut a, Button::Width(2));
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert_eq!(a.view().style, Style { color: 3, width: 2 });
@@ -102,7 +102,7 @@ fn a_selection_restyle_does_not_change_the_reported_style() {
     a.handle(Event::PointerDown(p(350.0, 100.0)));
     a.handle(Event::PointerUp(p(350.0, 100.0)));
     assert!(!a.selection().is_empty(), "the stroke is selected");
-    pick(&mut a, Control::Color(2));
+    pick(&mut a, Button::Color(2));
     assert_eq!(last(&a).stroke_color(), GREEN);
     assert_eq!(a.view().style, Style::default());
 }
