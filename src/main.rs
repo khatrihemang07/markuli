@@ -288,11 +288,20 @@ impl App {
         }
     }
 
+    /// Saves the config when the Pen's Style changed, and only then.
+    fn remember_style(&mut self, view: View) {
+        if view.style != self.config.style {
+            self.config.style = view.style;
+            settings::save(&self.config);
+        }
+    }
+
     /// Feeds an input event to the core and applies what changed: Draw Mode
     /// ending (`sync`), or a repaint and the cursor shape.
     fn input(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         let was_drawing = self.core.view().draw_mode;
         let view = self.core.handle(event);
+        self.remember_style(view);
         if view.draw_mode != was_drawing {
             self.sync(event_loop, view, None);
             return;
@@ -552,8 +561,11 @@ fn main() {
         let _ = proxy.send_event(UserEvent::Menu(e));
     }));
 
+    let mut core = Annotator::new();
+    core.handle(Event::Style(config.style));
+
     let mut app = App {
-        core: Annotator::new(),
+        core,
         started: Instant::now(),
         overlay: None,
         previous: None,

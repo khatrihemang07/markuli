@@ -58,6 +58,7 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 - [ ] Choosing the Clear combo for Toggle (or the reverse) is refused with a message.
 - [ ] Quit and relaunch: the new hotkeys, and the launch-at-login checkbox, are remembered (49). The `config` file is plain `key=value` and holds nothing else; edit it to garbage and relaunch: the app still starts with defaults.
 - [ ] Launch at login: tick the box, **log out and in (or reboot)**: Markuli is running (46). macOS: `~/Library/LaunchAgents/com.markuli.app.plist` exists. Windows: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `Markuli` value. Untick: the file / value is gone and Markuli no longer starts.
+- [ ] Style is remembered: in Draw Mode pick a colour and a width (Pen), leave Draw Mode, quit and relaunch, enter Draw Mode: the style panel and the next Stroke use them. The `config` file gains `color=<0..4>` and `width=<0..2>`; set `color=9` by hand and relaunch: red (the default) is used. The file is rewritten only when the style changes (check its modified time while only drawing).
 - [ ] Close Settings: the window is gone and memory is back at the idle level of section 1 (50).
 
 ## 4. Privacy and permissions (story 55)

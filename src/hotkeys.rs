@@ -430,6 +430,7 @@ mod tests {
             toggle: "nonsense".into(),
             clear: "nonsense".into(),
             launch_at_login: false,
+            ..Config::default()
         };
         let hotkeys = Hotkeys::new(&os, &config);
         assert_eq!(hotkeys.text(Binding::Toggle), "alt+Backquote");
@@ -443,6 +444,7 @@ mod tests {
             toggle: "alt+KeyQ".into(),
             clear: "alt+KeyQ".into(),
             launch_at_login: false,
+            ..Config::default()
         };
         let hotkeys = Hotkeys::new(&os, &config);
         assert_eq!(hotkeys.text(Binding::Toggle), "alt+KeyQ");
