@@ -38,18 +38,18 @@ What pointer input does in Draw Mode. One of Select, Pen, Eraser or Laser.
 The Elements currently chosen with the Select Tool, for moving, deleting or copying.
 
 **Toolbar**:
-The single row of buttons shown in Draw Mode: the Tools, the five colors, the three widths, then undo, redo and Clear. It is part of the Overlay, not Ink.
+One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing (the Eraser and the Laser). It is part of the Overlay, not Ink.
 _Avoid_: panel, palette, style panel
 
 **Toolbar Position**:
-Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. A Setting; the default is top.
+Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. It stays clear of the menu bar, notch, Dock and taskbar. A Setting; the default is top.
 
 **Style**:
-The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color index into the 5-color palette and a width index into the 3 presets. It persists across launches and is not reset when Draw Mode is entered.
+The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color index into the 5-color palette and a width index into the 3 presets. It is remembered across launches, but it is not a Setting, and it is not reset when Draw Mode is entered.
 _Avoid_: pen settings, brush
 
 **Settings**:
-User preferences that persist across launches: the hotkeys, launch at login, the Toolbar Position and the Style. Ink is never part of Settings.
+User preferences that persist across launches: the hotkeys, launch at login and the Toolbar Position. Ink is never part of Settings.
 
 ## Relationships
 
