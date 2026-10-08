@@ -38,7 +38,7 @@ What pointer input does in Draw Mode. One of Select, Pen, Eraser or Laser.
 The Elements currently chosen with the Select Tool, for moving, deleting or copying.
 
 **Toolbar**:
-One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing (the Eraser and the Laser). It is part of the Overlay, not Ink.
+One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing. It is part of the Overlay, not Ink.
 _Avoid_: panel, palette, style panel
 
 **Toolbar Position**:
