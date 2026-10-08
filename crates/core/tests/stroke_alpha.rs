@@ -2,6 +2,14 @@
 //! pointer event) must look like the same Stroke rendered once, and its start
 //! must not be darker than its middle (nothing is composited twice).
 
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names,
+    reason = "test pixel coordinates are small and positive"
+)]
+
 use markuli_core::{Annotator, Control, DisplayId, Event, Format, Point};
 use tiny_skia::Pixmap;
 

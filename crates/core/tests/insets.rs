@@ -2,6 +2,14 @@
 //! inset (macOS menu bar and notch, Windows work area), while Ink can still be
 //! drawn anywhere.
 
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names,
+    reason = "test pixel coordinates are small and positive"
+)]
+
 use markuli_core::{Annotator, Button, Control, DisplayId, Event, Format, Point};
 use tiny_skia::Pixmap;
 
@@ -29,7 +37,9 @@ fn render(a: &mut Annotator) -> Pixmap {
 /// The tallest alpha in the top `rows` rows.
 fn top_alpha(pm: &Pixmap, rows: u32) -> u8 {
     pm.data()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .take((rows * W) as usize)
         .map(|p| p[3])
         .max()
