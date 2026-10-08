@@ -29,6 +29,16 @@ pub fn set_sink(sink: impl Fn(SettingsEvent) + Send + Sync + 'static) {
     let _ = SINK.set(Box::new(sink));
 }
 
+/// The radio button title of a Toolbar Position.
+pub fn position_title(position: ToolbarPosition) -> &'static str {
+    match position {
+        ToolbarPosition::Top => "Top",
+        ToolbarPosition::Bottom => "Bottom",
+        ToolbarPosition::Left => "Left",
+        ToolbarPosition::Right => "Right",
+    }
+}
+
 /// Called by the platform windows from their callbacks.
 pub fn emit(event: SettingsEvent) {
     if let Some(sink) = SINK.get() {

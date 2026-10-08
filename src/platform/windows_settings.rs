@@ -15,7 +15,7 @@
 use super::windows::wide;
 use super::windows_recorder::Recorder;
 use crate::hotkeys::Binding;
-use crate::settings::{emit, SettingsEvent};
+use crate::settings::{emit, position_title, SettingsEvent};
 use core::ffi::c_void;
 use core::ptr::{null, null_mut};
 use markuli_core::{Config, ToolbarPosition};
@@ -40,12 +40,6 @@ const ID_LOGIN: usize = 103;
 /// The Toolbar radio buttons, in order; a button's id is `ID_POSITION + index`.
 const ID_POSITION: usize = 104;
 const ID_LAST_POSITION: usize = ID_POSITION + 3;
-const POSITIONS: [(&str, ToolbarPosition); 4] = [
-    ("Top", ToolbarPosition::Top),
-    ("Bottom", ToolbarPosition::Bottom),
-    ("Left", ToolbarPosition::Left),
-    ("Right", ToolbarPosition::Right),
-];
 /// `BM_GETCHECK` results (defined in the controls header; not worth a feature flag).
 const BST_UNCHECKED: u32 = 0;
 const BST_CHECKED: u32 = 1;
@@ -98,7 +92,8 @@ fn control(parent: HWND, class: &str, text: &str, style: u32, id: usize, rect: [
 /// `WS_GROUP` on the first makes the four exclude each other.
 fn add_toolbar_row(hwnd: HWND, current: ToolbarPosition) {
     control(hwnd, "STATIC", "Toolbar", 0, 0, [20, 144, 80, 20]);
-    for (index, (title, position)) in POSITIONS.into_iter().enumerate() {
+    for (index, position) in ToolbarPosition::ALL.into_iter().enumerate() {
+        let title = position_title(position);
         let group = if index == 0 { WS_GROUP } else { 0 };
         let radio = control(
             hwnd,
@@ -194,7 +189,9 @@ unsafe extern "system" fn window_proc(
                         emit(SettingsEvent::LaunchAtLogin(checked));
                     }
                     ID_POSITION..=ID_LAST_POSITION => {
-                        emit(SettingsEvent::Toolbar(POSITIONS[id - ID_POSITION].1));
+                        emit(SettingsEvent::Toolbar(
+                            ToolbarPosition::ALL[id - ID_POSITION],
+                        ));
                     }
                     _ => {}
                 }

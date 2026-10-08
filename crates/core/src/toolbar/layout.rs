@@ -72,8 +72,9 @@ impl Area {
 /// Colors and widths in the row: the palette and the width presets.
 pub(super) const COLORS: usize = 5;
 pub(super) const WIDTHS: usize = 3;
-/// Undo, redo, Clear.
-const ACTIONS: usize = 3;
+/// The buttons after the widths, in row order.
+const ACTION_BUTTONS: [Button; 3] = [Button::Undo, Button::Redo, Button::Clear];
+const ACTIONS: usize = ACTION_BUTTONS.len();
 const ISLANDS: usize = 4;
 
 /// Buttons in the row for `tools` Tools.
@@ -93,6 +94,9 @@ pub enum ToolbarPosition {
 }
 
 impl ToolbarPosition {
+    /// Every position, in the order Settings lists them.
+    pub const ALL: [Self; 4] = [Self::Top, Self::Bottom, Self::Left, Self::Right];
+
     /// The name used in the config file.
     pub(crate) fn name(self) -> &'static str {
         match self {
@@ -104,9 +108,7 @@ impl ToolbarPosition {
     }
 
     pub(crate) fn from_name(name: &str) -> Option<Self> {
-        [Self::Top, Self::Bottom, Self::Left, Self::Right]
-            .into_iter()
-            .find(|p| p.name() == name)
+        Self::ALL.into_iter().find(|p| p.name() == name)
     }
 }
 
@@ -242,29 +244,25 @@ pub(super) fn button(i: usize, tools: usize) -> Button {
     let Some(i) = i.checked_sub(tools) else {
         return Button::Tool(i);
     };
-    match i {
-        0..COLORS => Button::Color(i),
-        _ => match i - COLORS {
-            j @ 0..WIDTHS => Button::Width(j),
-            j => match j - WIDTHS {
-                0 => Button::Undo,
-                1 => Button::Redo,
-                _ => Button::Clear,
-            },
-        },
+    if i < COLORS {
+        return Button::Color(i);
     }
+    let i = i - COLORS;
+    if i < WIDTHS {
+        return Button::Width(i);
+    }
+    ACTION_BUTTONS[(i - WIDTHS).min(ACTIONS - 1)]
 }
 
 /// The position of `button` in the row, if there is such a button.
 #[cfg(feature = "test-support")]
 pub(super) fn index_of(button: Button, tools: usize) -> Option<usize> {
+    let action = |a: Button| ACTION_BUTTONS.iter().position(|&b| b == a);
     match button {
         Button::Tool(i) => (i < tools).then_some(i),
         Button::Color(i) => (i < COLORS).then_some(tools + i),
         Button::Width(i) => (i < WIDTHS).then_some(tools + COLORS + i),
-        Button::Undo => Some(tools + COLORS + WIDTHS),
-        Button::Redo => Some(tools + COLORS + WIDTHS + 1),
-        Button::Clear => Some(tools + COLORS + WIDTHS + 2),
+        other => action(other).map(|j| tools + COLORS + WIDTHS + j),
     }
 }
 

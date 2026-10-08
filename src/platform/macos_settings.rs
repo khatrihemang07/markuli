@@ -4,7 +4,7 @@
 //! Objective-C class.
 
 use crate::hotkeys::{self, Binding, Mods};
-use crate::settings::{emit, SettingsEvent};
+use crate::settings::{emit, position_title, SettingsEvent};
 use markuli_core::{Config, ToolbarPosition};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
@@ -19,14 +19,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 
 const ESCAPE: u16 = 53;
 
-/// The Toolbar radio buttons, in order; a button's tag is its index.
-const POSITIONS: [(&str, ToolbarPosition); 4] = [
-    ("Top", ToolbarPosition::Top),
-    ("Bottom", ToolbarPosition::Bottom),
-    ("Left", ToolbarPosition::Left),
-    ("Right", ToolbarPosition::Right),
-];
-
+/// The Toolbar radio buttons are `ToolbarPosition::ALL`; a button's tag is its index.
 #[derive(Default)]
 struct Ivars {
     /// Which hotkey is waiting for a key press, if any.
@@ -75,7 +68,7 @@ define_class!(
             let tag: isize = sender.map_or(-1, |s| unsafe { msg_send![s, tag] });
             let position = usize::try_from(tag)
                 .ok()
-                .and_then(|i| POSITIONS.get(i).map(|(_, p)| *p));
+                .and_then(|i| ToolbarPosition::ALL.get(i).copied());
             if let Some(position) = position {
                 emit(SettingsEvent::Toolbar(position));
             }
@@ -183,7 +176,8 @@ fn add_toolbar_row(
     content.addSubview(&label);
     // Radio buttons sharing a superview and an action exclude each other.
     let mut x = 190.0;
-    for (tag, (title, position)) in (0_isize..).zip(POSITIONS) {
+    for (tag, position) in (0_isize..).zip(ToolbarPosition::ALL) {
+        let title = position_title(position);
         // SAFETY: the target is the window, which implements `positionChanged:`.
         let radio = unsafe {
             NSButton::radioButtonWithTitle_target_action(

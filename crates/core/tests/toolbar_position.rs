@@ -16,7 +16,6 @@ use tiny_skia::Pixmap;
 
 const W: u32 = 1600;
 const H: u32 = 1000;
-const ALL: [Pos; 4] = [Pos::Top, Pos::Bottom, Pos::Left, Pos::Right];
 
 fn insets(scale: f32) -> Insets {
     let s = |v: f32| (v * scale) as u32;
@@ -68,7 +67,7 @@ fn row_and_column_shapes_are_centred_between_the_insets() {
             (w - i.right) as f32,
             (h - i.bottom) as f32,
         );
-        for pos in ALL {
+        for pos in Pos::ALL {
             let a = scene(pos, scale, w, h);
             let c = centers(&a);
             let (first, last) = (c[0], c[c.len() - 1]);
@@ -118,7 +117,7 @@ fn no_button_or_shadow_reaches_into_an_inset() {
     for scale in [1.0_f32, 2.0] {
         let (w, h) = ((W as f32 * scale) as u32, (H as f32 * scale) as u32);
         let i = insets(scale);
-        for pos in ALL {
+        for pos in Pos::ALL {
             let mut a = scene(pos, scale, w, h);
             let half = 16.0 * scale;
             for p in centers(&a) {
@@ -199,12 +198,21 @@ fn changed_insets_repaint_and_leave_no_old_pixels() {
 
 #[test]
 fn a_click_on_a_button_works_in_every_position() {
-    for pos in ALL {
+    for pos in Pos::ALL {
         let mut a = scene(pos, 1.0, W, H);
         let eraser = a.button_center(Button::Tool(2)).expect("eraser");
         a.handle(Event::PointerDown(eraser));
         let view = a.handle(Event::PointerUp(eraser));
         assert_eq!(view.tool, markuli_core::ToolKind::Eraser, "{pos:?}");
         assert_eq!(a.ink().len(), 0, "{pos:?}");
+    }
+}
+
+#[test]
+fn all_lists_each_position_once_starting_with_the_default() {
+    let all = Pos::ALL;
+    assert_eq!(all[0], Pos::default());
+    for (i, a) in all.iter().enumerate() {
+        assert!(all[i + 1..].iter().all(|b| a != b));
     }
 }
