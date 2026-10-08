@@ -370,3 +370,18 @@ pub fn secondary_click_modifier(_modifiers: ModifiersState) -> bool {
 
 /// Nothing to hand back: the DIB section is freed with the window.
 pub fn release_memory() {}
+
+/// The Palette editors do not exist on Windows yet: a secondary click is
+/// reported by the core and ignored here.
+#[derive(Default)]
+pub struct Editors;
+
+impl Editors {
+    pub fn is_open(&self) -> bool {
+        false
+    }
+
+    pub fn open(&mut self, _: &Window, _: markuli_core::EditRequest) {}
+
+    pub fn close(&mut self) {}
+}

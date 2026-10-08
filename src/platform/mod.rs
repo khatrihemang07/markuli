@@ -2,6 +2,7 @@
 //!
 //! - `window_attributes` tunes the Overlay window before it is created.
 //! - `monitor_under_cursor` picks the display for Draw Mode.
+//! - `Editors` opens the Palette editors (color panel, width popover).
 //! - `config_dir`, `set_launch_at_login` and `SettingsWindow` serve Settings.
 //! - `Presenter` owns the pixel buffer and puts it on screen with per-pixel
 //!   alpha (softbuffer cannot, see the PR notes).
@@ -11,9 +12,13 @@
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
+mod macos_editors;
+#[cfg(target_os = "macos")]
 mod macos_settings;
 #[cfg(target_os = "macos")]
 use macos as imp;
+#[cfg(target_os = "macos")]
+pub use macos_editors::Editors;
 #[cfg(target_os = "macos")]
 pub use macos_settings::SettingsWindow;
 
@@ -25,6 +30,8 @@ mod windows_recorder;
 mod windows_settings;
 #[cfg(target_os = "windows")]
 use windows as imp;
+#[cfg(target_os = "windows")]
+pub use windows::Editors;
 #[cfg(target_os = "windows")]
 pub use windows_settings::SettingsWindow;
 
