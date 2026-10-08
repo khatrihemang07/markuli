@@ -47,9 +47,9 @@ impl Tool for Eraser {
         &icons::ERASER
     }
 
-    /// E, 3 (its place in the toolbar) and Excalidraw's 0.
+    /// E and Excalidraw's 0.
     fn keys(&self) -> &'static [char] {
-        &['e', '3', '0']
+        &['e', '0']
     }
 
     /// Pressing E or 0 on the Eraser swaps back to the Pen.

@@ -64,7 +64,7 @@ fn red_pixels(buf: &[u8]) -> usize {
 #[test]
 fn laser_input_never_changes_ink_or_the_undo_history() {
     let mut a = laser();
-    key(&mut a, '2');
+    key(&mut a, 'p');
     a.handle(Event::PointerDown(p(10.0, 10.0)));
     a.handle(Event::PointerUp(p(60.0, 40.0)));
     let before = a.ink().clone();

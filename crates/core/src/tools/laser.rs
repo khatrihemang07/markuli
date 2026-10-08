@@ -23,9 +23,9 @@ impl Tool for LaserTool {
         &icons::LASER
     }
 
-    /// K (Excalidraw) and 4, its place in the toolbar.
+    /// K (Excalidraw).
     fn keys(&self) -> &'static [char] {
-        &['k', '4']
+        &['k']
     }
 
     fn cursor(&self, _: Appearance) -> Cursor {

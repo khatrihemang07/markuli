@@ -3,7 +3,8 @@
 
 use crate::panel::Press;
 use crate::style;
-use crate::tools::{Ctx, Tool, Tools};
+use crate::style::Appearance;
+use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
 use crate::{
     excalidraw, Annotator, Button, Control, DisplayId, Element, Event, Ink, Key, Point, View,
 };
@@ -54,20 +55,32 @@ impl Annotator {
         self.view()
     }
 
-    /// A style panel choice: it styles the Selection if there is one, else
-    /// the next Strokes.
-    fn choose(&mut self, control: Control) {
-        if self.selection.is_empty() {
-            self.style = self.style.with(control);
-        } else {
-            style::restyle(
+    /// A style choice, from a key or a panel click. The active Tool's
+    /// [`StyleTarget`] decides, never its kind: a Selection is restyled, the
+    /// next Strokes take the Style, and a Tool with neither hands over to the
+    /// Pen first.
+    fn choose(&mut self, change: impl Fn(Appearance) -> Appearance) {
+        let target = self.tools.get(self.tools.active()).map(Tool::styles);
+        match target {
+            Some(StyleTarget::Selection) if !self.selection.is_empty() => style::restyle(
                 &mut self.ink,
                 self.selection.ids(),
-                control,
+                change,
                 &mut self.restyling,
                 (&mut self.freehand, &mut self.paint, self.scale),
-            );
+            ),
+            Some(StyleTarget::NextStrokes) => self.style = change(self.style),
+            _ => {
+                self.switch_tool(|tools| tools.select_by_kind(ToolKind::Pen));
+                self.style = change(self.style);
+            }
         }
+    }
+
+    /// A key is a single action: the restyle is logged right away.
+    fn choose_by_key(&mut self, change: impl Fn(Appearance) -> Appearance) {
+        self.choose(change);
+        self.finish_restyle();
     }
 
     /// The panel gesture ended: a restyle becomes one operation-log entry.
@@ -115,7 +128,7 @@ impl Annotator {
                 Press::Miss => {}
                 Press::Dead => return,
                 Press::Control(control) => {
-                    self.choose(control);
+                    self.choose(|look| look.with(control));
                     return;
                 }
             }
@@ -128,7 +141,7 @@ impl Annotator {
         self.toolbar.hover_at(at, self.tools.len());
         if self.panel.pressing() {
             if let Some(control) = self.panel.drag_to(at) {
-                self.choose(control);
+                self.choose(|look| look.with(control));
             }
         } else if self.panel_view().is_some() {
             self.panel.hover_at(at);
@@ -175,6 +188,8 @@ impl Annotator {
             // Undo, redo and switching wait for the Stroke to end: it is not
             // logged yet.
             (Key::Char(_), _, _) if self.tool_busy() || self.panel.pressing() => {}
+            // A style choice would change the Style under the press.
+            (Key::Char('1'..='5' | '[' | ']'), false, _) if self.toolbar.pressing() => {}
             (Key::Char('z'), true, false) => self.undo(),
             (Key::Char('z'), true, true) | (Key::Char('y'), true, false) => self.redo(),
             (Key::Char('a'), true, false) => {
@@ -185,6 +200,12 @@ impl Annotator {
                 self.selection.select_all(&self.ink);
             }
             (Key::Char('c'), true, false) => self.copy(),
+            (Key::Char(c @ '1'..='5'), false, _) if !alt => {
+                let index = usize::from(u8::try_from(c).unwrap_or(b'1') - b'1');
+                self.choose_by_key(|look| look.with(Control::Color(index)));
+            }
+            (Key::Char('['), false, _) => self.choose_by_key(Appearance::thinner),
+            (Key::Char(']'), false, _) => self.choose_by_key(Appearance::bolder),
             (Key::Char(c), false, false) if !alt => {
                 self.switch_tool(|tools| tools.press(c));
             }

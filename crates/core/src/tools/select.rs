@@ -54,9 +54,9 @@ impl Tool for Select {
         &icons::SELECTION
     }
 
-    /// V (Excalidraw) and 1, its place in the toolbar.
+    /// V (Excalidraw).
     fn keys(&self) -> &'static [char] {
-        &['v', '1']
+        &['v']
     }
 
     fn cursor(&self, _: Appearance) -> Cursor {
