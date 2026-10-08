@@ -82,7 +82,6 @@ impl Appearance {
         Self {
             color: PALETTE[style.color],
             width: WIDTHS[style.width],
-            ..self
         }
     }
 
