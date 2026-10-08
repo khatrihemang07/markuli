@@ -68,6 +68,9 @@ pub enum Event {
     Insets {
         top: u32,
     },
+    /// The remembered Style of the Pen, sent at startup. Out-of-range
+    /// indices are ignored.
+    Style(Style),
     /// The OS light or dark theme.
     Theme(Theme),
     /// Physical pixels.
@@ -126,6 +129,9 @@ pub struct View {
     pub cursor: Cursor,
     /// The active Tool.
     pub tool: ToolKind,
+    /// The Pen's Style (colour and width indices). A Selection restyle does
+    /// not change it. The platform saves it when it changes.
+    pub style: Style,
     /// The time (same clock as [`Event::Clock`]) the next frame is due. Set
     /// only while something animates (a visible Laser trail): wait for it,
     /// then send `Clock`. `None` means sleep until the next input.

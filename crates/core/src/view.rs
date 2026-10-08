@@ -23,6 +23,7 @@ impl Annotator {
                 _ => Cursor::Arrow,
             },
             tool: self.tools.active_kind(),
+            style: self.style.as_style(),
             next_frame: self.laser.next_frame(),
         }
     }

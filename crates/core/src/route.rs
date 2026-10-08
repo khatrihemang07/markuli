@@ -24,6 +24,7 @@ impl Annotator {
                 self.panel.set_top(top);
                 self.paint.full();
             }
+            Event::Style(style) => self.style = self.style.with_style(style),
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
                 self.panel.theme = theme;

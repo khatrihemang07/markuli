@@ -1,6 +1,6 @@
 //! Settings file behaviour, through the public interface only.
 
-use markuli_core::Config;
+use markuli_core::{Config, Style};
 
 #[test]
 fn defaults_match_the_spec() {
@@ -16,6 +16,7 @@ fn saved_settings_load_back_unchanged() {
         toggle: "control+shift+KeyD".into(),
         clear: "F9".into(),
         launch_at_login: true,
+        style: Style { color: 4, width: 0 },
     };
     assert_eq!(Config::parse(&config.to_text()), config);
 }
@@ -59,4 +60,31 @@ fn arbitrary_bytes_never_panic() {
     ] {
         let _ = Config::parse(text);
     }
+}
+
+#[test]
+fn the_default_style_is_red_and_medium() {
+    assert_eq!(Config::default().style, Style { color: 1, width: 1 });
+}
+
+#[test]
+fn style_keys_are_read_and_written() {
+    let config = Config::parse("color=3\nwidth=2\n");
+    assert_eq!(config.style, Style { color: 3, width: 2 });
+    assert!(config.to_text().contains("color=3\n"));
+    assert!(config.to_text().contains("width=2\n"));
+}
+
+#[test]
+fn invalid_or_out_of_range_style_values_keep_the_defaults() {
+    for text in [
+        "color=5\nwidth=3",
+        "color=-1\nwidth=x",
+        "color=\nwidth= ",
+        "color=1.5",
+    ] {
+        assert_eq!(Config::parse(text).style, Style::default(), "{text}");
+    }
+    let config = Config::parse("color=9\nwidth=2\n");
+    assert_eq!(config.style, Style { color: 1, width: 2 });
 }

@@ -72,7 +72,43 @@ pub enum Control {
     Opacity(u8),
 }
 
+impl Style {
+    /// Whether both indices name a palette colour and a width preset.
+    pub(crate) fn is_valid(self) -> bool {
+        self.color < PALETTE.len() && self.width < WIDTHS.len()
+    }
+}
+
 impl Appearance {
+    /// The chosen look of the next Strokes, or `self` if `style` is out of
+    /// range.
+    pub fn with_style(self, style: Style) -> Self {
+        if !style.is_valid() {
+            return self;
+        }
+        Self {
+            color: PALETTE[style.color],
+            width: WIDTHS[style.width],
+            ..self
+        }
+    }
+
+    /// This look as palette and width indices (the defaults for a look that
+    /// is not a preset, which never happens for the Pen's own Appearance).
+    pub fn as_style(self) -> Style {
+        let default = Style::default();
+        Style {
+            color: PALETTE
+                .iter()
+                .position(|c| *c == self.color)
+                .unwrap_or(default.color),
+            width: WIDTHS
+                .iter()
+                .position(|w| (*w - self.width).abs() < f32::EPSILON)
+                .unwrap_or(default.width),
+        }
+    }
+
     /// The style after `control` was chosen; an unknown choice changes nothing.
     pub fn with(self, control: Control) -> Self {
         match control {
