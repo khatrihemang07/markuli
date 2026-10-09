@@ -139,6 +139,9 @@ fn widths_clamp_to_half_to_thirty_and_snap_to_quarters() {
     assert_eq!(Palette::width_text(2.25), "2.25");
     assert_eq!(Palette::width_text(2.5), "2.5");
     assert_eq!(Palette::width_text(2.0), "2");
+    assert_eq!(Palette::width_text(10.0), "10");
+    assert_eq!(Palette::width_text(20.5), "20.5");
+    assert_eq!(Palette::width_text(30.0), "30");
     let (mut a, _) = session(1.0);
     a.handle(Event::EditWidth {
         slot: 0,

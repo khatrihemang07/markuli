@@ -361,7 +361,8 @@ impl Scratch {
 }
 
 /// The outline polygon of a Stroke, as Excalidraw computes it: perfect-freehand
-/// `getStroke` with `size = strokeWidth * 4.25` and Excalidraw's other options.
+/// `getStroke` with the given `size` (the caller converts width to size) and
+/// Excalidraw's other options.
 ///
 /// `points` are relative to the Element origin. An empty `pressures` means
 /// simulated pressure; otherwise there is one pressure per point. `last` is

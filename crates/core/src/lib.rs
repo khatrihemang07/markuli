@@ -82,7 +82,7 @@ pub enum Event {
         slot: usize,
         rgb: [u8; 3],
     },
-    /// Sets width slot `slot` (snapped to 0.5, clamped to 0.5..=30; not finite
+    /// Sets width slot `slot` (snapped to 0.25, clamped to 0.5..=30; not finite
     /// is ignored) and chooses it. Consecutive edits of one slot restyle a
     /// Selection as one undo step, until [`Event::EditEnd`], a key or a click.
     EditWidth {
