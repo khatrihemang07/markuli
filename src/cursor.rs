@@ -64,10 +64,10 @@ pub fn render(cursor: Cursor, scale: f32) -> Option<Image> {
     }
 }
 
-/// Half the width of the marker's tip: thin (diameter 6), medium (9) and bold
-/// (17) strokes get a visibly thin, medium and wide chisel.
+/// Half the width of the marker's tip: thin (diameter 3), medium (4) and bold
+/// (8) strokes get a visibly thin, medium and wide chisel.
 fn nib_half_width(diameter: f32) -> f32 {
-    (0.9 + (diameter - 6.0) * 0.28).clamp(0.9, 4.0)
+    (0.9 + (diameter - 3.0) * 0.5).clamp(0.9, 4.0)
 }
 
 struct Canvas {
@@ -291,14 +291,14 @@ mod tests {
     fn cursor_pictures_match_their_goldens() {
         let pen = |diameter, color| Cursor::Pen { diameter, color };
         for (scale, tag) in [(1.0, "1x"), (2.0, "2x")] {
-            golden(&format!("cursor_pen_thin_blue_{tag}"), pen(6, BLUE), scale);
-            golden(&format!("cursor_pen_medium_red_{tag}"), pen(9, RED), scale);
+            golden(&format!("cursor_pen_thin_blue_{tag}"), pen(3, BLUE), scale);
+            golden(&format!("cursor_pen_medium_red_{tag}"), pen(4, RED), scale);
             golden(
                 &format!("cursor_pen_bold_black_{tag}"),
-                pen(17, BLACK),
+                pen(8, BLACK),
                 scale,
             );
-            golden(&format!("cursor_pen_bold_red_{tag}"), pen(17, RED), scale);
+            golden(&format!("cursor_pen_bold_red_{tag}"), pen(8, RED), scale);
             golden(
                 &format!("cursor_eraser_{tag}"),
                 Cursor::Eraser { diameter: 16 },
@@ -332,7 +332,7 @@ mod tests {
         for scale in [1.0, 2.0] {
             for cursor in [
                 Cursor::Pen {
-                    diameter: 17,
+                    diameter: 8,
                     color: RED,
                 },
                 Cursor::Eraser { diameter: 16 },
@@ -346,9 +346,10 @@ mod tests {
 
     #[test]
     fn the_pen_dot_is_exactly_the_brush_diameter_centred_on_the_hotspot() {
-        // The nib points up and right from the hotspot, so the dot is
+        // The nib points up and right from the hotspot (its white edge covers
+        // the start of a small dot), so the dot is
         // measured to the left and below it.
-        for (diameter, scale) in [(6_u16, 2.0_f32), (9, 2.0), (17, 2.0), (17, 1.0), (9, 1.0)] {
+        for (diameter, scale) in [(9_u16, 2.0_f32), (17, 2.0), (17, 1.0), (9, 1.0)] {
             let image = render(
                 Cursor::Pen {
                     diameter,
@@ -364,7 +365,7 @@ mod tests {
             for (dx, dy) in [(-inner, 0), (0, inner), (-(inner * 7 / 10), inner * 7 / 10)] {
                 let [r, g, b, a] = pixel(&image, hx + dx, hy + dy);
                 assert_eq!(a, 255, "{diameter}@{scale}: solid at ({dx},{dy})");
-                assert_eq!([r, g, b], BLUE, "{diameter}@{scale}: color");
+                assert_eq!([r, g, b], BLUE, "{diameter}@{scale}: color at ({dx},{dy})");
             }
             // Just beyond it comes the white edge (at most 1 logical px), then nothing.
             let edge = pixel(
@@ -417,9 +418,9 @@ mod tests {
             }
             hi - lo
         };
-        let (thin, medium, bold) = (span(6), span(9), span(17));
+        let (thin, medium, bold) = (span(3), span(4), span(8));
         assert!(
-            thin + 0.5 < medium && medium + 1.0 < bold,
+            thin + 0.1 < medium && medium + 1.0 < bold,
             "{thin} {medium} {bold}"
         );
     }

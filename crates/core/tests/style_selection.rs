@@ -89,12 +89,12 @@ fn first_and_third_selected() -> Annotator {
 fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
     let mut a = first_and_third_selected();
     assert_eq!(a.selection().len(), 2);
-    pick(&mut a, Button::Color(3));
+    pick(&mut a, Button::Color(1));
     pick(&mut a, Button::Width(0));
     for (i, selected) in [true, false, true].into_iter().enumerate() {
         let e = &a.ink().elements()[i];
         assert_eq!(e.stroke_color() == BLUE, selected, "color of {i}");
-        assert_eq!((e.stroke_width() - 1.0).abs() < f32::EPSILON, selected);
+        assert_eq!((e.stroke_width() - 2.0).abs() < f32::EPSILON, selected);
     }
     // The next Strokes keep their own style.
     stroke(&mut a, 400.0);
@@ -105,7 +105,7 @@ fn with_a_selection_a_choice_restyles_exactly_the_selected_elements() {
 #[test]
 fn a_restyle_is_one_undo_step_per_choice_and_redo_applies_it_again() {
     let mut a = first_and_third_selected();
-    pick(&mut a, Button::Color(3));
+    pick(&mut a, Button::Color(1));
     pick(&mut a, Button::Color(2));
     assert_eq!(colors(&a), [GREEN, RED, GREEN]);
     command(&mut a, 'z', false);
@@ -121,7 +121,7 @@ fn a_restyle_is_one_undo_step_per_choice_and_redo_applies_it_again() {
 #[test]
 fn choosing_what_is_already_set_logs_nothing() {
     let mut a = first_and_third_selected();
-    pick(&mut a, Button::Color(1));
+    pick(&mut a, Button::Color(0));
     pick(&mut a, Button::Width(1));
     command(&mut a, 'z', false);
     assert_eq!(
@@ -151,8 +151,10 @@ fn copied_excalidraw_json_reflects_the_restyled_values() {
     let elements = doc["elements"].as_array().expect("elements");
     assert_eq!(elements.len(), 2);
     for e in elements {
-        assert_eq!(e["strokeColor"], "#f08c00");
-        assert_eq!(e["strokeWidth"], 4);
+        assert_eq!(e["strokeColor"], "#1e1e1e");
+        // 8 pt in Excalidraw's unit: pt / (4.25 * sqrt(2)).
+        let sw = e["strokeWidth"].as_f64().expect("number");
+        assert!((sw - 8.0 / 6.01).abs() < 0.005, "{sw}");
         assert_eq!(e["opacity"], 100);
     }
     // Undo both, and the copy goes back to the old values.
@@ -162,7 +164,9 @@ fn copied_excalidraw_json_reflects_the_restyled_values() {
     command(&mut a, 'c', false);
     let text = a.take_copy().expect("still selected");
     assert!(text.contains(r##""strokeColor":"#e03131""##));
-    assert!(text.contains(r#""strokeWidth":2,"#));
+    let doc: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+    let sw = doc["elements"][0]["strokeWidth"].as_f64().expect("number");
+    assert!((sw - 4.0 / 6.01).abs() < 0.005, "{sw}");
     assert!(text.contains(r#""opacity":100,"#));
 }
 

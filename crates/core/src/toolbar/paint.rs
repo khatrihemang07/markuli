@@ -13,11 +13,11 @@ use tiny_skia::{LineCap, PathBuilder, Stroke, Transform};
 const ICON: f32 = 16.0;
 /// Swatch edge (Excalidraw's 1.35 rem swatch is about 22 px).
 const SWATCH: f32 = 22.0;
-/// A width button's line is 1.5 times the width it chooses up to 2 px, then
-/// grows by 0.75 per px (the defaults 1, 2 and 4 give 1.5, 3 and 4.5)...
-const ICON_LINE: f32 = 1.5;
-const ICON_KNEE: f32 = 2.0;
-const ICON_LINE_SLOPE: f32 = 0.75;
+/// A width button's line is 0.75 times the width it chooses up to 4 pt, then
+/// grows by 0.375 per pt (the defaults 2, 4 and 8 give 1.5, 3 and 4.5)...
+const ICON_LINE: f32 = 0.75;
+const ICON_KNEE: f32 = 4.0;
+const ICON_LINE_SLOPE: f32 = 0.375;
 /// ...up to this thickness, so a round-capped line still fits the button.
 const ICON_LINE_MAX: f32 = 14.0;
 /// How much of its color a dimmed swatch keeps.

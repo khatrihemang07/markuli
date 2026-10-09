@@ -28,6 +28,12 @@ fn scene() -> (Annotator, Pixmap) {
     let mut a = Annotator::new();
     let mut pm = Pixmap::new(W, H).expect("pixmap");
     a.handle(Event::ScaleFactor(SCALE));
+    // 12 pt, so a slow stroke is about 12 px across (the look the pixel
+    // checks and the golden were made with).
+    a.handle(Event::EditWidth {
+        slot: 1,
+        width: 12.0,
+    });
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a.render(&mut pm.as_mut(), Format::Rgba);
     (a, pm)
@@ -80,7 +86,7 @@ fn a_mouse_stroke_gets_thinner_the_faster_it_moves() {
     let slow = thickness(&pm, 100.0, 0.0, 50.0);
     let fast = thickness(&pm, 100.0, 50.0, 100.0);
     assert!(slow > fast + 1.0, "slow {slow} vs fast {fast}");
-    // Medium width is perfect-freehand size 8.5; its radius is size * easeOutSine(..), so a slow stroke is up to ~16 px across.
+    // 12 pt is perfect-freehand size 8.5; its radius is size * easeOutSine(..), so a slow stroke is up to ~16 px across.
     assert!(slow > 8.0 && slow < 18.0, "slow {slow}");
 }
 

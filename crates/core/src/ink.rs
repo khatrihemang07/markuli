@@ -16,8 +16,12 @@ pub struct Point {
 /// start is closed into a loop on finalize (actionFinalize.tsx, `isPathALoop`).
 const LOOP_THRESHOLD: f32 = 8.0;
 
-/// perfect-freehand `size` = strokeWidth * 4.25 (renderElement.ts).
-const SIZE_PER_WIDTH: f64 = 4.25;
+/// perfect-freehand `size` (renderElement.ts) is `strokeWidth * 4.25`, and
+/// easeOutSine at mid pressure widens the line by sqrt(2). Markuli's width is
+/// the line's thickness in pt, so `size = pt / sqrt(2)`.
+const SIZE_PER_PT: f64 = std::f64::consts::FRAC_1_SQRT_2;
+/// Excalidraw `strokeWidth` per pt: `1 / (4.25 * sqrt(2))`, about 1 / 6.01.
+pub(crate) const STROKE_WIDTH_PER_PT: f32 = 1.0 / (4.25 * std::f32::consts::SQRT_2);
 
 /// Axis-aligned box `[left, top, right, bottom]`.
 pub(crate) type Rect = [f32; 4];
@@ -173,7 +177,7 @@ impl Element {
             self.points.iter().map(|p| [f64::from(p.x), f64::from(p.y)]),
             self.pressures.iter().map(|&p| f64::from(p)),
         );
-        let size = f64::from(self.stroke_width) * SIZE_PER_WIDTH;
+        let size = f64::from(self.stroke_width) * SIZE_PER_PT;
         self.outline.clear();
         #[allow(
             clippy::cast_possible_truncation,

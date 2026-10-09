@@ -45,7 +45,7 @@ _Avoid_: panel, style panel
 Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. It stays clear of the menu bar, notch, Dock and taskbar. A Setting; the default is top.
 
 **Palette**:
-The 5 color slots and 3 width slots on the Toolbar. The user can edit them (a secondary click on a slot), and they are remembered across launches. Editing a slot also chooses it. Elements already drawn keep their own color and width. Widths are 0.5 to 20 in steps of 0.5. Defaults are Excalidraw's colors and widths 1, 2 and 4.
+The 5 color slots and 3 width slots on the Toolbar. The user can edit them (a secondary click on a slot), and they are remembered across launches. Editing a slot also chooses it. Elements already drawn keep their own color and width. A width is the drawn line's thickness in pt (logical px) at mid pressure, from 0.5 to 30 in steps of 0.25. Defaults are red, blue, green, yellow and black, and widths 2, 4 and 8 pt. The config marks this format with `palette=2`; an older file's colors, widths and chosen slots are ignored once.
 _Avoid_: swatches, presets
 
 **Style**:

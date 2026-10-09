@@ -17,9 +17,9 @@ pub struct Style {
 }
 
 impl Default for Style {
-    /// Excalidraw red, medium width.
+    /// Red, medium width.
     fn default() -> Self {
-        Self { color: 1, width: 1 }
+        Self { color: 0, width: 1 }
     }
 }
 
@@ -30,7 +30,7 @@ impl Style {
     }
 }
 
-/// What one Element looks like: its stroke rgb and px width.
+/// What one Element looks like: its stroke rgb and width in pt.
 ///
 /// This is a [`Style`] resolved against the Palette, so the stroke color and
 /// width can be applied to an Element (and compared with an Element's own)
@@ -43,7 +43,7 @@ pub(crate) struct Appearance {
 }
 
 impl Default for Appearance {
-    /// Excalidraw red, medium width.
+    /// Red, medium width.
     fn default() -> Self {
         Self::of(Style::default(), &Palette::DEFAULT)
     }

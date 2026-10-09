@@ -1,18 +1,16 @@
 //! The Palette: the 5 color slots and 3 width slots on the Toolbar.
 //!
-//! The defaults are Excalidraw's: the quick stroke palette
-//! (`DEFAULT_ELEMENT_STROKE_PICKS`, colors.ts, open-color shade 4 of the
-//! 0/2/4/6/8 picks) and its stroke widths 1, 2 and 4 (constants.ts
-//! `STROKE_WIDTH`: thin, bold, extra bold; Markuli calls them thin, medium
-//! and bold). Excalidraw 0.18, MIT.
+//! A width slot is the drawn line's thickness in pt (logical px) at mid
+//! pressure. The default colors are Excalidraw's open-color picks (colors.ts,
+//! Excalidraw 0.18, MIT), in the order red, blue, green, yellow, black.
 
 /// Color slots on the Toolbar.
 pub(crate) const COLORS: usize = 5;
 /// Width slots on the Toolbar.
 pub(crate) const WIDTHS: usize = 3;
-/// The width range a slot accepts, in px; slots snap to steps of 0.5.
+/// The width range a slot accepts, in pt; slots snap to steps of 0.25.
 pub const MIN_WIDTH: f32 = 0.5;
-pub const MAX_WIDTH: f32 = 20.0;
+pub const MAX_WIDTH: f32 = 30.0;
 
 /// The 5 color slots and 3 width slots. The user edits them and they are
 /// remembered; a [`Style`](crate::Style) is the chosen slot indices.
@@ -23,26 +21,26 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// Black, red, green, blue, yellow; thin 1, medium 2, bold 4. What Reset
-    /// restores, slot by slot.
+    /// Red, blue, green, yellow, black; thin 2, medium 4, bold 8 pt. What
+    /// Reset restores, slot by slot.
     pub const DEFAULT: Self = Self {
         colors: [
-            [0x1e, 0x1e, 0x1e],
             [0xe0, 0x31, 0x31],
-            [0x2f, 0x9e, 0x44],
             [0x19, 0x71, 0xc2],
-            [0xf0, 0x8c, 0x00],
+            [0x2f, 0x9e, 0x44],
+            [0xfa, 0xb0, 0x05],
+            [0x1e, 0x1e, 0x1e],
         ],
-        widths: [1.0, 2.0, 4.0],
+        widths: [2.0, 4.0, 8.0],
     };
 
-    /// A width slot value: `width` snapped to 0.5 and clamped to 0.5..=20;
+    /// A width slot value: `width` snapped to 0.25 and clamped to 0.5..=30;
     /// `None` for NaN or infinity.
     #[must_use]
     pub fn snap_width(width: f32) -> Option<f32> {
         width
             .is_finite()
-            .then(|| ((width * 2.0).round() / 2.0).clamp(MIN_WIDTH, MAX_WIDTH))
+            .then(|| ((width * 4.0).round() / 4.0).clamp(MIN_WIDTH, MAX_WIDTH))
     }
 
     /// What Reset restores for a slot; `None` for an out-of-range slot.
@@ -69,14 +67,11 @@ impl Palette {
         Self::snap_width(text.trim().replace(',', ".").parse().ok()?)
     }
 
-    /// A width as the editors show it: `2` and `2.5`, never `2.0`.
+    /// A width as the editors show it: `2`, `2.5` and `2.25`, never `2.0`.
     #[must_use]
     pub fn width_text(width: f32) -> String {
-        if width.fract() == 0.0 {
-            format!("{width:.0}")
-        } else {
-            format!("{width:.1}")
-        }
+        let text = format!("{width:.2}");
+        text.trim_end_matches('0').trim_end_matches('.').to_owned()
     }
 
     /// This Palette with every width made a valid slot value; one that is not

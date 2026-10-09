@@ -10,7 +10,7 @@ use crate::style::Appearance;
 use crate::Key;
 
 /// Smallest ring diameter, logical px.
-const MIN_RING: u16 = 6;
+const MIN_RING: u16 = 3;
 
 #[allow(
     clippy::cast_possible_truncation,
@@ -45,12 +45,10 @@ impl Tool for Pen {
         Some((&['p', '7'], ToolKind::Eraser))
     }
 
-    /// A dot as wide as the Stroke: Excalidraw's freedraw `size` is
-    /// `strokeWidth * 4.25` and the outline is about that wide at the
-    /// simulated pressure of a mouse. Never below `MIN_RING`, which would be
-    /// hard to see.
+    /// A dot as wide as the Stroke: the width is its thickness in pt at mid
+    /// pressure. Never below `MIN_RING`, which would be hard to see.
     fn cursor(&self, style: Appearance) -> Cursor {
-        let width = (style.width * 4.25).round().clamp(0.0, 64.0);
+        let width = style.width.round().clamp(0.0, 64.0);
         Cursor::Pen {
             diameter: MIN_RING.max(float_to_u16(width)),
             color: style.color,

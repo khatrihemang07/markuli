@@ -19,8 +19,8 @@ The build is unsigned. On first launch, right-click the app and choose **Open**.
 | `Alt` + `1` | Clear the Ink |
 | `P` / `E` | Toggle Pen and Eraser |
 | `V` / `K` | Select / Laser (`7` and `0` also toggle Pen and Eraser) |
-| `1`–`5` | Color: black, red, green, blue, yellow |
-| `[` / `]` | Thinner / bolder (thin, medium, bold) |
+| `1`–`5` | Color: red, blue, green, yellow, black |
+| `[` / `]` | Thinner / bolder (thin 2 pt, medium 4 pt, bold 8 pt) |
 | `Cmd` + `Z` / `Cmd` + `Shift` + `Z` | Undo / redo |
 | `Cmd` + `C` | Copy the Ink as Excalidraw data |
 

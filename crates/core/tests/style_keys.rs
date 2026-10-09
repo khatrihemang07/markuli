@@ -3,13 +3,13 @@
 use markuli_core::{Annotator, Button, DisplayId, Element, Event, Key, Point, ToolKind};
 
 const PALETTE: [[u8; 3]; 5] = [
-    [0x1e, 0x1e, 0x1e],
     [0xe0, 0x31, 0x31],
-    [0x2f, 0x9e, 0x44],
     [0x19, 0x71, 0xc2],
-    [0xf0, 0x8c, 0x00],
+    [0x2f, 0x9e, 0x44],
+    [0xfa, 0xb0, 0x05],
+    [0x1e, 0x1e, 0x1e],
 ];
-const RED: [u8; 3] = PALETTE[1];
+const RED: [u8; 3] = PALETTE[0];
 
 fn p(x: f32, y: f32) -> Point {
     Point { x, y }
@@ -96,7 +96,7 @@ fn brackets_step_the_width_and_stop_at_the_ends() {
         stroke(&mut a, 200.0);
         seen.push(last(&a).stroke_width());
     }
-    assert_eq!(seen, [1.0, 1.0, 2.0, 4.0, 4.0, 4.0]);
+    assert_eq!(seen, [2.0, 2.0, 4.0, 8.0, 8.0, 8.0]);
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn a_width_key_from_another_tool_switches_to_the_pen_and_steps() {
         key(&mut a, ']');
         assert_eq!(tool(&a), ToolKind::Pen, "{from}");
         stroke(&mut a, 200.0);
-        assert_eq!(last(&a).stroke_width(), 4.0, "{from}");
+        assert_eq!(last(&a).stroke_width(), 8.0, "{from}");
     }
 }
 
@@ -159,14 +159,14 @@ fn a_selection_steps_each_elements_own_width() {
     stroke(&mut a, 300.0); // bold
     press(&mut a, 'a', true, false);
     key(&mut a, ']');
+    assert_eq!(widths(&a), [4.0, 8.0]);
+    key(&mut a, '[');
     assert_eq!(widths(&a), [2.0, 4.0]);
     key(&mut a, '[');
-    assert_eq!(widths(&a), [1.0, 2.0]);
-    key(&mut a, '[');
-    assert_eq!(widths(&a), [1.0, 1.0]);
+    assert_eq!(widths(&a), [2.0, 2.0]);
     // Each press is its own undo step.
     press(&mut a, 'z', true, false);
-    assert_eq!(widths(&a), [1.0, 2.0]);
+    assert_eq!(widths(&a), [2.0, 4.0]);
 }
 
 #[test]
@@ -215,10 +215,10 @@ fn keys_are_ignored_mid_stroke() {
     key(&mut a, ']');
     a.handle(Event::PointerUp(p(400.0, 200.0)));
     assert_eq!(last(&a).stroke_color(), RED);
-    assert_eq!(last(&a).stroke_width(), 2.0);
+    assert_eq!(last(&a).stroke_width(), 4.0);
     stroke(&mut a, 300.0);
     assert_eq!(last(&a).stroke_color(), RED);
-    assert_eq!(last(&a).stroke_width(), 2.0);
+    assert_eq!(last(&a).stroke_width(), 4.0);
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn keys_are_ignored_while_the_toolbar_is_pressed() {
     key(&mut a, 'p');
     stroke(&mut a, 200.0);
     assert_eq!(last(&a).stroke_color(), RED);
-    assert_eq!(last(&a).stroke_width(), 2.0);
+    assert_eq!(last(&a).stroke_width(), 4.0);
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn cmd_blocks_the_style_keys() {
     key(&mut a, 'p');
     stroke(&mut a, 200.0);
     assert_eq!(last(&a).stroke_color(), RED);
-    assert_eq!(last(&a).stroke_width(), 2.0);
+    assert_eq!(last(&a).stroke_width(), 4.0);
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn alt_blocks_digits_but_not_brackets() {
     assert_eq!(tool(&a), ToolKind::Pen);
     stroke(&mut a, 200.0);
     assert_eq!(last(&a).stroke_color(), RED);
-    assert_eq!(last(&a).stroke_width(), 4.0);
+    assert_eq!(last(&a).stroke_width(), 8.0);
 }
 
 #[test]

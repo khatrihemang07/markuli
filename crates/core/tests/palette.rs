@@ -77,15 +77,15 @@ fn edit_width(a: &mut Annotator, slot: usize, width: f32) {
 fn the_view_reports_the_default_palette() {
     let palette = session().view().palette;
     assert_eq!(palette, Palette::default());
-    assert_eq!(palette.colors[1], RED);
-    assert_eq!(palette.widths, [1.0, 2.0, 4.0]);
+    assert_eq!(palette.colors[0], RED);
+    assert_eq!(palette.widths, [2.0, 4.0, 8.0]);
 }
 
 #[test]
 fn a_startup_palette_is_reported_and_drawn_with() {
     let mut a = Annotator::new();
     let mut palette = Palette::default();
-    palette.colors[1] = TEAL;
+    palette.colors[0] = TEAL;
     palette.widths[1] = 7.5;
     a.handle(Event::Palette(palette));
     a.handle(Event::Resize {
@@ -94,7 +94,7 @@ fn a_startup_palette_is_reported_and_drawn_with() {
     });
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     assert_eq!(a.view().palette, palette);
-    // The default Style (slots 1 and 1) resolves to the edited values.
+    // The default Style (slots 0 and 1) resolves to the edited values.
     stroke(&mut a, 100.0);
     assert_eq!(last(&a).stroke_color(), TEAL);
     assert!((last(&a).stroke_width() - 7.5).abs() < f32::EPSILON);
@@ -108,7 +108,7 @@ fn the_palette_event_sanitizes_widths() {
         ..Palette::default()
     };
     a.handle(Event::Palette(palette));
-    assert_eq!(a.view().palette.widths, [0.5, 20.0, 4.0]);
+    assert_eq!(a.view().palette.widths, [0.5, 30.0, 8.0]);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn an_edited_color_is_drawn_by_the_next_stroke_and_by_key_n() {
     assert_eq!(a.view().palette.colors[2], TEAL);
     stroke(&mut a, 100.0);
     assert_eq!(last(&a).stroke_color(), TEAL);
-    key(&mut a, '4');
+    key(&mut a, '2');
     stroke(&mut a, 200.0);
     assert_eq!(last(&a).stroke_color(), BLUE);
     key(&mut a, '3');
@@ -166,15 +166,15 @@ fn editing_chooses_the_slot_for_every_tool_and_hands_over_to_the_pen() {
 }
 
 #[test]
-fn width_edits_are_clamped_and_snapped_to_half_steps() {
+fn width_edits_are_clamped_and_snapped_to_quarter_steps() {
     let mut a = session();
     for (given, expected) in [
         (0.1, 0.5),
-        (0.74, 0.5),
-        (0.76, 1.0),
-        (3.3, 3.5),
-        (19.9, 20.0),
-        (500.0, 20.0),
+        (0.6, 0.5),
+        (0.63, 0.75),
+        (3.3, 3.25),
+        (29.9, 30.0),
+        (500.0, 30.0),
         (-3.0, 0.5),
     ] {
         edit_width(&mut a, 2, given);
@@ -231,7 +231,7 @@ fn old_strokes_keep_their_look_after_an_edit() {
     stroke(&mut a, 200.0);
     let first = &a.ink().elements()[0];
     assert_eq!(first.stroke_color(), RED);
-    assert!((first.stroke_width() - 2.0).abs() < f32::EPSILON);
+    assert!((first.stroke_width() - 4.0).abs() < f32::EPSILON);
     assert_eq!(last(&a).stroke_color(), TEAL);
 }
 
@@ -256,7 +256,7 @@ fn editing_with_a_selection_restyles_it_in_one_undo_step() {
     assert_eq!(a.view().tool, ToolKind::Select);
     assert_eq!(
         a.view().style.color,
-        1,
+        0,
         "a Selection restyle leaves the Pen"
     );
     command(&mut a, 'z');
@@ -275,7 +275,7 @@ fn a_width_edit_with_a_selection_restyles_and_undoes_in_one_step() {
     }
     command(&mut a, 'z');
     for e in a.ink().elements() {
-        assert!((e.stroke_width() - 2.0).abs() < f32::EPSILON);
+        assert!((e.stroke_width() - 4.0).abs() < f32::EPSILON);
     }
 }
 
@@ -296,7 +296,7 @@ fn edits_of_different_slots_are_separate_undo_steps() {
 fn a_key_after_an_edit_closes_the_coalescing() {
     let mut a = two_selected();
     edit_color(&mut a, 2, TEAL);
-    key(&mut a, '4');
+    key(&mut a, '2');
     edit_color(&mut a, 2, PINK);
     a.handle(Event::EditEnd);
     command(&mut a, 'z');
@@ -323,7 +323,11 @@ fn copied_excalidraw_json_carries_the_custom_values() {
     command(&mut a, 'c');
     let json = a.take_copy().expect("a copy");
     assert!(json.contains("#12b8a6"), "{json}");
-    assert!(json.contains("\"strokeWidth\":7.5"), "{json}");
+    // 7.5 pt in Excalidraw's unit: pt / (4.25 * sqrt(2)).
+    let at = json.find("\"strokeWidth\":").expect("strokeWidth") + 14;
+    let end = at + json[at..].find(',').expect("comma");
+    let sw: f32 = json[at..end].parse().expect("a number");
+    assert!((sw - 7.5 / 6.01).abs() < 0.005, "{json}");
 }
 
 fn secondary(a: &mut Annotator, at: Point) -> Option<EditRequest> {
@@ -503,15 +507,17 @@ fn width_text_drops_a_useless_fraction() {
     assert_eq!(Palette::width_text(2.0), "2");
     assert_eq!(Palette::width_text(2.5), "2.5");
     assert_eq!(Palette::width_text(0.5), "0.5");
+    assert_eq!(Palette::width_text(2.25), "2.25");
+    assert_eq!(Palette::width_text(12.75), "12.75");
 }
 
 #[test]
 fn typed_widths_snap_and_clamp() {
     assert_eq!(Palette::parse_width(" 3 "), Some(3.0));
-    assert_eq!(Palette::parse_width("2.3"), Some(2.5));
+    assert_eq!(Palette::parse_width("2.3"), Some(2.25));
     assert_eq!(Palette::parse_width("2,5"), Some(2.5));
     assert_eq!(Palette::parse_width("0"), Some(0.5));
-    assert_eq!(Palette::parse_width("57"), Some(20.0));
+    assert_eq!(Palette::parse_width("57"), Some(30.0));
 }
 
 #[test]

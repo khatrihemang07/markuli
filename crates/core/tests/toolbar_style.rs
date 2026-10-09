@@ -98,8 +98,8 @@ fn a_click_restyles_the_selection_like_the_key_and_stays_on_select() {
         click(a, p(350.0, 100.0));
         assert_eq!(a.selection().len(), 1);
     }
-    press(&mut by_click, Button::Color(3));
-    key(&mut by_key, '4');
+    press(&mut by_click, Button::Color(1));
+    key(&mut by_key, '2');
     press(&mut by_click, Button::Width(2));
     key(&mut by_key, ']');
     assert_eq!(by_click.ink(), by_key.ink());

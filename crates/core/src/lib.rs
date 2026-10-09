@@ -72,8 +72,8 @@ pub enum Event {
     /// The remembered Style of the Pen, sent at startup. Out-of-range
     /// indices are ignored.
     Style(Style),
-    /// The remembered Palette, sent at startup. Widths are snapped to 0.5 and
-    /// clamped to 0.5..=20. The Pen keeps its chosen slots.
+    /// The remembered Palette, sent at startup. Widths are snapped to 0.25 and
+    /// clamped to 0.5..=30. The Pen keeps its chosen slots.
     Palette(Palette),
     /// Sets color slot `slot` and chooses it, as a click on it would. An
     /// out-of-range slot is ignored. Reset is this event with the default
@@ -82,7 +82,7 @@ pub enum Event {
         slot: usize,
         rgb: [u8; 3],
     },
-    /// Sets width slot `slot` (snapped to 0.5, clamped to 0.5..=20; not finite
+    /// Sets width slot `slot` (snapped to 0.5, clamped to 0.5..=30; not finite
     /// is ignored) and chooses it. Consecutive edits of one slot restyle a
     /// Selection as one undo step, until [`Event::EditEnd`], a key or a click.
     EditWidth {

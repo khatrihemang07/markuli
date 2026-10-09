@@ -3,7 +3,7 @@
 //!
 //! - Color: the system `ChooseColor` dialog, with a "Reset" button of ours
 //!   added under it by a hook (`windows_width` has the other editor).
-//! - Width: a small popup with a trackbar (0.5 steps), an edit box and Reset.
+//! - Width: a small popup with a trackbar (0.25 pt steps), an edit box and Reset.
 //!
 //! Re-entrancy: both editors pump messages (`ChooseColorW` and the popup's
 //! loop) on the thread that is inside winit's event handler. That is safe

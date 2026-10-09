@@ -4,6 +4,10 @@ use crate::palette::{Palette, COLORS, WIDTHS};
 use crate::style::Style;
 use crate::ToolbarPosition;
 
+/// The `palette=` value that marks the width-in-pt format (0.4.0). Configs
+/// without it hold old Excalidraw-unit widths and old colors.
+const PALETTE_VERSION: &str = "2";
+
 /// What the user can change in Settings. Hotkeys are kept as text because the
 /// core knows no key codes; the platform layer parses and validates them.
 #[derive(Clone, Debug, PartialEq)]
@@ -38,6 +42,7 @@ impl Config {
     #[must_use]
     pub fn parse(text: &str) -> Self {
         let mut config = Self::default();
+        let mut current = false;
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
                 continue;
@@ -46,6 +51,7 @@ impl Config {
             match key.trim() {
                 "toggle" if !value.is_empty() => config.toggle = value.into(),
                 "clear" if !value.is_empty() => config.clear = value.into(),
+                "palette" => current = value == PALETTE_VERSION,
                 "launch_at_login" => config.launch_at_login = value == "true",
                 "color" => config.style.color = index(value, COLORS, config.style.color),
                 "width" => config.style.width = index(value, WIDTHS, config.style.width),
@@ -57,13 +63,19 @@ impl Config {
                 _ => {}
             }
         }
+        // One-time reset: an older file's colors, widths and Style indices
+        // mean something else now. Everything else is kept.
+        if !current {
+            config.style = Style::default();
+            config.palette = Palette::DEFAULT;
+        }
         config
     }
 
     #[must_use]
     pub fn to_text(&self) -> String {
         format!(
-            "toggle={}\nclear={}\nlaunch_at_login={}\ncolor={}\nwidth={}\ntoolbar={}\ncolors={}\nwidths={}\n",
+            "toggle={}\nclear={}\nlaunch_at_login={}\ncolor={}\nwidth={}\ntoolbar={}\npalette={PALETTE_VERSION}\ncolors={}\nwidths={}\n",
             self.toggle,
             self.clear,
             self.launch_at_login,
@@ -104,7 +116,7 @@ fn color(text: &str) -> Option<[u8; 3]> {
     Some([channel(0)?, channel(2)?, channel(4)?])
 }
 
-/// Same for widths: snapped to 0.5 and clamped like an edit.
+/// Same for widths: snapped to 0.25 and clamped like an edit.
 fn parse_widths(value: &str, slots: &mut [f32]) {
     for (slot, item) in slots.iter_mut().zip(value.split(',')) {
         if let Some(width) = item.trim().parse().ok().and_then(Palette::snap_width) {

@@ -1,4 +1,4 @@
-//! The Windows width editor: a small popup with a trackbar (0.5 steps), an
+//! The Windows width editor: a small popup with a trackbar (0.25 pt steps), an
 //! edit box and Reset. Modal: `popup` returns when it is closed. The
 //! re-entrancy argument is in `windows_editors`.
 
@@ -44,9 +44,9 @@ const ID_EDIT: usize = 101;
 const ID_RESET: usize = 102;
 /// Popup client size at 96 dpi: trackbar on top, edit box and Reset below.
 const SIZE: (i32, i32) = (230, 74);
-/// Trackbar positions are half pixels: position 1 is width 0.5.
-const MIN_POS: i32 = 1;
-const MAX_POS: i32 = 40;
+/// Trackbar positions are quarter points: position 2 is width 0.5, 120 is 30.
+const MIN_POS: i32 = 2;
+const MAX_POS: i32 = 120;
 
 /// The popup's outer size in pixels at `dpi`.
 pub(super) fn size(dpi: u32) -> (i32, i32) {
@@ -56,13 +56,13 @@ pub(super) fn size(dpi: u32) -> (i32, i32) {
 /// The trackbar position for a slot width (snapped and clamped first).
 fn pos_from_width(width: f32) -> i32 {
     Palette::snap_width(width).map_or(MIN_POS, |w| {
-        ((w * 2.0).round() as i32).clamp(MIN_POS, MAX_POS)
+        ((w * 4.0).round() as i32).clamp(MIN_POS, MAX_POS)
     })
 }
 
 /// The slot width a trackbar position stands for.
 fn width_from_pos(pos: i32) -> f32 {
-    pos.clamp(MIN_POS, MAX_POS) as f32 / 2.0
+    pos.clamp(MIN_POS, MAX_POS) as f32 / 4.0
 }
 
 /// What the popup's window procedure reaches through `GWLP_USERDATA`. It
@@ -264,7 +264,7 @@ unsafe fn add_controls(hwnd: HWND, state: &State, width: f32, dpi: u32) {
         state.track.set(track);
         state.edit.set(edit);
         SendMessageW(track, TBM_SETRANGE, 1, (MIN_POS | MAX_POS << 16) as LPARAM);
-        SendMessageW(track, TBM_SETPAGESIZE, 0, 2);
+        SendMessageW(track, TBM_SETPAGESIZE, 0, 4);
         SendMessageW(track, TBM_SETPOS, 1, pos_from_width(width) as LPARAM);
         SetFocus(track);
     }

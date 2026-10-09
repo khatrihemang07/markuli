@@ -75,12 +75,12 @@ fn arbitrary_bytes_never_panic() {
 
 #[test]
 fn the_default_style_is_red_and_medium() {
-    assert_eq!(Config::default().style, Style { color: 1, width: 1 });
+    assert_eq!(Config::default().style, Style { color: 0, width: 1 });
 }
 
 #[test]
 fn style_keys_are_read_and_written() {
-    let config = Config::parse("color=3\nwidth=2\n");
+    let config = Config::parse("palette=2\ncolor=3\nwidth=2\n");
     assert_eq!(config.style, Style { color: 3, width: 2 });
     assert!(config.to_text().contains("color=3\n"));
     assert!(config.to_text().contains("width=2\n"));
@@ -94,10 +94,11 @@ fn invalid_or_out_of_range_style_values_keep_the_defaults() {
         "color=\nwidth= ",
         "color=1.5",
     ] {
-        assert_eq!(Config::parse(text).style, Style::default(), "{text}");
+        let text = format!("palette=2\n{text}");
+        assert_eq!(Config::parse(&text).style, Style::default(), "{text}");
     }
-    let config = Config::parse("color=9\nwidth=2\n");
-    assert_eq!(config.style, Style { color: 1, width: 2 });
+    let config = Config::parse("palette=2\ncolor=9\nwidth=2\n");
+    assert_eq!(config.style, Style { color: 0, width: 2 });
 }
 
 #[test]
@@ -123,28 +124,32 @@ fn the_toolbar_position_is_read_tolerantly() {
 }
 
 #[test]
-fn the_default_palette_is_excalidraws() {
+fn the_default_palette_is_red_blue_green_yellow_black_at_2_4_8_pt() {
     assert_eq!(Config::default().palette, Palette::DEFAULT);
     let text = Config::default().to_text();
     assert!(
-        text.contains("colors=#1e1e1e,#e03131,#2f9e44,#1971c2,#f08c00\n"),
+        text.contains("colors=#e03131,#1971c2,#2f9e44,#fab005,#1e1e1e\n"),
         "{text}"
     );
-    assert!(text.contains("widths=1,2,4\n"), "{text}");
+    assert!(text.contains("widths=2,4,8\n"), "{text}");
+    assert!(text.contains("palette=2\n"), "{text}");
 }
 
 #[test]
 fn palette_values_are_read_slot_by_slot() {
-    let c = Config::parse("colors=#112233,#445566,#778899,#aabbcc,#ddeeff\nwidths=0.5,3.5,20\n");
+    let c = Config::parse(
+        "palette=2\ncolors=#112233,#445566,#778899,#aabbcc,#ddeeff\nwidths=0.5,3.25,30\n",
+    );
     assert_eq!(c.palette.colors[0], [0x11, 0x22, 0x33]);
     assert_eq!(c.palette.colors[4], [0xdd, 0xee, 0xff]);
-    assert_eq!(c.palette.widths, [0.5, 3.5, 20.0]);
+    assert_eq!(c.palette.widths, [0.5, 3.25, 30.0]);
 }
 
 #[test]
 fn invalid_palette_slots_fall_back_to_their_default_alone() {
     let d = Palette::DEFAULT;
-    let c = Config::parse("colors=#112233,red,#12345,#GGGGGG,#AABBCC\nwidths=abc,5,NaN\n");
+    let c =
+        Config::parse("palette=2\ncolors=#112233,red,#12345,#GGGGGG,#AABBCC\nwidths=abc,5,NaN\n");
     assert_eq!(c.palette.colors[0], [0x11, 0x22, 0x33]);
     assert_eq!(c.palette.colors[1], d.colors[1]);
     assert_eq!(c.palette.colors[2], d.colors[2]);
@@ -156,20 +161,47 @@ fn invalid_palette_slots_fall_back_to_their_default_alone() {
 #[test]
 fn short_long_and_odd_palette_lists_are_tolerated() {
     let d = Palette::DEFAULT;
-    let c = Config::parse("colors=#010203\nwidths=9,,\n");
+    let c = Config::parse("palette=2\ncolors=#010203\nwidths=9,,\n");
     assert_eq!(c.palette.colors[0], [1, 2, 3]);
     assert_eq!(c.palette.colors[1..], d.colors[1..]);
     assert!((c.palette.widths[0] - 9.0).abs() < f32::EPSILON);
     assert_eq!(c.palette.widths[1..], d.widths[1..]);
     let c = Config::parse(
-        "colors=#010203,#010203,#010203,#010203,#010203,#ffffff,#ffffff\nwidths=1,1,1,1,1\n",
+        "palette=2\ncolors=#010203,#010203,#010203,#010203,#010203,#ffffff,#ffffff\nwidths=1,1,1,1,1\n",
     );
     assert_eq!(c.palette.colors[4], [1, 2, 3]);
-    assert_eq!(Config::parse("colors=\nwidths=").palette, d);
+    assert_eq!(Config::parse("palette=2\ncolors=\nwidths=").palette, d);
 }
 
 #[test]
 fn out_of_range_widths_are_clamped_and_snapped() {
-    let c = Config::parse("widths=0.1,2.3,500\n");
-    assert_eq!(c.palette.widths, [0.5, 2.5, 20.0]);
+    let c = Config::parse("palette=2\nwidths=0.1,2.3,500\n");
+    assert_eq!(c.palette.widths, [0.5, 2.25, 30.0]);
+}
+
+#[test]
+fn a_0_3_0_config_without_the_version_key_resets_the_palette_and_style_once() {
+    let old = "toggle=control+KeyD\nclear=F9\nlaunch_at_login=true\ncolor=3\nwidth=2\n\
+               toolbar=left\ncolors=#112233,#445566,#778899,#aabbcc,#ddeeff\nwidths=1,2,4\n";
+    let c = Config::parse(old);
+    assert_eq!(c.palette, Palette::DEFAULT);
+    assert_eq!(c.style, Style::default());
+    assert_eq!(c.toggle, "control+KeyD");
+    assert_eq!(c.clear, "F9");
+    assert!(c.launch_at_login);
+    assert_eq!(c.toolbar, markuli_core::ToolbarPosition::Left);
+    // Saved once, the new format is kept.
+    let saved = Config::parse(&c.to_text());
+    assert_eq!(saved, c);
+}
+
+#[test]
+fn a_version_2_config_round_trips_and_other_versions_reset() {
+    let mut c = Config::default();
+    c.palette.widths = [0.75, 12.25, 30.0];
+    c.palette.colors[2] = [9, 8, 7];
+    c.style = Style { color: 2, width: 0 };
+    assert_eq!(Config::parse(&c.to_text()), c);
+    let text = c.to_text().replace("palette=2", "palette=3");
+    assert_eq!(Config::parse(&text).palette, Palette::DEFAULT);
 }

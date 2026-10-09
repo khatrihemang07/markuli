@@ -287,7 +287,7 @@ fn toolbar_highlights_the_chosen_color_and_width_in_both_themes() {
         (Theme::Dark, dark_page(), "toolbar_dark_blue_bold"),
     ] {
         let mut a = scene(theme, 1.0);
-        key(&mut a, '4');
+        key(&mut a, '2');
         key(&mut a, ']');
         check(name, (W, H), &image(&mut a, page));
     }
@@ -393,7 +393,7 @@ fn toolbar_shows_a_custom_palette_with_a_capped_width_icon() {
             [0xff, 0xff, 0xff],
             [0x00, 0x00, 0x00],
         ],
-        widths: [0.5, 8.0, 20.0],
+        widths: [0.5, 8.0, 12.0],
     };
     a.handle(Event::Palette(palette));
     a.handle(Event::EditColor {
@@ -402,7 +402,7 @@ fn toolbar_shows_a_custom_palette_with_a_capped_width_icon() {
     });
     a.handle(Event::EditWidth {
         slot: 2,
-        width: 20.0,
+        width: 30.0,
     });
     a.handle(Event::PointerDown(p(100.0, 220.0)));
     a.handle(Event::PointerMove(p(300.0, 180.0)));

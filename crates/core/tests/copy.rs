@@ -183,7 +183,8 @@ fn a_stroke_carries_its_geometry_and_style() {
     assert_eq!(e["height"].as_f64(), Some(30.0));
     assert_eq!(e["strokeColor"], "#e03131");
     assert_eq!(e["backgroundColor"], "transparent");
-    assert_eq!(e["strokeWidth"].as_f64(), Some(2.0));
+    // The medium slot is 4 pt: strokeWidth = pt / (4.25 * sqrt(2)).
+    assert!((e["strokeWidth"].as_f64().expect("number") - 4.0 / 6.01).abs() < 0.005);
     assert_eq!(e["opacity"], 100);
     assert_eq!(e["angle"].as_f64(), Some(0.0));
     assert_eq!(e["roughness"], 1);

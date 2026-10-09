@@ -10,6 +10,7 @@
 //! Deviations: `updated` is 0 (the core has no clock; paste only uses it for
 //! collaboration), `versionNonce` repeats the seed, and `files` is `{}`.
 
+use crate::ink::STROKE_WIDTH_PER_PT;
 use crate::Element;
 use std::fmt::Write;
 
@@ -41,7 +42,7 @@ fn write_element(out: &mut String, element: &Element, z: usize) {
         y = Num(e.y()),
         w = Num(right - left),
         h = Num(bottom - top),
-        sw = Num(e.stroke_width()),
+        sw = Num(e.stroke_width() * STROKE_WIDTH_PER_PT),
         op = e.opacity(),
         index = Index(z),
         seed = e.seed(),

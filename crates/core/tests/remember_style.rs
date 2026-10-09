@@ -46,13 +46,13 @@ const GREEN: [u8; 3] = [0x2f, 0x9e, 0x44];
 
 #[test]
 fn the_view_reports_the_default_style() {
-    assert_eq!(session().view().style, Style { color: 1, width: 1 });
+    assert_eq!(session().view().style, Style { color: 0, width: 1 });
 }
 
 #[test]
 fn the_startup_style_sets_the_next_strokes_look() {
     let mut a = Annotator::new();
-    a.handle(Event::Style(Style { color: 3, width: 2 }));
+    a.handle(Event::Style(Style { color: 1, width: 2 }));
     a.handle(Event::Resize {
         width: 800,
         height: 600,
@@ -60,8 +60,8 @@ fn the_startup_style_sets_the_next_strokes_look() {
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     stroke(&mut a, 100.0);
     assert_eq!(last(&a).stroke_color(), BLUE);
-    assert!((last(&a).stroke_width() - 4.0).abs() < f32::EPSILON);
-    assert_eq!(a.view().style, Style { color: 3, width: 2 });
+    assert!((last(&a).stroke_width() - 8.0).abs() < f32::EPSILON);
+    assert_eq!(a.view().style, Style { color: 1, width: 2 });
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn the_default_style_draws_what_a_fresh_session_draws() {
     a.handle(Event::Style(Style::default()));
     stroke(&mut a, 100.0);
     assert_eq!(last(&a).stroke_color(), [0xe0, 0x31, 0x31]);
-    assert!((last(&a).stroke_width() - 2.0).abs() < f32::EPSILON);
+    assert!((last(&a).stroke_width() - 4.0).abs() < f32::EPSILON);
     assert_eq!(last(&a).stroke_color(), last(&fresh).stroke_color());
     assert!((last(&a).stroke_width() - last(&fresh).stroke_width()).abs() < f32::EPSILON);
 }

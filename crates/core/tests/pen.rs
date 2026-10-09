@@ -75,7 +75,7 @@ fn elements_have_excalidraw_defaults_and_relative_points() {
     assert_eq!((e.x(), e.y()), (10.0, 20.0));
     assert_eq!(e.points(), &[p(0.0, 0.0), p(10.0, 5.0), p(20.0, 40.0)]);
     assert_eq!(e.stroke_color(), [0xe0, 0x31, 0x31]);
-    assert!((e.stroke_width() - 2.0).abs() < f32::EPSILON);
+    assert!((e.stroke_width() - 4.0).abs() < f32::EPSILON);
     assert_eq!(e.opacity(), 100);
 }
 
