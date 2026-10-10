@@ -97,9 +97,19 @@ fn check(name: &str, expected: (u32, u32), actual: &Pixmap) {
         .max_by_key(|&(_, d)| d)
         .unwrap_or((0, 0));
     let (x, y) = (at / 4 % expected.0 as usize, at / 4 / expected.0 as usize);
+    let width = expected.0 as usize;
+    let over: Vec<String> = golden
+        .data()
+        .chunks_exact(4)
+        .zip(actual.data().chunks_exact(4))
+        .enumerate()
+        .filter(|(_, (g, a))| g.iter().zip(*a).any(|(g, a)| g.abs_diff(*a) > 2))
+        .take(40)
+        .map(|(i, (g, a))| format!("({}, {}) {g:?} -> {a:?}", i % width, i / width))
+        .collect();
     assert!(
         worst <= 2,
-        "{name}: differs from its golden by {worst} at ({x}, {y})"
+        "{name}: differs from its golden by {worst} at ({x}, {y}): {over:#?}"
     );
 }
 
