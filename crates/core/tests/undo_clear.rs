@@ -215,12 +215,19 @@ fn esc_mid_stroke_discards_only_that_stroke() {
 }
 
 #[test]
-fn esc_never_clears() {
+fn esc_leaves_draw_mode_and_never_clears() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
-    key(&mut a, Key::Escape, false, false);
-    assert_eq!(a.ink().len(), 1);
+    key(&mut a, Key::Escape, true, false);
+    key(&mut a, Key::Escape, false, true);
     assert!(a.view().draw_mode);
+    key(&mut a, Key::Escape, false, false);
+    assert!(!a.view().draw_mode);
+    // Esc only leaves: outside Draw Mode it does not enter it again.
+    key(&mut a, Key::Escape, false, false);
+    assert!(!a.view().draw_mode);
+    a.handle(Event::ToggleDrawMode(D1));
+    assert_eq!(a.ink().len(), 1);
 }
 
 #[test]

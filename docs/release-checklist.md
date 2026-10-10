@@ -56,7 +56,7 @@ Note for macOS: AppKit and the tray put the idle baseline near 10-11 MB before a
 - [ ] macOS: toggling over a full-screen app does not create or switch Spaces (10).
 - [ ] The Overlay is above normal windows (11).
 - [ ] The Overlay covers the display and Ink lines up with what is under the cursor, including the menu bar / taskbar areas, on a Retina or scaled (125%, 150%) display (12).
-- [ ] Esc in Draw Mode never clears Ink (13).
+- [ ] Esc in Draw Mode never clears Ink (13). It cancels a Stroke in progress or drops the Selection; with neither it leaves Draw Mode like the toggle hotkey (focus goes back, the Ink returns on the next entry). Outside Draw Mode Esc reaches the app underneath.
 - [ ] Pen, Eraser, Laser, Select, toolbar, undo/redo and copy to Excalidraw: check against their own tickets (stories 14-43).
 - [ ] Width in pt (macOS and Windows): a 4 pt stroke measures about 4 pt across (screenshot at scale 1 and 2), the cursor ring matches, and the three Toolbar width icons look distinct. Launch with a 0.3.0 config: colors, widths and the chosen slots are the new defaults (red, blue, green, yellow, black; 2, 4, 8 pt) while hotkeys and Toolbar position are kept, and the config now has `palette=2`. Paste a stroke into Excalidraw: it looks the same.
 
