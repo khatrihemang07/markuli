@@ -163,14 +163,14 @@ fn clearing_empty_ink_logs_nothing() {
 }
 
 #[test]
-fn the_q_key_clears_like_the_clear_button() {
+fn the_space_key_clears_like_the_clear_button() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
     stroke(&mut a, 50.0);
-    key(&mut a, Key::Char('q'), false, true);
-    key(&mut a, Key::Char('q'), true, false);
+    key(&mut a, Key::Char(' '), false, true);
+    key(&mut a, Key::Char(' '), true, false);
     a.handle(Event::Key {
-        key: Key::Char('q'),
+        key: Key::Char(' '),
         command: false,
         shift: false,
         alt: true,
@@ -179,13 +179,13 @@ fn the_q_key_clears_like_the_clear_button() {
 
     a.handle(Event::PointerDown(p(80.0, 80.0)));
     a.handle(Event::PointerMove(p(90.0, 90.0)));
-    key(&mut a, Key::Char('q'), false, false);
+    key(&mut a, Key::Char(' '), false, false);
     a.handle(Event::PointerUp(p(95.0, 95.0)));
     assert_eq!(a.ink().len(), 3);
 
     let before = a.ink().clone();
     let view = a.handle(Event::Key {
-        key: Key::Char('q'),
+        key: Key::Char(' '),
         command: false,
         shift: false,
         alt: false,

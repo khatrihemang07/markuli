@@ -279,7 +279,7 @@ impl Annotator {
             }
             (Key::Char('['), false, _) => self.choose_by_key(Choice::Thinner),
             (Key::Char(']'), false, _) => self.choose_by_key(Choice::Bolder),
-            (Key::Char('q'), false, false) if !alt => self.clear(),
+            (Key::Char(' '), false, false) if !alt => self.clear(),
             // Esc with nothing left to cancel leaves Draw Mode, like the hotkey.
             (Key::Escape, false, false) if !alt => {
                 if let Some(display) = self.display {

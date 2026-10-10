@@ -17,7 +17,7 @@ The build is unsigned. On first launch, right-click the app and choose **Open**.
 |---|---|
 | `Alt` + `` ` `` | Enter or leave Draw Mode |
 | `Esc` | Leave Draw Mode (first cancels a Stroke in progress or drops the Selection) |
-| `Alt` + `1` | Clear the Ink (`Q` also clears in Draw Mode) |
+| `Alt` + `1` | Clear the Ink (`Space` also clears in Draw Mode) |
 | `P` / `E` | Toggle Pen and Eraser |
 | `V` / `K` | Select / Laser (`7` and `0` also toggle Pen and Eraser) |
 | `1`–`5` | Color: red, blue, green, yellow, black |

@@ -285,6 +285,7 @@ impl App {
         let key = match &event.logical_key {
             WinitKey::Named(NamedKey::Escape) => Key::Escape,
             WinitKey::Named(NamedKey::Delete | NamedKey::Backspace) => Key::Delete,
+            WinitKey::Named(NamedKey::Space) => Key::Char(' '),
             WinitKey::Character(text) => match text.to_lowercase().chars().next() {
                 Some(c) => Key::Char(c),
                 None => return,
