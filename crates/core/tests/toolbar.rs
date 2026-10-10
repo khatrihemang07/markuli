@@ -162,7 +162,7 @@ fn p_and_7_select_the_pen_and_other_keys_do_not() {
         assert_eq!(a.view().tool, ToolKind::Pen);
     }
     key(&mut a, Key::Char('p'), true, false); // Cmd+P is not a Tool key.
-    key(&mut a, Key::Char('q'), false, false);
+    key(&mut a, Key::Char('x'), false, false);
     assert_eq!(a.view().tool, ToolKind::Pen);
     // And keys do nothing outside Draw Mode.
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));

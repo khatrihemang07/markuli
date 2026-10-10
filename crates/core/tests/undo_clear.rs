@@ -163,6 +163,40 @@ fn clearing_empty_ink_logs_nothing() {
 }
 
 #[test]
+fn the_q_key_clears_like_the_clear_button() {
+    let mut a = drawing();
+    stroke(&mut a, 10.0);
+    stroke(&mut a, 50.0);
+    key(&mut a, Key::Char('q'), false, true);
+    key(&mut a, Key::Char('q'), true, false);
+    a.handle(Event::Key {
+        key: Key::Char('q'),
+        command: false,
+        shift: false,
+        alt: true,
+    });
+    assert_eq!(a.ink().len(), 2);
+
+    a.handle(Event::PointerDown(p(80.0, 80.0)));
+    a.handle(Event::PointerMove(p(90.0, 90.0)));
+    key(&mut a, Key::Char('q'), false, false);
+    a.handle(Event::PointerUp(p(95.0, 95.0)));
+    assert_eq!(a.ink().len(), 3);
+
+    let before = a.ink().clone();
+    let view = a.handle(Event::Key {
+        key: Key::Char('q'),
+        command: false,
+        shift: false,
+        alt: false,
+    });
+    assert!(a.ink().is_empty());
+    assert!(view.draw_mode);
+    undo(&mut a);
+    assert_eq!(*a.ink(), before);
+}
+
+#[test]
 fn esc_mid_stroke_discards_only_that_stroke() {
     let mut a = drawing();
     stroke(&mut a, 10.0);
@@ -237,7 +271,7 @@ fn random_event_sequences_never_panic_and_undo_all_returns_to_empty_ink() {
                 },
                 _ => Event::Key {
                     #[allow(clippy::cast_possible_truncation)]
-                    key: Key::Char(['z', 'y', 'q'][rng.next(3) as usize]),
+                    key: Key::Char(['z', 'y', 'x'][rng.next(3) as usize]),
                     command: flag(&mut rng),
                     shift: flag(&mut rng),
                     alt: false,

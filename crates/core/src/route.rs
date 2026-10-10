@@ -279,6 +279,7 @@ impl Annotator {
             }
             (Key::Char('['), false, _) => self.choose_by_key(Choice::Thinner),
             (Key::Char(']'), false, _) => self.choose_by_key(Choice::Bolder),
+            (Key::Char('q'), false, false) if !alt => self.clear(),
             (Key::Char(c), false, false) if !alt => {
                 self.switch_tool(|tools| tools.press(c));
             }
