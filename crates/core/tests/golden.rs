@@ -100,8 +100,10 @@ fn check(name: &str, expected: (u32, u32), actual: &Pixmap) {
     let width = expected.0 as usize;
     let over: Vec<String> = golden
         .data()
-        .chunks_exact(4)
-        .zip(actual.data().chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(actual.data().as_chunks::<4>().0)
         .enumerate()
         .filter(|(_, (g, a))| g.iter().zip(*a).any(|(g, a)| g.abs_diff(*a) > 2))
         .take(40)
