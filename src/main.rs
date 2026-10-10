@@ -294,6 +294,8 @@ impl App {
             WinitKey::Named(NamedKey::Escape) => Key::Escape,
             WinitKey::Named(NamedKey::Delete | NamedKey::Backspace) => Key::Delete,
             WinitKey::Named(NamedKey::Space) => Key::Char(' '),
+            WinitKey::Named(NamedKey::PageUp) => Key::PageUp,
+            WinitKey::Named(NamedKey::PageDown) => Key::PageDown,
             WinitKey::Character(text) => match text.to_lowercase().chars().next() {
                 Some(c) => Key::Char(c),
                 None => return,

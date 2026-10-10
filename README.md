@@ -21,6 +21,7 @@ The build is unsigned. On first launch, right-click the app and choose **Open**.
 | `P` / `E` | Toggle Pen and Eraser |
 | `V` / `K` / `H` | Select / Laser / Hand (`7` and `0` also toggle Pen and Eraser) |
 | Wheel or trackpad | Scroll the Ink up and down, with any Tool |
+| `Page Up` / `Page Down` | Scroll the Ink by most of a screen |
 | `Option` + drag | Scroll the Ink by dragging, with any Tool (the Hand Tool does it without the key) |
 | `1`–`5` | Color: red, blue, green, yellow, black |
 | `[` / `]` | Thinner / bolder (thin 2 pt, medium 4 pt, bold 8 pt) |

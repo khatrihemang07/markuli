@@ -35,7 +35,7 @@ _Avoid_: pointer, spotlight
 What pointer input does in Draw Mode. One of Select, Pen, Eraser, Laser or Hand.
 
 **Scroll**:
-How far the Ink is shifted vertically on the Overlay. It is 0 where the Ink lines up with the screen as it was drawn, and has no limit in either direction. The wheel or trackpad changes it with any Tool active. It never moves Ink sideways, never moves the screen behind the Overlay or the Toolbar, never changes an Element, and is not undoable.
+How far the Ink is shifted vertically on the Overlay. It is 0 where the Ink lines up with the screen as it was drawn, and has no limit in either direction. The wheel or trackpad changes it with any Tool active, and Page Up and Page Down change it by most of a screen. It never moves Ink sideways, never moves the screen behind the Overlay or the Toolbar, never changes an Element, and is not undoable.
 _Avoid_: pan, offset, viewport, canvas
 
 **Hand**:

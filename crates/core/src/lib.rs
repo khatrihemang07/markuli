@@ -147,6 +147,10 @@ pub enum Key {
     Escape,
     /// Delete or Backspace.
     Delete,
+    /// Scroll so that the Ink further up comes into view.
+    PageUp,
+    /// Scroll so that the Ink further down comes into view.
+    PageDown,
     /// A character key, lowercase.
     Char(char),
 }

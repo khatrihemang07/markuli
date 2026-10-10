@@ -295,6 +295,14 @@ impl Annotator {
             (Key::Char('['), false, _) => self.choose_by_key(Choice::Thinner),
             (Key::Char(']'), false, _) => self.choose_by_key(Choice::Bolder),
             (Key::Char(' '), false, false) if !alt => self.clear(),
+            // A page is most of a screen, so a strip of the Ink stays in view.
+            (Key::PageUp | Key::PageDown, false, false)
+                if !self.tool_busy() && !self.toolbar.pressing() =>
+            {
+                let page = 0.9 * self.toolbar.overlay_height() / self.scale;
+                let (_, mut ctx) = self.tool();
+                ctx.scroll_by(if key == Key::PageUp { page } else { -page });
+            }
             // Esc with nothing left to cancel leaves Draw Mode, like the hotkey.
             (Key::Escape, false, false) if !alt => {
                 if let Some(display) = self.display {

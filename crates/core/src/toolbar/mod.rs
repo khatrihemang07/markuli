@@ -112,6 +112,11 @@ impl Default for Toolbar {
 }
 
 impl Toolbar {
+    /// The Overlay's height in physical pixels, 0 before the first resize.
+    pub fn overlay_height(&self) -> f32 {
+        self.size.map_or(0.0, |(_, height)| height)
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) {
         self.size = Some((layout::to_f32(width), layout::to_f32(height)));
     }

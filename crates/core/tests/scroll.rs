@@ -456,3 +456,28 @@ fn a_zero_scroll_step_redraws_nothing() {
     assert!(!a.handle(Event::Scroll { dy: 0.0 }).needs_render);
     assert!(a.handle(Event::Scroll { dy: 3.0 }).needs_render);
 }
+
+#[test]
+fn page_down_and_page_up_scroll_by_most_of_a_screen() {
+    let mut a = drawing();
+    // The Overlay is 300 px high: a page is 270, and Page Down moves the Ink up.
+    key(&mut a, Key::PageDown, false, false);
+    assert_eq!(a.view().scroll.to_bits(), (-270.0_f32).to_bits());
+    key(&mut a, Key::PageUp, false, false);
+    key(&mut a, Key::PageUp, false, false);
+    assert_eq!(a.view().scroll.to_bits(), 270.0_f32.to_bits());
+    assert_eq!(a.view().tool, ToolKind::Pen);
+}
+
+#[test]
+fn a_page_is_measured_in_logical_pixels_and_waits_for_a_stroke_to_end() {
+    let mut a = drawing();
+    a.handle(Event::ScaleFactor(2.0));
+    key(&mut a, Key::PageDown, false, false);
+    assert_eq!(a.view().scroll.to_bits(), (-135.0_f32).to_bits());
+    a.handle(Event::PointerDown(p(100.0, 200.0)));
+    key(&mut a, Key::PageDown, false, false);
+    assert_eq!(a.view().scroll.to_bits(), (-135.0_f32).to_bits());
+    a.handle(Event::PointerUp(p(100.0, 200.0)));
+    assert_eq!(a.ink().elements().len(), 1);
+}
