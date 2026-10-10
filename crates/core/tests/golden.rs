@@ -88,14 +88,19 @@ fn check(name: &str, expected: (u32, u32), actual: &Pixmap) {
         "{name}: golden size"
     );
     // The SIMD and scalar rasterizer paths may differ by a rounding step.
-    let worst = golden
+    let (at, worst) = golden
         .data()
         .iter()
         .zip(actual.data())
         .map(|(g, a)| g.abs_diff(*a))
-        .max()
-        .unwrap_or(0);
-    assert!(worst <= 2, "{name}: differs from its golden by {worst}");
+        .enumerate()
+        .max_by_key(|&(_, d)| d)
+        .unwrap_or((0, 0));
+    let (x, y) = (at / 4 % expected.0 as usize, at / 4 / expected.0 as usize);
+    assert!(
+        worst <= 2,
+        "{name}: differs from its golden by {worst} at ({x}, {y})"
+    );
 }
 
 const WHITE_PAGE: Color = Color::WHITE;
