@@ -88,30 +88,27 @@ fn check(name: &str, expected: (u32, u32), actual: &Pixmap) {
         "{name}: golden size"
     );
     // The SIMD and scalar rasterizer paths may differ by a rounding step.
-    let (at, worst) = golden
-        .data()
-        .iter()
-        .zip(actual.data())
-        .map(|(g, a)| g.abs_diff(*a))
-        .enumerate()
-        .max_by_key(|&(_, d)| d)
-        .unwrap_or((0, 0));
-    let (x, y) = (at / 4 % expected.0 as usize, at / 4 / expected.0 as usize);
+    // An edge that falls exactly on an anti-aliasing sample row can also land
+    // on either side of it per platform (ADR-0003; seen on the Hand icon's
+    // fingertip, macOS vs Windows): a few pixels may be off by up to three of
+    // the 16 coverage samples.
     let width = expected.0 as usize;
-    let over: Vec<String> = golden
-        .data()
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .zip(actual.data().as_chunks::<4>().0)
-        .enumerate()
-        .filter(|(_, (g, a))| g.iter().zip(*a).any(|(g, a)| g.abs_diff(*a) > 2))
-        .take(40)
-        .map(|(i, (g, a))| format!("({}, {}) {g:?} -> {a:?}", i % width, i / width))
-        .collect();
+    let off = |limit: u8| {
+        golden
+            .data()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(actual.data().as_chunks::<4>().0)
+            .enumerate()
+            .filter(move |(_, (g, a))| g.iter().zip(*a).any(|(g, a)| g.abs_diff(*a) > limit))
+            .map(move |(i, (g, a))| format!("({}, {}) {g:?} -> {a:?}", i % width, i / width))
+    };
+    let (rounding, samples) = (off(2).count(), off(48).count());
     assert!(
-        worst <= 2,
-        "{name}: differs from its golden by {worst} at ({x}, {y}): {over:#?}"
+        rounding <= 8 && samples == 0,
+        "{name}: {rounding} pixels differ from the golden, {samples} by more than 48: {:#?}",
+        off(2).take(40).collect::<Vec<_>>()
     );
 }
 
