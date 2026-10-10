@@ -79,9 +79,15 @@ fn first_and_third_selected() -> Annotator {
     }
     key(&mut a, 'v');
     click(&mut a, p(350.0, 100.0));
-    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::Modifiers {
+        shift: true,
+        alt: false,
+    });
     click(&mut a, p(350.0, 300.0));
-    a.handle(Event::Modifiers { shift: false });
+    a.handle(Event::Modifiers {
+        shift: false,
+        alt: false,
+    });
     a
 }
 

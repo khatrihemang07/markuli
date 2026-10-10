@@ -37,7 +37,8 @@ pub fn render(cursor: Cursor, scale: f32) -> Option<Image> {
         1.0
     };
     match cursor {
-        Cursor::Arrow => None,
+        // The Hand is the system open or closed hand (`Shape::system`).
+        Cursor::Arrow | Cursor::Hand { .. } => None,
         Cursor::Pen { diameter, color } => {
             let d = f32::from(diameter);
             // Room left of and below the hotspot for the dot and its white edge.
@@ -329,6 +330,7 @@ mod tests {
     #[test]
     fn the_arrow_is_the_system_cursor_and_every_hotspot_is_inside_its_picture() {
         assert!(render(Cursor::Arrow, 2.0).is_none());
+        assert!(render(Cursor::Hand { grabbing: true }, 2.0).is_none());
         for scale in [1.0, 2.0] {
             for cursor in [
                 Cursor::Pen {

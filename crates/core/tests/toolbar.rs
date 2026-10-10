@@ -12,7 +12,7 @@ use markuli_core::{
 };
 use tiny_skia::PixmapMut;
 
-const W: u32 = 640;
+const W: u32 = 700;
 const H: u32 = 240;
 const PEN: Button = Button::Tool(1);
 

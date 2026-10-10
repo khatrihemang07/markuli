@@ -24,7 +24,7 @@ _Avoid_: shape, object, path
 The gesture of drawing one Element with the Pen, from pointer down to pointer up.
 
 **Clear**:
-Removes all Ink (undoable). It does not change **Draw Mode**: in Draw Mode the Overlay stays, outside it the hidden Ink is cleared silently and no Overlay appears.
+Removes all Ink (undoable) and resets the **Scroll**. It does not change **Draw Mode**: in Draw Mode the Overlay stays, outside it the hidden Ink is cleared silently and no Overlay appears.
 _Avoid_: reset, wipe
 
 **Laser**:
@@ -32,7 +32,14 @@ A fading pointer trail. It is never part of Ink and can't be selected, undone or
 _Avoid_: pointer, spotlight
 
 **Tool**:
-What pointer input does in Draw Mode. One of Select, Pen, Eraser or Laser.
+What pointer input does in Draw Mode. One of Select, Pen, Eraser, Laser or Hand.
+
+**Scroll**:
+How far the Ink is shifted vertically on the Overlay. It is 0 where the Ink lines up with the screen as it was drawn, and has no limit in either direction. The wheel or trackpad changes it with any Tool active. It never moves Ink sideways, never moves the screen behind the Overlay or the Toolbar, never changes an Element, and is not undoable.
+_Avoid_: pan, offset, viewport, canvas
+
+**Hand**:
+The Tool whose drag changes the Scroll. It never changes Ink. Holding Alt (Option) when a drag starts makes that drag a Hand drag in any Tool.
 
 **Selection**:
 The Elements currently chosen with the Select Tool, for moving, deleting or copying.
@@ -57,7 +64,7 @@ User preferences that persist across launches: the hotkeys, launch at login and 
 
 ## Relationships
 
-- An **Overlay** shows exactly one **Ink**. Leaving **Draw Mode** hides the **Ink** (the **Overlay** is destroyed, the **Ink** stays in memory); entering again on the same display shows the same **Ink**, with its undo history. Entering on another display **Clears** it.
+- An **Overlay** shows exactly one **Ink**. Leaving **Draw Mode** hides the **Ink** (the **Overlay** is destroyed, the **Ink** stays in memory); entering again on the same display shows the same **Ink** at the same **Scroll**, with its undo history. Entering on another display **Clears** it.
 - **Ink** is made of zero or more **Elements**. A **Selection** is a subset of the **Ink**.
 - **Tools** act only in **Draw Mode**. **Ink** is shown only in **Draw Mode**.
 

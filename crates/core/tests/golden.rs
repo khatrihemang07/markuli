@@ -10,7 +10,7 @@ use markuli_core::{
 use std::path::PathBuf;
 use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
 
-/// Wide enough for the one-row Toolbar (about 580 logical px).
+/// Wide enough for the one-row Toolbar (about 620 logical px).
 const W: u32 = 640;
 const H: u32 = 150;
 
@@ -177,7 +177,10 @@ fn selection_of_one_element_light() {
 #[test]
 fn selection_of_two_elements_has_a_dashed_common_box() {
     let a = &mut one_selected(Theme::Light, 1.0);
-    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::Modifiers {
+        shift: true,
+        alt: false,
+    });
     a.handle(Event::PointerDown(p(250.0, 90.0)));
     a.handle(Event::PointerUp(p(250.0, 90.0)));
     check("selection_two_light", (W, H), &image(a, WHITE_PAGE));
@@ -257,7 +260,10 @@ fn toolbar_highlights_nothing_for_a_selection_of_mixed_values() {
     key(&mut a, 'v');
     a.handle(Event::PointerDown(p(80.0, 110.0)));
     a.handle(Event::PointerUp(p(80.0, 110.0)));
-    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::Modifiers {
+        shift: true,
+        alt: false,
+    });
     a.handle(Event::PointerDown(p(250.0, 90.0)));
     a.handle(Event::PointerUp(p(250.0, 90.0)));
     assert_eq!(a.selection().len(), 2);
@@ -278,6 +284,13 @@ fn toolbar_dims_colors_and_widths_for_the_eraser() {
         (W, H),
         &image(&mut a, dark_page()),
     );
+}
+
+#[test]
+fn toolbar_shows_the_hand_tool_active_with_the_style_dimmed() {
+    let mut a = scene(Theme::Light, 1.0);
+    key(&mut a, 'h');
+    check("toolbar_light_hand", (W, H), &image(&mut a, WHITE_PAGE));
 }
 
 #[test]
@@ -339,7 +352,10 @@ fn toolbar_on_the_right_dark_with_a_mixed_selection() {
     key(&mut a, 'v');
     a.handle(Event::PointerDown(p(150.0, 270.0)));
     a.handle(Event::PointerUp(p(150.0, 270.0)));
-    a.handle(Event::Modifiers { shift: true });
+    a.handle(Event::Modifiers {
+        shift: true,
+        alt: false,
+    });
     a.handle(Event::PointerDown(p(150.0, 420.0)));
     a.handle(Event::PointerUp(p(150.0, 420.0)));
     assert_eq!(a.selection().len(), 2);

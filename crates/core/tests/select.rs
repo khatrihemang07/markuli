@@ -74,7 +74,10 @@ fn click(a: &mut Annotator, at: (f32, f32)) {
 }
 
 fn shift(a: &mut Annotator, held: bool) {
-    a.handle(Event::Modifiers { shift: held });
+    a.handle(Event::Modifiers {
+        shift: held,
+        alt: false,
+    });
 }
 
 fn ids(a: &Annotator) -> Vec<u64> {

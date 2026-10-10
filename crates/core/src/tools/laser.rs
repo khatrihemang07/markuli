@@ -1,7 +1,8 @@
 //! The Laser Tool: a fading trail while the pointer is down.
 //!
 //! It never touches Ink or the operation log (so it can't be undone, selected
-//! or copied). The trail itself lives in `crate::laser`.
+//! or copied). The trail itself lives in `crate::laser`. It works in screen
+//! coordinates: the Scroll does not move it.
 
 use super::{Ctx, Cursor, Tool, ToolKind};
 use crate::icons::{self, Icon};
@@ -33,7 +34,7 @@ impl Tool for LaserTool {
     }
 
     fn pointer_down(&mut self, ctx: &mut Ctx<'_>, at: Point) {
-        if let Some(at) = ctx.logical(at) {
+        if let Some(at) = ctx.screen(at) {
             self.down = true;
             ctx.laser.start(at, ctx.paint, ctx.scale);
         }
@@ -42,7 +43,7 @@ impl Tool for LaserTool {
     fn pointer_move(&mut self, ctx: &mut Ctx<'_>, at: Point) {
         // Hovering draws nothing: Excalidraw only trails while pressed.
         if self.down {
-            if let Some(at) = ctx.logical(at) {
+            if let Some(at) = ctx.screen(at) {
                 ctx.laser.extend(at, ctx.paint, ctx.scale);
             }
         }

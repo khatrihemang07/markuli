@@ -115,10 +115,22 @@ fn run(scale: f32) {
     s.key(Key::Char('v'), false, false, "select tool");
     s.step(Event::PointerDown(p(70.0, 115.0)), "click down");
     s.step(Event::PointerUp(p(70.0, 115.0)), "click up");
-    s.step(Event::Modifiers { shift: true }, "shift");
+    s.step(
+        Event::Modifiers {
+            shift: true,
+            alt: false,
+        },
+        "shift",
+    );
     s.step(Event::PointerDown(p(190.0, 125.0)), "shift-click down");
     s.step(Event::PointerUp(p(190.0, 125.0)), "shift-click up");
-    s.step(Event::Modifiers { shift: false }, "shift off");
+    s.step(
+        Event::Modifiers {
+            shift: false,
+            alt: false,
+        },
+        "shift off",
+    );
     s.drag((70.0, 115.0), (90.0, 70.0), "move both");
     s.key(Key::Char('z'), true, false, "undo move");
     s.drag((5.0, 60.0), (270.0, 190.0), "box select");

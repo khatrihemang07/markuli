@@ -144,7 +144,7 @@ impl Selection {
             return;
         }
         self.stale = false;
-        let now = self.area(ink, scale);
+        let now = self.area(ink, scale, paint.scroll());
         for area in [self.shown, now].into_iter().flatten() {
             paint.add_physical(area);
         }
@@ -156,23 +156,27 @@ impl Selection {
         self.shown
     }
 
-    /// Selected Elements' padded rectangles, in logical pixels.
-    fn rects<'a>(&'a self, ink: &'a Ink) -> impl Iterator<Item = Rect> + 'a {
+    /// Selected Elements' padded rectangles, in logical screen pixels (the
+    /// Scroll applied).
+    fn rects<'a>(&'a self, ink: &'a Ink, scroll: f32) -> impl Iterator<Item = Rect> + 'a {
         ink.elements()
             .iter()
             .filter(|e| self.contains(e.id()))
-            .map(|e| grow(e.absolute_extent(), PADDING))
+            .map(move |e| lower(grow(e.absolute_extent(), PADDING), scroll))
     }
 
-    fn common(&self, ink: &Ink) -> Option<Rect> {
-        self.rects(ink).reduce(union)
+    fn common(&self, ink: &Ink, scroll: f32) -> Option<Rect> {
+        self.rects(ink, scroll).reduce(union)
     }
 
-    fn area(&self, ink: &Ink, scale: f32) -> Option<Rect> {
-        let logical = [self.common(ink), self.dragging.map(|b| grow(b, 1.0))]
-            .into_iter()
-            .flatten()
-            .reduce(union)?;
+    fn area(&self, ink: &Ink, scale: f32, scroll: f32) -> Option<Rect> {
+        let logical = [
+            self.common(ink, scroll),
+            self.dragging.map(|b| lower(grow(b, 1.0), scroll)),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(union)?;
         let [l, t, r, b] = grow(logical, SLACK / scale);
         let area = [l * scale, t * scale, r * scale, b * scale];
         area.iter().all(|v| v.is_finite()).then_some(area)
@@ -180,7 +184,14 @@ impl Selection {
 
     /// Paints the overlay. The caller has already redrawn the whole of
     /// [`Selection::shown`] from the Ink.
-    pub fn paint(&self, ink: &Ink, target: &mut Canvas<'_, '_>, scale: f32, format: Format) {
+    pub fn paint(
+        &self,
+        ink: &Ink,
+        target: &mut Canvas<'_, '_>,
+        scale: f32,
+        format: Format,
+        scroll: f32,
+    ) {
         let color = match self.theme {
             Theme::Light => LIGHT,
             Theme::Dark => DARK,
@@ -192,15 +203,15 @@ impl Selection {
             ..Stroke::default()
         };
         let count = self.ids.len();
-        for rect in self.rects(ink) {
+        for rect in self.rects(ink, scroll) {
             outline(target, rect, scale, &line, &solid);
         }
         if count >= 2 {
-            if let (Some(common), Some((_, dashed))) = (self.common(ink), &self.dashed) {
+            if let (Some(common), Some((_, dashed))) = (self.common(ink, scroll), &self.dashed) {
                 outline(target, common, scale, &line, dashed);
             }
         }
-        if let Some(rect) = self.dragging {
+        if let Some(rect) = self.dragging.map(|r| lower(r, scroll)) {
             let [l, t, r, b] = snap(rect, scale);
             if let Some(fill) = SkiaRect::from_ltrb(l, t, r, b) {
                 let tint = stroke_paint([0, 0, 200], 0.04, format);
@@ -271,6 +282,11 @@ fn alpha_byte(alpha: f32) -> u8 {
 
 fn grow([l, t, r, b]: Rect, by: f32) -> Rect {
     [l - by, t - by, r + by, b + by]
+}
+
+/// Ink coordinates to screen coordinates.
+fn lower([l, t, r, b]: Rect, scroll: f32) -> Rect {
+    [l, t + scroll, r, b + scroll]
 }
 
 fn union(a: Rect, b: Rect) -> Rect {

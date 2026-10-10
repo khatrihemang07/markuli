@@ -19,13 +19,15 @@ The build is unsigned. On first launch, right-click the app and choose **Open**.
 | `Esc` | Leave Draw Mode (first cancels a Stroke in progress or drops the Selection) |
 | `Alt` + `1` | Clear the Ink (`Space` also clears in Draw Mode) |
 | `P` / `E` | Toggle Pen and Eraser |
-| `V` / `K` | Select / Laser (`7` and `0` also toggle Pen and Eraser) |
+| `V` / `K` / `H` | Select / Laser / Hand (`7` and `0` also toggle Pen and Eraser) |
+| Wheel or trackpad | Scroll the Ink up and down, with any Tool |
+| `Option` + drag | Scroll the Ink by dragging, with any Tool (the Hand Tool does it without the key) |
 | `1`–`5` | Color: red, blue, green, yellow, black |
 | `[` / `]` | Thinner / bolder (thin 2 pt, medium 4 pt, bold 8 pt) |
 | `Cmd` + `Z` / `Cmd` + `Shift` + `Z` | Undo / redo |
 | `Cmd` + `C` | Copy the Ink as Excalidraw data |
 
-Ink shows only in Draw Mode. When you enter Draw Mode again on the same display, your Ink comes back. You change hotkeys and launch at login from the tray icon.
+Ink shows only in Draw Mode. When you enter Draw Mode again on the same display, your Ink comes back, scrolled as you left it. You change hotkeys and launch at login from the tray icon.
 
 ## Build
 

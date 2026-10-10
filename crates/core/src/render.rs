@@ -78,12 +78,18 @@ impl<'a, 'b> Canvas<'a, 'b> {
 /// Anti-aliasing and curve slack around changed geometry, in pixels.
 const DAMAGE_PAD: f32 = 2.0;
 
+/// The largest Scroll in either direction, logical px.
+const MAX_SCROLL: f32 = 1_000_000.0;
+
 /// What the next `render` must redraw, plus the buffers it reuses.
 #[derive(Debug, Default)]
 pub struct Pending {
     full: bool,
     /// Union of changed rectangles, physical `[l, t, r, b]`.
     dirty: Option<Rect>,
+    /// The Scroll, logical px. It lives here because every layer that maps Ink
+    /// to pixels already receives the `Pending`.
+    scroll: f32,
     scratch: Vec<u8>,
     builder: Option<PathBuilder>,
 }
@@ -91,6 +97,24 @@ pub struct Pending {
 impl Pending {
     pub fn full(&mut self) {
         self.full = true;
+    }
+
+    pub fn scroll(&self) -> f32 {
+        self.scroll
+    }
+
+    /// Moves the Ink down by `dy` logical px and redraws everything.
+    pub fn scroll_by(&mut self, dy: f32) {
+        // Clamped so f32 keeps sub-pixel precision for the coordinates that
+        // result (at 1e6 the spacing between floats is still 0.06 px).
+        let scroll = (self.scroll + dy).clamp(-MAX_SCROLL, MAX_SCROLL);
+        // Rule 7: a zero step (a trackpad's momentum tail) redraws nothing.
+        self.full |= scroll.to_bits() != self.scroll.to_bits();
+        self.scroll = scroll;
+    }
+
+    pub fn reset_scroll(&mut self) {
+        self.scroll = 0.0;
     }
 
     pub fn is_pending(&self) -> bool {
@@ -137,7 +161,7 @@ impl Pending {
     /// Marks an element-local logical box as changed.
     pub fn damage_local(&mut self, local: Rect, origin: (f32, f32), scale: f32) {
         let [left, top, right, bottom] = local;
-        let (ox, oy) = origin;
+        let (ox, oy) = (origin.0, origin.1 + self.scroll);
         let rect = [
             (left + ox) * scale - DAMAGE_PAD,
             (top + oy) * scale - DAMAGE_PAD,
@@ -201,6 +225,7 @@ pub fn render(
         return None;
     };
     let layers = Layers {
+        scroll: pending.scroll,
         ink,
         laser,
         selection,
@@ -240,6 +265,7 @@ fn overlaps(a: Rect, b: Rect) -> bool {
 /// What a frame is made of, bottom to top: backdrop, Ink and Laser, Selection
 /// overlay, then (chrome, below) the toolbar.
 struct Layers<'a> {
+    scroll: f32,
     ink: &'a Ink,
     laser: &'a Laser,
     selection: &'a Selection,
@@ -265,6 +291,7 @@ fn compose_band(
     band: Damage,
 ) {
     let Layers {
+        scroll,
         ink,
         laser,
         selection,
@@ -289,14 +316,22 @@ fn compose_band(
     // In Draw Mode the Overlay needs alpha 1 everywhere, otherwise the OS
     // sends clicks on fully transparent pixels to the apps underneath.
     region.fill(Color::from_rgba8(0, 0, 0, u8::from(draw_mode)));
-    draw_elements(ink, laser, builder, &mut region, band, scale, format);
+    draw_elements(
+        ink,
+        laser,
+        builder,
+        &mut region,
+        band,
+        (scale, scroll),
+        format,
+    );
     let mut canvas = Canvas::new(&mut region, band.x, band.y);
     let this = Area::from_bounds(bounds_of(band));
     if selection
         .shown()
         .is_some_and(|area| overlaps(area, bounds_of(band)))
     {
-        selection.paint(ink, &mut canvas, scale, format);
+        selection.paint(ink, &mut canvas, scale, format, scroll);
     }
     if chrome.region().is_some_and(|r| r.intersects(&this)) {
         chrome.paint(&mut canvas, format);
@@ -322,7 +357,7 @@ fn draw_elements(
     builder: &mut Option<PathBuilder>,
     pm: &mut PixmapMut<'_>,
     view: Damage,
-    scale: f32,
+    (scale, scroll): (f32, f32),
     format: Format,
 ) {
     let (ox, oy) = (to_f32(view.x), to_f32(view.y));
@@ -331,13 +366,13 @@ fn draw_elements(
         let Some([l, t, r, b]) = element.bounds() else {
             continue;
         };
-        let (ex, ey) = (element.x(), element.y());
+        let (ex, ey) = (element.x(), element.y() + scroll);
         let touches = (l + ex) * scale - DAMAGE_PAD < vr
             && (r + ex) * scale + DAMAGE_PAD > ox
             && (t + ey) * scale - DAMAGE_PAD < vb
             && (b + ey) * scale + DAMAGE_PAD > oy;
         if touches {
-            fill_element(element, builder, pm, (scale, ox, oy), format);
+            fill_element(element, builder, pm, (scale, scroll, ox, oy), format);
         }
     }
     laser.fill(builder, pm, (scale, ox, oy), format == Format::Bgra);
@@ -351,14 +386,14 @@ fn fill_element(
     element: &Element,
     builder: &mut Option<PathBuilder>,
     pm: &mut PixmapMut<'_>,
-    (scale, ox, oy): (f32, f32, f32),
+    (scale, scroll, ox, oy): (f32, f32, f32, f32),
     format: Format,
 ) {
     let outline = element.outline();
     if outline.len() < 3 {
         return;
     }
-    let (ex, ey) = (element.x(), element.y());
+    let (ex, ey) = (element.x(), element.y() + scroll);
     let absolute = |v: [f32; 2]| ((v[0] + ex) * scale, (v[1] + ey) * scale);
     let mut path = builder.take().unwrap_or_default();
     // `outline.len() >= 3` was checked above, so both indexings are in range

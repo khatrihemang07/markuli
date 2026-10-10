@@ -112,6 +112,14 @@ pub enum Event {
     /// Whether Shift is held, for the pointer events that follow.
     Modifiers {
         shift: bool,
+        /// Alt (Option): a drag that starts with it held is a Hand drag.
+        alt: bool,
+    },
+    /// The wheel or trackpad, in physical pixels; positive moves the Ink down.
+    /// Ignored outside Draw Mode, while a Tool gesture or a Toolbar press is
+    /// in progress, and when not finite.
+    Scroll {
+        dy: f32,
     },
     /// Physical pixels per logical pixel of the Overlay (default 1).
     ScaleFactor(f32),
@@ -170,6 +178,8 @@ pub struct View {
     /// only while something animates (a visible Laser trail): wait for it,
     /// then send `Clock`. `None` means sleep until the next input.
     pub next_frame: Option<u64>,
+    /// The Scroll: how far the Ink is shifted down on the Overlay, logical px.
+    pub scroll: f32,
 }
 
 /// Whether a Palette editor is open, as far as the core can tell.
@@ -196,6 +206,7 @@ pub struct Annotator {
     scale: f32,
     pressure: Option<f32>,
     shift: bool,
+    alt: bool,
     selection: Selection,
     copied: Option<String>,
     next_id: u64,
@@ -229,6 +240,7 @@ impl Default for Annotator {
             scale: 1.0,
             pressure: None,
             shift: false,
+            alt: false,
             selection: Selection::default(),
             copied: None,
             next_id: 1,

@@ -74,6 +74,18 @@ impl Shape {
         })
     }
 
+    /// The system open or closed hand.
+    pub fn system(_: &ActiveEventLoop, grabbing: bool) -> Self {
+        Self(
+            if grabbing {
+                winit::window::CursorIcon::Grabbing
+            } else {
+                winit::window::CursorIcon::Grab
+            }
+            .into(),
+        )
+    }
+
     pub fn set(&self, window: &Window) {
         window.set_cursor(self.0.clone());
     }

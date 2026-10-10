@@ -11,12 +11,14 @@ impl Annotator {
     #[must_use]
     pub fn view(&self) -> View {
         let over_toolbar = self.toolbar.over() && !self.tool_busy();
+        let alt_hand = self.alt && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
             display: self.display,
             needs_render: self.paint.is_pending()
                 || self.toolbar.is_dirty(self.draw_mode, self.ui()),
-            cursor: match self.tools.get(self.tools.active()) {
+            cursor: match self.tools.in_use() {
+                Some(_) if alt_hand && !over_toolbar => Cursor::Hand { grabbing: false },
                 Some(tool) if !over_toolbar => tool.cursor(self.style),
                 _ => Cursor::Arrow,
             },
@@ -25,6 +27,7 @@ impl Annotator {
             palette: self.palette,
             edit: self.edit,
             next_frame: self.laser.next_frame(),
+            scroll: self.paint.scroll(),
         }
     }
 

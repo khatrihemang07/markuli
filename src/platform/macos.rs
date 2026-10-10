@@ -133,6 +133,15 @@ impl Shape {
         )
     }
 
+    /// The system open or closed hand.
+    pub fn system(_: &ActiveEventLoop, grabbing: bool) -> Self {
+        Self(if grabbing {
+            NSCursor::closedHandCursor()
+        } else {
+            NSCursor::openHandCursor()
+        })
+    }
+
     /// Makes it the cursor now.
     pub fn set(&self, _: &Window) {
         self.0.set();

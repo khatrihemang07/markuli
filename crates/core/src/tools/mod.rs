@@ -6,6 +6,7 @@
 //! so no other Tool and no other module is edited.
 
 mod eraser;
+mod hand;
 mod laser;
 mod pen;
 mod select;
@@ -36,6 +37,8 @@ pub enum Cursor {
     Eraser { diameter: u16 },
     /// A red ring with a dot in the middle.
     Laser,
+    /// An open hand, closed while it drags the Ink.
+    Hand { grabbing: bool },
 }
 
 /// Which Tool is active, for the platform layer and tests (the registry
@@ -46,6 +49,7 @@ pub enum ToolKind {
     Pen,
     Eraser,
     Laser,
+    Hand,
 }
 
 /// What the color and width buttons do while a Tool is active.
@@ -81,12 +85,27 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// Physical pointer position to logical Element coordinates.
-    pub fn logical(&self, at: Point) -> Option<Point> {
+    /// Physical pointer position to logical screen coordinates.
+    pub fn screen(&self, at: Point) -> Option<Point> {
         (at.x.is_finite() && at.y.is_finite()).then(|| Point {
             x: at.x / self.scale,
             y: at.y / self.scale,
         })
+    }
+
+    /// Physical pointer position to logical Element coordinates: the one place
+    /// the Scroll is taken off.
+    pub fn logical(&self, at: Point) -> Option<Point> {
+        self.screen(at).map(|p| Point {
+            x: p.x,
+            y: p.y - self.paint.scroll(),
+        })
+    }
+
+    /// Moves the Ink down by `dy` logical px.
+    pub fn scroll_by(&mut self, dy: f32) {
+        self.paint.scroll_by(dy);
+        self.selection.touch();
     }
 
     /// Runs `step` on the last Element (the Stroke in progress) and marks
@@ -137,6 +156,8 @@ pub(crate) trait Tool: Debug {
 pub(crate) struct Tools {
     list: Vec<Box<dyn Tool>>,
     active: usize,
+    /// An Alt drag is in progress: the Hand handles it, whatever is active.
+    pub temp_hand: bool,
 }
 
 impl Tools {
@@ -147,13 +168,18 @@ impl Tools {
             Box::new(pen::Pen::default()),
             Box::new(eraser::Eraser::default()),
             Box::new(laser::LaserTool::default()),
+            Box::new(hand::Hand::default()),
         ]);
         tools.reset();
         tools
     }
 
     fn with(list: Vec<Box<dyn Tool>>) -> Self {
-        Self { list, active: 0 }
+        Self {
+            list,
+            active: 0,
+            temp_hand: false,
+        }
     }
 
     /// The Pen is the default Tool whenever Draw Mode starts.
@@ -179,10 +205,26 @@ impl Tools {
         self.list.get(index).map(|t| &**t)
     }
 
+    fn index_in_use(&self) -> usize {
+        self.list
+            .iter()
+            .position(|t| t.kind() == ToolKind::Hand)
+            .filter(|_| self.temp_hand)
+            .unwrap_or(self.active)
+    }
+
+    /// The Tool that gets pointer input: the Hand during an Alt drag.
     pub fn active_mut(&mut self) -> &mut dyn Tool {
-        // Invariant: the registry is never empty (`new` registers four Tools)
+        let index = self.index_in_use();
+        // Invariant: the registry is never empty (`new` registers five Tools)
         // and `select*` only store indices below `len`, so this cannot panic.
-        &mut *self.list[self.active]
+        &mut *self.list[index]
+    }
+
+    /// The Tool that gets pointer input, for reading (see `active_mut`).
+    pub fn in_use(&self) -> Option<&dyn Tool> {
+        let index = self.index_in_use();
+        self.get(index)
     }
 
     pub fn select(&mut self, index: usize) {

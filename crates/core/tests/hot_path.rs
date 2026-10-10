@@ -138,6 +138,32 @@ fn pointer_moves_do_not_allocate_and_render_allocates_nothing_that_scales() {
         a.render(&mut pm.as_mut(), Format::Rgba);
     }
     assert_alloc_free("toolbar hover", &mut a, &mut pm, |i| along(40 + i % 40));
+
+    // Scrolling: the whole Overlay is redrawn, but handling the wheel
+    // allocates nothing of our own and rendering stays bounded.
+    for _ in 0..4 {
+        a.handle(Event::Scroll { dy: 3.0 });
+        a.render(&mut pm.as_mut(), Format::Rgba);
+    }
+    let (mut calls, mut bytes) = (0, 0);
+    for i in 0..100_u16 {
+        let c0 = CALLS.load(Ordering::Relaxed);
+        a.handle(Event::Scroll {
+            dy: if i % 2 == 0 { 5.0 } else { -4.0 },
+        });
+        let (c1, b1) = (CALLS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed));
+        a.render(&mut pm.as_mut(), Format::Rgba);
+        calls += c1 - c0;
+        bytes += BYTES.load(Ordering::Relaxed) - b1;
+    }
+    assert_eq!(calls, 0, "allocations handling 100 scrolls");
+    assert!(
+        // A full redraw: tiny-skia's transient edge buffers (measured ~430
+        // KiB) are bounded by the width, not by Ink.
+        bytes / 100 < 1024 * 1024,
+        "{} bytes allocated per scrolled render",
+        bytes / 100
+    );
 }
 
 /// 100 pointer moves of the active Tool: `handle` must not allocate and

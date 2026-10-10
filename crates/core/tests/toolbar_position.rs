@@ -150,10 +150,10 @@ fn a_column_that_does_not_fit_falls_back_to_the_top_row() {
 
 #[test]
 fn a_column_needs_its_length_plus_both_margins() {
-    // 580 px of buttons + 2 x 16 margin + 107 of insets = 719.
-    let fits = scene(Pos::Left, 1.0, W, 720);
+    // 616 px of buttons + 2 x 16 margin + 107 of insets = 755.
+    let fits = scene(Pos::Left, 1.0, W, 756);
     assert!(near(centers(&fits)[0].x, 60.0 + 36.0));
-    let tight = scene(Pos::Left, 1.0, W, 718);
+    let tight = scene(Pos::Left, 1.0, W, 754);
     assert!(near(centers(&tight)[0].y, 37.0 + 36.0));
 }
 

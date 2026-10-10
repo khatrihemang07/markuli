@@ -20,7 +20,9 @@ use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, KeyEvent, MouseButton, StartCause, TouchPhase, WindowEvent};
+use winit::event::{
+    ElementState, KeyEvent, MouseButton, MouseScrollDelta, StartCause, TouchPhase, WindowEvent,
+};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
@@ -142,7 +144,10 @@ impl App {
         let scale = overlay.window.scale_factor();
         #[allow(clippy::cast_possible_truncation, reason = "scale factors are small")]
         let image = cursor::render(cursor, scale as f32);
-        overlay.cursor = platform::Shape::new(event_loop, image.as_ref(), scale);
+        overlay.cursor = match cursor {
+            Cursor::Hand { grabbing } => platform::Shape::system(event_loop, grabbing),
+            _ => platform::Shape::new(event_loop, image.as_ref(), scale),
+        };
         overlay.cursor.set(&overlay.window);
     }
 
@@ -187,7 +192,10 @@ impl App {
     /// No modifier is held as far as Markuli knows (see `Focused(false)`).
     fn forget_modifiers(&mut self) {
         self.modifiers = ModifiersState::empty();
-        self.core.handle(Event::Modifiers { shift: false });
+        self.core.handle(Event::Modifiers {
+            shift: false,
+            alt: false,
+        });
     }
 
     fn open_settings(&mut self) {
@@ -500,9 +508,27 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::Focused(false) => self.forget_modifiers(),
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
-                self.core.handle(Event::Modifiers {
-                    shift: self.modifiers.shift_key(),
-                });
+                // The hand cursor follows Alt without a pointer move.
+                self.input(
+                    event_loop,
+                    Event::Modifiers {
+                        shift: self.modifiers.shift_key(),
+                        alt: self.modifiers.alt_key(),
+                    },
+                );
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scale = self
+                    .overlay
+                    .as_ref()
+                    .map_or(1.0, |overlay| overlay.window.scale_factor());
+                self.core.handle(self.clock());
+                self.input(
+                    event_loop,
+                    Event::Scroll {
+                        dy: wheel_dy(delta, scale),
+                    },
+                );
             }
             WindowEvent::KeyboardInput { event, .. } => self.key(event_loop, &event),
             WindowEvent::ThemeChanged(theme) => {
@@ -585,6 +611,15 @@ fn point(position: PhysicalPosition<f64>) -> Point {
     Point {
         x: position.x as f32,
         y: position.y as f32,
+    }
+}
+
+/// Physical pixels of a wheel step: a notch (line) is 40 logical px.
+#[allow(clippy::cast_possible_truncation, reason = "wheel deltas fit f32")]
+fn wheel_dy(delta: MouseScrollDelta, scale: f64) -> f32 {
+    match delta {
+        MouseScrollDelta::PixelDelta(position) => position.y as f32,
+        MouseScrollDelta::LineDelta(_, lines) => lines * 40.0 * scale as f32,
     }
 }
 

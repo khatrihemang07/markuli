@@ -58,8 +58,20 @@ impl Annotator {
                 self.toolbar.theme = theme;
                 self.selection.set_theme(theme);
             }
-            Event::Modifiers { shift } => self.shift = shift,
+            Event::Modifiers { shift, alt } => {
+                self.shift = shift;
+                self.alt = alt;
+            }
             Event::Pressure(p) => self.pressure = p.filter(|p| p.is_finite()),
+            Event::Scroll { dy }
+                if self.draw_mode
+                    && dy.is_finite()
+                    && !self.tool_busy()
+                    && !self.toolbar.pressing() =>
+            {
+                let (_, mut ctx) = self.tool();
+                ctx.scroll_by(dy / ctx.scale);
+            }
             Event::ScaleFactor(scale) if scale.is_finite() && scale > 0.0 => {
                 self.scale = scale;
                 self.toolbar.set_scale(scale);
@@ -196,13 +208,14 @@ impl Annotator {
     }
 
     pub(super) fn tool_busy(&self) -> bool {
-        self.tools.get(self.tools.active()).is_some_and(Tool::busy)
+        self.tools.in_use().is_some_and(Tool::busy)
     }
 
     /// Commits the gesture in progress to the operation log.
     fn finish_gesture(&mut self) {
         let (tool, mut ctx) = self.tool();
         tool.finish(&mut ctx);
+        self.tools.temp_hand = false;
         self.finish_restyle();
     }
 
@@ -211,6 +224,7 @@ impl Annotator {
         if self.toolbar.press_at(at, self.tools.len()) {
             return;
         }
+        self.tools.temp_hand = self.alt;
         let (tool, mut ctx) = self.tool();
         tool.pointer_down(&mut ctx, at);
     }
@@ -232,6 +246,7 @@ impl Annotator {
             self.toolbar.hover_at(at, self.tools.len());
             let (tool, mut ctx) = self.tool();
             tool.pointer_up(&mut ctx, at);
+            self.tools.temp_hand = false;
         }
     }
 
@@ -336,6 +351,7 @@ impl Annotator {
         // Draw Mode is untouched: Clear empties the Ink, nothing more.
         self.selection.clear();
         self.laser.clear();
+        self.paint.reset_scroll();
         self.paint.full();
     }
 
@@ -351,6 +367,7 @@ impl Annotator {
             if self.display != Some(display) {
                 // ADR-0002: the history belongs to the Ink that was Cleared.
                 self.ink = Ink::default();
+                self.paint.reset_scroll();
                 self.history.reset();
             }
             self.display = Some(display);
