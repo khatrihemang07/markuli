@@ -194,7 +194,7 @@ impl Layout {
         self.usable
     }
 
-    /// The side of a button an editor opens on: facing away from the edge.
+    /// The side of a button its Color Picker or Width Picker opens on: facing away from the edge.
     pub fn side(&self) -> Side {
         match self.position {
             ToolbarPosition::Top => Side::Below,

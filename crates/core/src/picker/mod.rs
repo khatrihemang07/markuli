@@ -21,6 +21,7 @@ mod width;
 use crate::ink::Point;
 use crate::palette::{SlotKind, SlotValue};
 use crate::recent::RecentColors;
+use crate::render::Pending;
 use crate::toolbar::{Area, Theme};
 use color::{Hsv, NEUTRALS};
 use custom::Custom;
@@ -91,6 +92,36 @@ impl Look {
 pub(crate) struct Popover<'a> {
     pub picker: &'a mut Picker,
     pub look: Option<Look>,
+}
+
+impl Popover<'_> {
+    /// Adds what this pass must redraw because of the popover: its old and
+    /// new area when it changed, or its whole area when other damage touches
+    /// it. `toolbar` is the Toolbar's region.
+    pub fn damage(&self, pending: &mut Pending, toolbar: Option<Area>) {
+        let (before, now) = (self.picker.painted(), self.look);
+        let mut redrawn: Option<Area> = None;
+        let mut redraw = |pending: &mut Pending, area: Area| {
+            pending.add_physical(area.to_bounds());
+            redrawn = Some(redrawn.map_or(area, |all| all.union(&area)));
+        };
+        if self.picker.is_dirty(now) {
+            for look in [before, now].into_iter().flatten() {
+                redraw(pending, look.region());
+            }
+        } else if let Some(look) = now.filter(|l| pending.touches(l.region().to_bounds())) {
+            redraw(pending, look.region());
+        }
+        // The popover's band cuts through the toolbar's shadow and islands. A
+        // band edge through a thin ring rasterizes it differently from a whole
+        // redraw (tiny-skia's hairline clipping), so the toolbar is redrawn
+        // whole too.
+        if let (Some(r), Some(area)) = (toolbar, redrawn) {
+            if r.intersects(&area) {
+                pending.add_physical(r.to_bounds());
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default)]

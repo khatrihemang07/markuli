@@ -49,7 +49,7 @@ pub fn open_editor(request: EditRequest, owner: RawWindowHandle, send: &mut dyn 
     };
     let generation = GENERATION.get() + 1;
     GENERATION.set(generation);
-    // The color panel is not dismissed by a click on the canvas: the user
+    // The color panel is not dismissed by a click on the Overlay: the user
     // draws with it open. End the core's "editing" state now; edits still
     // coalesce until a click or key.
     send(Event::EditEnd);

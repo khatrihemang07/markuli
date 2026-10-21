@@ -583,7 +583,7 @@ pub fn command_held(modifiers: ModifiersState) -> bool {
 
 /// Control+click is the secondary click on a one-button trackpad. Read from
 /// the click's own `NSEvent`: winit's modifier state goes stale when another
-/// window (an editor popover) was key and took the key-up.
+/// window (the system color panel) was key and took the key-up.
 pub fn secondary_click_modifier() -> bool {
     let current = MainThreadMarker::new()
         .and_then(|mtm| NSApplication::sharedApplication(mtm).currentEvent())

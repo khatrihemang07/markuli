@@ -566,7 +566,7 @@ impl ApplicationHandler<UserEvent> for App {
                 state,
                 ..
             } => {
-                // The focus may be elsewhere (an editor took it), and then
+                // The focus may be elsewhere (the system color panel took it), and then
                 // winit's modifier state is stale: ask the press itself.
                 if state == ElementState::Pressed {
                     self.reclaim_focus();

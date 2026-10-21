@@ -189,27 +189,8 @@ pub fn render(
         }
         _ => {}
     }
-    let (before, now) = (popover.picker.painted(), popover.look);
-    let mut redrawn: Option<Area> = None;
-    let mut redraw = |pending: &mut Pending, area: Area| {
-        pending.add_physical(area.to_bounds());
-        redrawn = Some(redrawn.map_or(area, |all| all.union(&area)));
-    };
-    if popover.picker.is_dirty(now) {
-        for look in [before, now].into_iter().flatten() {
-            redraw(pending, look.region());
-        }
-    } else if let Some(look) = now.filter(|l| pending.touches(l.region().to_bounds())) {
-        redraw(pending, look.region());
-    }
-    // The popover's band cuts through the toolbar's shadow and islands. A band
-    // edge through a thin ring rasterizes it differently from a whole redraw
-    // (tiny-skia's hairline clipping), so the toolbar is redrawn whole too.
-    if let (Some(r), Some(area)) = (region, redrawn) {
-        if r.intersects(&area) {
-            pending.add_physical(r.to_bounds());
-        }
-    }
+    popover.damage(pending, region);
+    let now = popover.look;
     // The toolbar and popover regions may have brought in more damage for
     // the Selection.
     grow_to_overlay(pending, selection);
