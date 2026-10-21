@@ -36,20 +36,7 @@ impl Annotator {
     }
 
     fn slot_value(&self, kind: SlotKind, index: usize) -> Option<SlotValue> {
-        match kind {
-            SlotKind::Color => self
-                .palette
-                .colors
-                .get(index)
-                .copied()
-                .map(SlotValue::Color),
-            SlotKind::Width => self
-                .palette
-                .widths
-                .get(index)
-                .copied()
-                .map(SlotValue::Width),
-        }
+        self.palette.get(kind, index)
     }
 
     /// Opens the picker of a slot, replacing an open one.
@@ -150,19 +137,21 @@ impl Annotator {
         })
     }
 
-    /// The slot takes `value` and is chosen, like any edit of it.
+    /// The slot takes `value` and is chosen, like any edit of it. A pick
+    /// from the system color panel still waiting for its `EditEnd` is
+    /// superseded: it must not join the Recent Colors after, say, a Reset.
     fn set_slot(&mut self, kind: SlotKind, index: usize, value: SlotValue) {
-        match (kind, value) {
-            (SlotKind::Color, SlotValue::Color(rgb)) => {
-                self.palette.colors[index] = rgb;
-                self.edit_slot(kind, index, Choice::Color(index));
-            }
-            (SlotKind::Width, SlotValue::Width(width)) => {
-                self.palette.widths[index] = width;
-                self.edit_slot(kind, index, Choice::Width(index));
-            }
-            _ => {}
+        if !self.palette.set(kind, index, value) {
+            return;
         }
+        if kind == SlotKind::Color && self.panel_run == Some(index) {
+            self.panel_run = None;
+        }
+        let choice = match kind {
+            SlotKind::Color => Choice::Color(index),
+            SlotKind::Width => Choice::Width(index),
+        };
+        self.edit_slot(kind, index, choice);
     }
 
     pub(super) fn picker_drag(&mut self, at: Point) {
@@ -193,8 +182,10 @@ impl Annotator {
         let slot = self.picker.slot();
         self.picker.release();
         self.finish_restyle();
-        if let Some((SlotKind::Color, index)) = slot {
-            self.recent.push(self.palette.colors[index]);
+        if let Some((kind @ SlotKind::Color, index)) = slot {
+            if let Some(SlotValue::Color(rgb)) = self.palette.get(kind, index) {
+                self.recent.push(rgb);
+            }
         }
     }
 

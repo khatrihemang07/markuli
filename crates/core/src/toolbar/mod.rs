@@ -38,6 +38,24 @@ pub enum Button {
     Clear,
 }
 
+impl Button {
+    /// The Palette slot a color or width button stands for.
+    fn slot(self) -> Option<(SlotKind, usize)> {
+        match self {
+            Self::Color(i) => Some((SlotKind::Color, i)),
+            Self::Width(i) => Some((SlotKind::Width, i)),
+            _ => None,
+        }
+    }
+
+    fn of_slot(kind: SlotKind, index: usize) -> Self {
+        match kind {
+            SlotKind::Color => Self::Color(index),
+            SlotKind::Width => Self::Width(index),
+        }
+    }
+}
+
 /// What decides how the toolbar looks besides the Toolbar's own state.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(
@@ -197,11 +215,7 @@ impl Toolbar {
     pub fn slot_at(&self, at: Point, tools: usize) -> Option<(SlotKind, usize)> {
         let l = self.layout(tools)?;
         let i = (0..layout::count(tools)).find(|&i| l.button_rect(i).contains(at))?;
-        match layout::button(i, tools) {
-            Button::Color(i) => Some((SlotKind::Color, i)),
-            Button::Width(i) => Some((SlotKind::Width, i)),
-            _ => None,
-        }
+        layout::button(i, tools).slot()
     }
 
     /// A slot's button, the side of it a popover opens on, and the area a
@@ -213,11 +227,7 @@ impl Toolbar {
         tools: usize,
     ) -> Option<(Area, Side, Area)> {
         let l = self.layout(tools)?;
-        let button = match kind {
-            SlotKind::Color => Button::Color(index),
-            SlotKind::Width => Button::Width(index),
-        };
-        let i = layout::index_of(button, tools)?;
+        let i = layout::index_of(Button::of_slot(kind, index), tools)?;
         Some((l.button_rect(i), l.side(), l.usable()))
     }
 

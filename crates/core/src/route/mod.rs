@@ -10,7 +10,7 @@ use crate::style::Appearance;
 use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
 use crate::{
     excalidraw, Annotator, Button, Choice, DisplayId, Element, Event, Ink, Key, Point, SlotKind,
-    View,
+    SlotValue, View,
 };
 
 impl Annotator {
@@ -53,7 +53,9 @@ impl Annotator {
             Event::EditEnd => {
                 self.finish_restyle();
                 if let Some(slot) = self.panel_run.take() {
-                    self.recent.push(self.palette.colors[slot]);
+                    if let Some(SlotValue::Color(rgb)) = self.palette.get(SlotKind::Color, slot) {
+                        self.recent.push(rgb);
+                    }
                 }
             }
             Event::RecentColors(recent) => self.recent = recent,
@@ -249,6 +251,10 @@ impl Annotator {
     fn key(&mut self, key: Key, command: bool, shift: bool, alt: bool) {
         if key == Key::Escape && self.picker.is_open() {
             self.picker_escape();
+            return;
+        }
+        // A key now would split the drag's undo step or change what it edits.
+        if self.picker.dragging() {
             return;
         }
         self.finish_restyle();

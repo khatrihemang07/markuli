@@ -361,7 +361,7 @@ fn leaving_draw_mode_closes_the_picker() {
 }
 
 #[test]
-fn escape_in_a_custom_drag_keeps_the_color_and_a_second_undo_restores_it() {
+fn escape_in_a_custom_drag_keeps_the_color_and_one_undo_restores_it() {
     let mut a = session();
     stroke(&mut a, 200.0);
     command(&mut a, 'a');
@@ -444,4 +444,45 @@ fn the_cursor_is_the_arrow_over_the_picker() {
     let at = part(&a, PickerPart::Preset(5));
     let view = a.handle(Event::PointerMove(at));
     assert_eq!(view.cursor, markuli_core::Cursor::Arrow);
+}
+
+#[test]
+fn keys_during_a_drag_are_ignored_so_it_stays_one_undo_step() {
+    for (c, command_held) in [('2', false), ('z', true), (' ', false), ('e', false)] {
+        let mut a = session();
+        stroke(&mut a, 200.0);
+        command(&mut a, 'a');
+        let before = colors(&a);
+        open(&mut a, Button::Color(2));
+        click_part(&mut a, PickerPart::Tab(1));
+        a.handle(Event::PointerDown(part(&a, PickerPart::Square(0.3, 0.3))));
+        if command_held {
+            command(&mut a, c);
+        } else {
+            key(&mut a, c);
+        }
+        a.handle(Event::PointerMove(part(&a, PickerPart::Square(0.6, 0.4))));
+        let dragged = slot_color(&a, 2);
+        assert_eq!(a.view().tool, ToolKind::Select, "{c}");
+        assert_eq!(a.selection().len(), 1, "{c}");
+        assert_eq!(colors(&a), vec![dragged], "{c}");
+        a.handle(Event::PointerUp(part(&a, PickerPart::Square(0.6, 0.4))));
+        command(&mut a, 'z');
+        assert_eq!(colors(&a), before, "one undo restores it ({c})");
+    }
+}
+
+#[test]
+fn reset_cancels_a_pending_system_panel_color_for_that_slot() {
+    let mut a = session();
+    // "..." then a pick in the (still open) system panel.
+    a.handle(Event::EditColor {
+        slot: 1,
+        rgb: [10, 20, 30],
+    });
+    open(&mut a, Button::Color(1));
+    click_part(&mut a, PickerPart::Reset);
+    a.handle(Event::EditEnd);
+    assert_eq!(a.view().palette.colors[1], Palette::DEFAULT.colors[1]);
+    assert_eq!(a.view().recent, markuli_core::RecentColors::default());
 }

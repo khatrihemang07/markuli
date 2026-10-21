@@ -46,21 +46,35 @@ impl Palette {
             .then(|| ((width * 4.0).round() / 4.0).clamp(MIN_WIDTH, MAX_WIDTH))
     }
 
+    /// What a slot holds; `None` for an out-of-range slot.
+    #[must_use]
+    pub fn get(&self, kind: SlotKind, index: usize) -> Option<SlotValue> {
+        match kind {
+            SlotKind::Color => self.colors.get(index).copied().map(SlotValue::Color),
+            SlotKind::Width => self.widths.get(index).copied().map(SlotValue::Width),
+        }
+    }
+
+    /// Sets a slot; false (and nothing changes) for an out-of-range slot or a
+    /// value of the other kind. The value is stored as given.
+    pub(crate) fn set(&mut self, kind: SlotKind, index: usize, value: SlotValue) -> bool {
+        match (kind, value) {
+            (SlotKind::Color, SlotValue::Color(rgb)) => {
+                self.colors.get_mut(index).map(|slot| *slot = rgb).is_some()
+            }
+            (SlotKind::Width, SlotValue::Width(width)) => self
+                .widths
+                .get_mut(index)
+                .map(|slot| *slot = width)
+                .is_some(),
+            _ => false,
+        }
+    }
+
     /// What Reset restores for a slot; `None` for an out-of-range slot.
     #[must_use]
     pub fn default_slot(kind: SlotKind, index: usize) -> Option<SlotValue> {
-        match kind {
-            SlotKind::Color => Self::DEFAULT
-                .colors
-                .get(index)
-                .copied()
-                .map(SlotValue::Color),
-            SlotKind::Width => Self::DEFAULT
-                .widths
-                .get(index)
-                .copied()
-                .map(SlotValue::Width),
-        }
+        Self::DEFAULT.get(kind, index)
     }
 
     /// This Palette with every width made a valid slot value; one that is not
