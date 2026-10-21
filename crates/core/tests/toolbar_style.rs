@@ -61,7 +61,8 @@ const TOOLS: [(char, ToolKind); 4] = [
 fn a_click_on_a_color_or_width_does_what_its_key_does_for_every_tool() {
     let choices = [
         (Button::Color(3), '4'),
-        (Button::Color(0), '1'),
+        // Not the chosen slot: a click on that one opens its picker.
+        (Button::Color(2), '3'),
         (Button::Width(0), '['),
         (Button::Width(2), ']'),
     ];
@@ -108,7 +109,7 @@ fn a_click_restyles_the_selection_like_the_key_and_stays_on_select() {
     assert_eq!(by_click.view().style, markuli_core::Style::default());
     assert_eq!(
         by_click.ink().elements()[0].stroke_color(),
-        [0x19, 0x71, 0xc2]
+        [0xf5, 0x9e, 0x0b]
     );
 }
 

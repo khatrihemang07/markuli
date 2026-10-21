@@ -94,6 +94,38 @@ pub(crate) const TRASH: Icon = Icon {
     paths: &["M3.333 5.833h13.334M8.333 9.167v5M11.667 9.167v5M4.167 5.833l.833 10c0 .92.746 1.667 1.667 1.667h6.666c.92 0 1.667-.746 1.667-1.667l.833-10M7.5 5.833v-2.5c0-.46.373-.833.833-.833h3.334c.46 0 .833.373.833.833v2.5"],
 };
 
+/// The Color Picker's Presets tab: four cells.
+pub(crate) const GRID: Icon = Icon {
+    view: 20.0,
+    stroke: 1.5,
+    paths: &["M4.5 4.5h4v4h-4zM11.5 4.5h4v4h-4zM4.5 11.5h4v4h-4zM11.5 11.5h4v4h-4z"],
+};
+
+/// The Custom tab: a saturation/value square with its knob, over a hue strip.
+pub(crate) const SPECTRUM: Icon = Icon {
+    view: 20.0,
+    stroke: 1.5,
+    paths: &[
+        "M3.5 3.5h13v8h-13z",
+        "M11 7.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0",
+        "M3.5 15.25h13",
+    ],
+};
+
+/// Reset: an arrow turning back, anticlockwise.
+pub(crate) const RESET: Icon = Icon {
+    view: 24.0,
+    stroke: 1.9,
+    paths: &["M3 4.5v5.5h5.5", "M5.2 14.5a7.5 7.5 0 1 0 1.9-7.6L3 10"],
+};
+
+/// "...": the system color panel, for exact values.
+pub(crate) const MORE: Icon = Icon {
+    view: 20.0,
+    stroke: 2.6,
+    paths: &["M4.5 10h.01M10 10h.01M15.5 10h.01"],
+};
+
 /// Strokes `icon` into a `size` x `size` pixel square at `(x, y)`.
 pub(crate) fn draw(
     target: &mut Canvas<'_, '_>,

@@ -1,8 +1,11 @@
 //! The Palette: the 5 color slots and 3 width slots on the Toolbar.
 //!
 //! A width slot is the drawn line's thickness in pt (logical px) at mid
-//! pressure. The default colors are Excalidraw's open-color picks (colors.ts,
-//! Excalidraw 0.18, MIT), in the order red, blue, green, yellow, black.
+//! pressure. The default colors are red, amber, green, blue and grape: red and
+//! grape are open-color picks (Excalidraw colors.ts, 0.18, MIT), amber and green
+//! are Tailwind's amber-500 and green-600, blue is Apple's system blue. They
+//! read on both a white and a dark page better than the black and yellow they
+//! replace.
 
 /// Color slots on the Toolbar.
 pub(crate) const COLORS: usize = 5;
@@ -21,15 +24,15 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// Red, blue, green, yellow, black; thin 2, medium 4, bold 8 pt. What
+    /// Red, amber, green, blue, grape; thin 2, medium 4, bold 8 pt. What
     /// Reset restores, slot by slot.
     pub const DEFAULT: Self = Self {
         colors: [
             [0xe0, 0x31, 0x31],
-            [0x19, 0x71, 0xc2],
-            [0x2f, 0x9e, 0x44],
-            [0xfa, 0xb0, 0x05],
-            [0x1e, 0x1e, 0x1e],
+            [0xf5, 0x9e, 0x0b],
+            [0x16, 0xa3, 0x4a],
+            [0x00, 0x7a, 0xff],
+            [0xbe, 0x4b, 0xdb],
         ],
         widths: [2.0, 4.0, 8.0],
     };
@@ -58,20 +61,6 @@ impl Palette {
                 .copied()
                 .map(SlotValue::Width),
         }
-    }
-
-    /// A width typed by the user: snapped and clamped as a slot value; a
-    /// comma counts as the decimal point. `None` when it is not a number.
-    #[must_use]
-    pub fn parse_width(text: &str) -> Option<f32> {
-        Self::snap_width(text.trim().replace(',', ".").parse().ok()?)
-    }
-
-    /// A width as the editors show it: `2`, `2.5` and `2.25`, never `2.0`.
-    #[must_use]
-    pub fn width_text(width: f32) -> String {
-        let text = format!("{width:.2}");
-        text.trim_end_matches('0').trim_end_matches('.').to_owned()
     }
 
     /// This Palette with every width made a valid slot value; one that is not
@@ -104,8 +93,8 @@ pub enum SlotValue {
     Width(f32),
 }
 
-/// The side of a button an editor opens on: the one facing away from the
-/// Toolbar's edge, so the editor never covers the rest of the Toolbar.
+/// The side of a button a picker or the system panel opens on: the one facing
+/// away from the Toolbar's edge, so it never covers the rest of the Toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
     Below,
@@ -123,14 +112,14 @@ pub struct Anchor {
     pub h: f32,
 }
 
-/// A secondary click landed on a color or width button: the platform opens
-/// its editor for that slot next to `anchor`.
+/// The "..." of the Color Picker was pressed: the platform opens the system
+/// color panel for that slot, next to `anchor`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EditRequest {
     pub kind: SlotKind,
     pub index: usize,
     pub anchor: Anchor,
-    /// Where the editor opens relative to `anchor`.
+    /// Where the panel opens relative to `anchor`.
     pub side: Side,
     /// What the slot holds now.
     pub value: SlotValue,

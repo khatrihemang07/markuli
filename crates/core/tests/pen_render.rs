@@ -30,10 +30,9 @@ fn scene() -> (Annotator, Pixmap) {
     a.handle(Event::ScaleFactor(SCALE));
     // 12 pt, so a slow stroke is about 12 px across (the look the pixel
     // checks and the golden were made with).
-    a.handle(Event::EditWidth {
-        slot: 1,
-        width: 12.0,
-    });
+    let mut palette = a.view().palette;
+    palette.widths[1] = 12.0;
+    a.handle(Event::Palette(palette));
     a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
     a.render(&mut pm.as_mut(), Format::Rgba);
     (a, pm)

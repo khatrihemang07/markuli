@@ -3,7 +3,7 @@
 
 use super::layout::Area;
 use crate::render::{Canvas, Format};
-use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder};
+use tiny_skia::{Color, Paint, Path, PathBuilder};
 
 /// Corner radius of islands and buttons, in logical pixels.
 pub(crate) const RADIUS: f32 = 8.0;
@@ -28,6 +28,11 @@ pub(crate) struct Tokens {
     /// (`--color-primary-darkest`).
     pub swatch_border: [u8; 3],
     pub swatch_active: [u8; 3],
+    /// The warning on a color that is hard to see on the page (a red that
+    /// reads on the island), and the page those colors are judged against:
+    /// white in Light, `#1e1e1e` in Dark.
+    pub low: [u8; 3],
+    pub page: [u8; 3],
 }
 
 const LIGHT: Tokens = Tokens {
@@ -39,6 +44,8 @@ const LIGHT: Tokens = Tokens {
     disabled: [0xb8, 0xb8, 0xb8],
     swatch_border: [0xd6, 0xd6, 0xd6],
     swatch_active: [0x4a, 0x47, 0xb1],
+    low: [0xc9, 0x2a, 0x2a],
+    page: [0xff, 0xff, 0xff],
 };
 
 const DARK: Tokens = Tokens {
@@ -50,6 +57,8 @@ const DARK: Tokens = Tokens {
     disabled: [0x5c, 0x5c, 0x5c],
     swatch_border: [0x5c, 0x5c, 0x66],
     swatch_active: [0xa8, 0xa5, 0xff],
+    low: [0xff, 0x87, 0x87],
+    page: [0x1e, 0x1e, 0x1e],
 };
 
 impl Theme {
@@ -103,17 +112,21 @@ pub(crate) fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'st
 }
 
 pub(crate) fn fill_rounded(target: &mut Canvas<'_, '_>, r: Area, radius: f32, paint: &Paint<'_>) {
-    if let Some(path) = rounded_rect(r, radius) {
-        target.fill_path(&path, paint, FillRule::Winding);
-    }
+    target.fill_with(|pb| push_rounded(pb, r, radius), paint);
 }
 
 /// A rounded rectangle from four cubic corner arcs.
 pub(crate) fn rounded_rect(r: Area, radius: f32) -> Option<Path> {
+    let mut pb = PathBuilder::new();
+    push_rounded(&mut pb, r, radius);
+    pb.finish()
+}
+
+/// Adds the rounded rectangle to `pb`.
+pub(crate) fn push_rounded(pb: &mut PathBuilder, r: Area, radius: f32) {
     let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
     let k = radius * (1.0 - 0.552_284_8);
     let (x0, y0, x1, y1) = (r.x, r.y, r.x + r.w, r.y + r.h);
-    let mut pb = PathBuilder::new();
     pb.move_to(x0 + radius, y0);
     pb.line_to(x1 - radius, y0);
     pb.cubic_to(x1 - k, y0, x1, y0 + k, x1, y0 + radius);
@@ -124,5 +137,4 @@ pub(crate) fn rounded_rect(r: Area, radius: f32) -> Option<Path> {
     pb.line_to(x0, y0 + radius);
     pb.cubic_to(x0, y0 + k, x0 + k, y0, x0 + radius, y0);
     pb.close();
-    pb.finish()
 }

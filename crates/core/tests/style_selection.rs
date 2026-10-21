@@ -59,8 +59,8 @@ fn pick(a: &mut Annotator, control: Button) {
 }
 
 const RED: [u8; 3] = [0xe0, 0x31, 0x31];
-const GREEN: [u8; 3] = [0x2f, 0x9e, 0x44];
-const BLUE: [u8; 3] = [0x19, 0x71, 0xc2];
+const GREEN: [u8; 3] = [0x16, 0xa3, 0x4a];
+const BLUE: [u8; 3] = [0xf5, 0x9e, 0x0b];
 
 fn colors(a: &Annotator) -> Vec<[u8; 3]> {
     a.ink()
@@ -157,7 +157,7 @@ fn copied_excalidraw_json_reflects_the_restyled_values() {
     let elements = doc["elements"].as_array().expect("elements");
     assert_eq!(elements.len(), 2);
     for e in elements {
-        assert_eq!(e["strokeColor"], "#1e1e1e");
+        assert_eq!(e["strokeColor"], "#be4bdb");
         // 8 pt in Excalidraw's unit: pt / (4.25 * sqrt(2)).
         let sw = e["strokeWidth"].as_f64().expect("number");
         assert!((sw - 8.0 / 6.01).abs() < 0.005, "{sw}");

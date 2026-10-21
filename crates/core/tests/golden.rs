@@ -4,11 +4,13 @@
 //! at. Regenerate after an intended change with `UPDATE_GOLDEN=1 cargo test`
 //! and look at the PNGs in `tests/golden/` before committing them.
 
+mod support;
+
 use markuli_core::{
     Annotator, Button, DisplayId, Event, Format, Key, Point, Theme, ToolbarPosition,
 };
-use std::path::PathBuf;
-use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
+use support::golden::{check, over};
+use tiny_skia::{Color, Pixmap};
 
 /// Wide enough for the one-row Toolbar (about 620 logical px).
 const W: u32 = 640;
@@ -43,73 +45,6 @@ fn image(a: &mut Annotator, page: Color) -> Pixmap {
     let mut overlay = Pixmap::new(W, H).expect("size is non-zero");
     a.render(&mut overlay.as_mut(), Format::Rgba);
     over(&overlay, page)
-}
-
-/// The Overlay buffer composited over the page.
-fn over(overlay: &Pixmap, page: Color) -> Pixmap {
-    let mut out = Pixmap::new(overlay.width(), overlay.height()).expect("size is non-zero");
-    out.fill(page);
-    out.draw_pixmap(
-        0,
-        0,
-        overlay.as_ref(),
-        &PixmapPaint::default(),
-        Transform::identity(),
-        None,
-    );
-    out
-}
-
-/// Compares with the golden `name`, which must be exactly `expected` pixels:
-/// the size is asserted here, so a change of it fails the test.
-fn check(name: &str, expected: (u32, u32), actual: &Pixmap) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/golden")
-        .join(format!("{name}.png"));
-    if std::env::var_os("UPDATE_GOLDEN").is_some() {
-        std::fs::create_dir_all(path.parent().expect("has a parent")).expect("create golden dir");
-        actual.save_png(&path).expect("write golden");
-        return;
-    }
-    let golden = Pixmap::load_png(&path).unwrap_or_else(|e| {
-        panic!(
-            "missing golden {} ({e}); run with UPDATE_GOLDEN=1",
-            path.display()
-        )
-    });
-    assert_eq!(
-        (actual.width(), actual.height()),
-        expected,
-        "{name}: rendered size"
-    );
-    assert_eq!(
-        (golden.width(), golden.height()),
-        expected,
-        "{name}: golden size"
-    );
-    // The SIMD and scalar rasterizer paths may differ by a rounding step.
-    // An edge that falls exactly on an anti-aliasing sample row can also land
-    // on either side of it per platform (ADR-0003; seen on the Hand icon's
-    // fingertip, macOS vs Windows): a few pixels may be off by up to three of
-    // the 16 coverage samples.
-    let width = expected.0 as usize;
-    let off = |limit: u8| {
-        golden
-            .data()
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .zip(actual.data().as_chunks::<4>().0)
-            .enumerate()
-            .filter(move |(_, (g, a))| g.iter().zip(*a).any(|(g, a)| g.abs_diff(*a) > limit))
-            .map(move |(i, (g, a))| format!("({}, {}) {g:?} -> {a:?}", i % width, i / width))
-    };
-    let (rounding, samples) = (off(2).count(), off(48).count());
-    assert!(
-        rounding <= 8 && samples == 0,
-        "{name}: {rounding} pixels differ from the golden, {samples} by more than 48: {:#?}",
-        off(2).take(40).collect::<Vec<_>>()
-    );
 }
 
 const WHITE_PAGE: Color = Color::WHITE;
@@ -314,7 +249,7 @@ fn toolbar_highlights_the_chosen_color_and_width_in_both_themes() {
         (Theme::Dark, dark_page(), "toolbar_dark_blue_bold"),
     ] {
         let mut a = scene(theme, 1.0);
-        key(&mut a, '2');
+        key(&mut a, '4');
         key(&mut a, ']');
         check(name, (W, H), &image(&mut a, page));
     }
@@ -423,17 +358,15 @@ fn toolbar_shows_a_custom_palette_with_a_capped_width_icon() {
             [0xff, 0xff, 0xff],
             [0x00, 0x00, 0x00],
         ],
-        widths: [0.5, 8.0, 12.0],
+        widths: [0.5, 8.0, 30.0],
     };
     a.handle(Event::Palette(palette));
     a.handle(Event::EditColor {
         slot: 2,
         rgb: [0x7c, 0x3a, 0xed],
     });
-    a.handle(Event::EditWidth {
-        slot: 2,
-        width: 30.0,
-    });
+    // `]` chooses the bold slot, now 30 pt.
+    key(&mut a, ']');
     a.handle(Event::PointerDown(p(100.0, 220.0)));
     a.handle(Event::PointerMove(p(300.0, 180.0)));
     a.handle(Event::PointerUp(p(500.0, 230.0)));

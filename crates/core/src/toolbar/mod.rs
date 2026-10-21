@@ -16,13 +16,14 @@ mod paint;
 mod theme;
 
 use crate::ink::Point;
-use crate::palette::{Anchor, Palette, Side};
+use crate::palette::{Palette, Side, SlotKind};
 use crate::tools::Tools;
 use layout::Layout;
 
 pub(crate) use layout::Area;
 pub use layout::{Insets, ToolbarPosition};
 pub use theme::Theme;
+pub(crate) use theme::{fill_rounded, push_rounded, shadow, solid_paint, Tokens, RADIUS};
 
 /// A toolbar button. `Tool(i)` is the i-th registered Tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -192,22 +193,32 @@ impl Toolbar {
             .then_some(Hit::Dead)
     }
 
-    /// The color or width button at `at` and where it is, for an edit request.
-    pub fn palette_button_at(&self, at: Point, tools: usize) -> Option<(Button, Anchor, Side)> {
+    /// The color or width slot whose button is at `at`.
+    pub fn slot_at(&self, at: Point, tools: usize) -> Option<(SlotKind, usize)> {
         let l = self.layout(tools)?;
         let i = (0..layout::count(tools)).find(|&i| l.button_rect(i).contains(at))?;
-        let button = layout::button(i, tools);
-        let r = l.button_rect(i);
-        matches!(button, Button::Color(_) | Button::Width(_)).then_some((
-            button,
-            Anchor {
-                x: r.x,
-                y: r.y,
-                w: r.w,
-                h: r.h,
-            },
-            l.side(),
-        ))
+        match layout::button(i, tools) {
+            Button::Color(i) => Some((SlotKind::Color, i)),
+            Button::Width(i) => Some((SlotKind::Width, i)),
+            _ => None,
+        }
+    }
+
+    /// A slot's button, the side of it a popover opens on, and the area a
+    /// popover may cover. Computed from the current layout on every call.
+    pub fn slot_geometry(
+        &self,
+        kind: SlotKind,
+        index: usize,
+        tools: usize,
+    ) -> Option<(Area, Side, Area)> {
+        let l = self.layout(tools)?;
+        let button = match kind {
+            SlotKind::Color => Button::Color(index),
+            SlotKind::Width => Button::Width(index),
+        };
+        let i = layout::index_of(button, tools)?;
+        Some((l.button_rect(i), l.side(), l.usable()))
     }
 
     #[cfg(feature = "test-support")]

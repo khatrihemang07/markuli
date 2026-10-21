@@ -41,8 +41,8 @@ fn last(a: &Annotator) -> &Element {
     a.ink().elements().last().expect("a stroke")
 }
 
-const BLUE: [u8; 3] = [0x19, 0x71, 0xc2];
-const GREEN: [u8; 3] = [0x2f, 0x9e, 0x44];
+const BLUE: [u8; 3] = [0xf5, 0x9e, 0x0b];
+const GREEN: [u8; 3] = [0x16, 0xa3, 0x4a];
 
 #[test]
 fn the_view_reports_the_default_style() {

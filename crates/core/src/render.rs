@@ -16,10 +16,12 @@
 
 use crate::ink::{Element, Ink, Rect};
 use crate::laser::Laser;
+use crate::picker::Popover;
 use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
 use tiny_skia::{
-    Color, FillRule, Paint, Path, PathBuilder, PixmapMut, Rect as SkiaRect, Stroke, Transform,
+    Color, FillRule, FilterQuality, Paint, Path, PathBuilder, Pattern, PixmapMut, PixmapRef,
+    Rect as SkiaRect, SpreadMode, Stroke, Transform,
 };
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
@@ -49,19 +51,71 @@ const BAND_BYTES: usize = 1 << 20;
 pub(crate) struct Canvas<'a, 'b> {
     pm: &'a mut PixmapMut<'b>,
     shift: Transform,
+    /// One path builder for every `*_with` shape of the frame.
+    builder: &'a mut Option<PathBuilder>,
 }
 
 impl<'a, 'b> Canvas<'a, 'b> {
     /// `pm`'s top-left pixel is the target pixel `(x, y)`.
-    fn new(pm: &'a mut PixmapMut<'b>, x: u32, y: u32) -> Self {
+    fn new(
+        pm: &'a mut PixmapMut<'b>,
+        (x, y): (u32, u32),
+        builder: &'a mut Option<PathBuilder>,
+    ) -> Self {
         Self {
             pm,
             shift: Transform::from_translate(-to_f32(x), -to_f32(y)),
+            builder,
         }
     }
 
-    pub fn fill_path(&mut self, path: &Path, paint: &Paint<'_>, rule: FillRule) {
-        self.pm.fill_path(path, paint, rule, self.shift, None);
+    /// Fills the shape `build` draws. The path is built in the frame's
+    /// reused builder, so a shape costs no allocation once warm (rule 8).
+    pub fn fill_with(&mut self, build: impl FnOnce(&mut PathBuilder), paint: &Paint<'_>) {
+        let mut path = self.builder.take().unwrap_or_default();
+        build(&mut path);
+        if let Some(path) = path.finish() {
+            self.pm
+                .fill_path(&path, paint, FillRule::Winding, self.shift, None);
+            *self.builder = Some(path.clear());
+        }
+    }
+
+    pub fn stroke_with(
+        &mut self,
+        build: impl FnOnce(&mut PathBuilder),
+        paint: &Paint<'_>,
+        stroke: &Stroke,
+    ) {
+        let mut path = self.builder.take().unwrap_or_default();
+        build(&mut path);
+        if let Some(path) = path.finish() {
+            self.pm.stroke_path(&path, paint, stroke, self.shift, None);
+            *self.builder = Some(path.clear());
+        }
+    }
+
+    /// Paints `pixels` (target pixel order) with their corner at `origin`,
+    /// only inside the shape `build` draws: a picture with rounded corners
+    /// and no mask to allocate.
+    pub fn draw_pixmap(
+        &mut self,
+        build: impl FnOnce(&mut PathBuilder),
+        pixels: PixmapRef<'_>,
+        origin: (f32, f32),
+    ) {
+        let paint = Paint {
+            shader: Pattern::new(
+                pixels,
+                SpreadMode::Pad,
+                FilterQuality::Nearest,
+                1.0,
+                Transform::from_translate(origin.0, origin.1),
+            ),
+            anti_alias: true,
+            ..Paint::default()
+        };
+        self.fill_with(build, &paint);
     }
 
     /// `at` maps the path into target pixels first.
@@ -183,12 +237,13 @@ impl Pending {
     }
 }
 
-/// Renders the Ink, then the toolbar on top of it.
+/// Renders the Ink, then the toolbar and the Color or Width Picker on top of it.
 ///
-/// The toolbar is never drawn incrementally: whenever it changed, or the Ink
-/// redraw touches its region, the whole region is redrawn from the backdrop
-/// and the Ink, then the toolbar is painted over it (so its shadow never
-/// stacks on itself).
+/// The toolbar and the popover are never drawn incrementally: whenever one
+/// changed, or the Ink redraw touches its region, the whole region is redrawn
+/// from the backdrop and the Ink, then it is painted over it (so a shadow
+/// never stacks on itself). When the popover changed, the area it covered
+/// before is redrawn too, so closing or moving it leaves nothing behind.
 #[allow(
     clippy::too_many_arguments,
     reason = "one call site; each is a distinct layer"
@@ -203,6 +258,7 @@ pub fn render(
     target: &mut PixmapMut<'_>,
     format: Format,
     mut chrome: Chrome<'_>,
+    mut popover: Popover<'_>,
 ) -> Option<Damage> {
     let region = chrome.region();
     let dirty = chrome.is_dirty();
@@ -218,10 +274,33 @@ pub fn render(
         }
         _ => {}
     }
-    // The toolbar region may have brought in more damage for the Selection.
+    let (before, now) = (popover.picker.painted(), popover.look);
+    let mut redrawn: Option<Area> = None;
+    let mut redraw = |pending: &mut Pending, area: Area| {
+        pending.add_physical(area.to_bounds());
+        redrawn = Some(redrawn.map_or(area, |all| all.union(&area)));
+    };
+    if popover.picker.is_dirty(now) {
+        for look in [before, now].into_iter().flatten() {
+            redraw(pending, look.region());
+        }
+    } else if let Some(look) = now.filter(|l| pending.touches(l.region().to_bounds())) {
+        redraw(pending, look.region());
+    }
+    // The popover's band cuts through the toolbar's shadow and islands. A band
+    // edge through a thin ring rasterizes it differently from a whole redraw
+    // (tiny-skia's hairline clipping), so the toolbar is redrawn whole too.
+    if let (Some(r), Some(area)) = (region, redrawn) {
+        if r.intersects(&area) {
+            pending.add_physical(r.to_bounds());
+        }
+    }
+    // The toolbar and popover regions may have brought in more damage for
+    // the Selection.
     grow_to_overlay(pending, selection);
     let Some(damage) = pending.take_damage(target.width(), target.height()) else {
         chrome.done();
+        popover.picker.done(now);
         return None;
     };
     let layers = Layers {
@@ -243,10 +322,11 @@ pub fn render(
             height: rows,
             ..damage
         };
-        compose_band(&layers, pending, &mut chrome, target, band);
+        compose_band(&layers, pending, (&mut chrome, &mut popover), target, band);
         y += rows;
     }
     chrome.done();
+    popover.picker.done(now);
     Some(damage)
 }
 
@@ -286,7 +366,7 @@ struct Layers<'a> {
 fn compose_band(
     layers: &Layers<'_>,
     pending: &mut Pending,
-    chrome: &mut Chrome<'_>,
+    (chrome, popover): (&mut Chrome<'_>, &mut Popover<'_>),
     target: &mut PixmapMut<'_>,
     band: Damage,
 ) {
@@ -325,7 +405,7 @@ fn compose_band(
         (scale, scroll),
         format,
     );
-    let mut canvas = Canvas::new(&mut region, band.x, band.y);
+    let mut canvas = Canvas::new(&mut region, (band.x, band.y), builder);
     let this = Area::from_bounds(bounds_of(band));
     if selection
         .shown()
@@ -335,6 +415,9 @@ fn compose_band(
     }
     if chrome.region().is_some_and(|r| r.intersects(&this)) {
         chrome.paint(&mut canvas, format);
+    }
+    if let Some(look) = popover.look.filter(|l| l.region().intersects(&this)) {
+        popover.picker.paint(&mut canvas, &look, format);
     }
     let stride = target.width() as usize * 4;
     let data = target.data_mut();

@@ -1,22 +1,24 @@
 //! What the Annotator tells the outside: the [`View`], read access to Ink and
 //! Selection, the copy text, and rendering to pixels.
 
+use crate::picker::Popover;
 use crate::toolbar::{Chrome, UiState};
 use crate::tools::{StyleTarget, Tool};
 use crate::{render, Annotator, Cursor, Damage, Element, Format, Ink, View};
 #[cfg(feature = "test-support")]
-use crate::{Button, Point};
+use crate::{Button, PickerPart, Point};
 
 impl Annotator {
     #[must_use]
     pub fn view(&self) -> View {
-        let over_toolbar = self.toolbar.over() && !self.tool_busy();
+        let over_toolbar = (self.toolbar.over() || self.picker.over()) && !self.tool_busy();
         let alt_hand = self.alt && !self.tool_busy();
         View {
             draw_mode: self.draw_mode,
             display: self.display,
             needs_render: self.paint.is_pending()
-                || self.toolbar.is_dirty(self.draw_mode, self.ui()),
+                || self.toolbar.is_dirty(self.draw_mode, self.ui())
+                || self.picker.is_dirty(self.picker_look()),
             cursor: match self.tools.in_use() {
                 Some(_) if alt_hand && !over_toolbar => Cursor::Hand { grabbing: false },
                 Some(tool) if !over_toolbar => tool.cursor(self.style),
@@ -26,6 +28,7 @@ impl Annotator {
             style: self.slots,
             palette: self.palette,
             edit: self.edit,
+            recent: self.recent,
             next_frame: self.laser.next_frame(),
             scroll: self.paint.scroll(),
         }
@@ -61,6 +64,15 @@ impl Annotator {
         self.toolbar.center_of(button, self.tools.len())
     }
 
+    /// The centre of a part of the open Color Picker or Width Picker in
+    /// Overlay pixels; `None` while no picker is open or the part is not on
+    /// it (for instance a Preset on the Custom tab).
+    #[cfg(feature = "test-support")]
+    #[must_use]
+    pub fn picker_point(&self, part: PickerPart) -> Option<Point> {
+        self.picker.point(part, &self.picker_frame()?)
+    }
+
     /// Draws what changed since the last call into `target` (premultiplied
     /// pixels, `format` channel order) and returns the changed region.
     pub fn render(
@@ -68,11 +80,16 @@ impl Annotator {
         target: &mut tiny_skia::PixmapMut<'_>,
         format: Format,
     ) -> Option<Damage> {
+        let look = self.picker_look();
         let chrome = Chrome {
             visible: self.draw_mode,
             ui: self.ui(),
             toolbar: &mut self.toolbar,
             tools: &self.tools,
+        };
+        let popover = Popover {
+            picker: &mut self.picker,
+            look,
         };
         render::render(
             &self.ink,
@@ -84,6 +101,7 @@ impl Annotator {
             target,
             format,
             chrome,
+            popover,
         )
     }
 
@@ -105,7 +123,7 @@ impl Annotator {
     /// active Tool leaves them dimmed. With a Selection they are the
     /// Selection's own values, `None` where it mixes them; otherwise the Pen's
     /// Style (a dimmed Tool shows it too: a click then switches to the Pen).
-    fn chosen_style(&self) -> Chosen {
+    pub(super) fn chosen_style(&self) -> Chosen {
         let target = self.tools.get(self.tools.active()).map(Tool::styles);
         let own = Chosen {
             color: Some(self.slots.color),
@@ -148,8 +166,8 @@ impl Annotator {
 
 /// What the Toolbar highlights: palette and width indices (`None` where a
 /// Selection mixes them), and whether the active Tool leaves them dimmed.
-struct Chosen {
-    color: Option<usize>,
-    width: Option<usize>,
-    dimmed: bool,
+pub(super) struct Chosen {
+    pub color: Option<usize>,
+    pub width: Option<usize>,
+    pub dimmed: bool,
 }

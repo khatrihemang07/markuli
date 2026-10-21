@@ -138,6 +138,8 @@ pub(super) struct Layout {
     vertical: bool,
     pub scale: f32,
     sizes: [usize; ISLANDS],
+    /// The Overlay minus the OS insets, physical px.
+    usable: Area,
 }
 
 fn island_width(n: usize) -> f32 {
@@ -183,7 +185,13 @@ impl Layout {
             vertical: matches!(position, ToolbarPosition::Left | ToolbarPosition::Right),
             scale,
             sizes,
+            usable: Area::from_bounds([l, t, w - r, h - b]),
         }
+    }
+
+    /// Where a popover may go: the Overlay minus the OS insets.
+    pub fn usable(&self) -> Area {
+        self.usable
     }
 
     /// The side of a button an editor opens on: facing away from the edge.
@@ -266,7 +274,6 @@ pub(super) fn button(i: usize, tools: usize) -> Button {
 }
 
 /// The position of `button` in the row, if there is such a button.
-#[cfg(feature = "test-support")]
 pub(super) fn index_of(button: Button, tools: usize) -> Option<usize> {
     let action = |a: Button| ACTION_BUTTONS.iter().position(|&b| b == a);
     match button {

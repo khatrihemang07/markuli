@@ -11,6 +11,8 @@ mod icons;
 mod ink;
 pub mod laser;
 mod palette;
+mod picker;
+mod recent;
 mod render;
 mod route;
 mod selection;
@@ -26,6 +28,10 @@ use history::History;
 pub use ink::{Element, Ink, Point};
 use laser::Laser;
 pub use palette::{Anchor, EditRequest, Palette, Side, SlotKind, SlotValue, MAX_WIDTH, MIN_WIDTH};
+use picker::Picker;
+#[cfg(feature = "test-support")]
+pub use picker::PickerPart;
+pub use recent::RecentColors;
 pub use render::{Damage, Format};
 use selection::Selection;
 use style::Appearance;
@@ -75,30 +81,22 @@ pub enum Event {
     /// The remembered Palette, sent at startup. Widths are snapped to 0.25 and
     /// clamped to 0.5..=30. The Pen keeps its chosen slots.
     Palette(Palette),
-    /// Sets color slot `slot` and chooses it, as a click on it would. An
-    /// out-of-range slot is ignored. Reset is this event with the default
-    /// ([`Palette::DEFAULT`]).
+    /// The system color panel sets color slot `slot` and chooses it, as a
+    /// click on it would. An out-of-range slot is ignored.
     EditColor {
         slot: usize,
         rgb: [u8; 3],
     },
-    /// Sets width slot `slot` (snapped to 0.25, clamped to 0.5..=30; not finite
-    /// is ignored) and chooses it. Consecutive edits of one slot restyle a
-    /// Selection as one undo step, until [`Event::EditEnd`], a key or a click.
-    EditWidth {
-        slot: usize,
-        width: f32,
-    },
-    /// The editor closed: the next edit is a new undo step. While an editor
-    /// is open (from [`View::edit`] until this event) the first
-    /// [`Event::PointerDown`] is the click that dismisses it: the core ends the
-    /// edit as this event would and swallows that press, its moves and its
-    /// release, so a dismissing click never draws. The platform still sends
-    /// this event when an editor closes.
+    /// The system color panel (opened by the Color Picker's "...") closed:
+    /// the next edit is a new undo step, and the panel's last color joins the
+    /// Recent Colors. The platform sends it when the panel closes.
     EditEnd,
+    /// The remembered Recent Colors, sent at startup.
+    RecentColors(RecentColors),
     /// A secondary click (right button, or Control+left on macOS) at this
-    /// position. On a color or width button it sets [`View::edit`]; anywhere
-    /// else it does nothing, and it never draws or changes the Tool.
+    /// position. On a color or width button it opens that slot's Color Picker
+    /// or Width Picker (replacing an open one); anywhere else it closes the
+    /// picker. It never draws or changes the Tool.
     SecondaryClick(Point),
     /// The OS light or dark theme.
     Theme(Theme),
@@ -175,9 +173,11 @@ pub struct View {
     pub style: Style,
     /// The Palette the slots hold. The platform saves it when it changes.
     pub palette: Palette,
-    /// Set by a [`Event::SecondaryClick`] on a color or width button, until
-    /// the next event: the platform opens that slot's editor.
+    /// Set when the Color Picker's "..." was pressed, until the next event:
+    /// the platform opens the system color panel for that slot.
     pub edit: Option<EditRequest>,
+    /// The Recent Colors. The platform saves them when they change.
+    pub recent: RecentColors,
     /// The time (same clock as [`Event::Clock`]) the next frame is due. Set
     /// only while something animates (a visible Laser trail): wait for it,
     /// then send `Clock`. `None` means sleep until the next input.
@@ -186,19 +186,11 @@ pub struct View {
     pub scroll: f32,
 }
 
-/// Whether a Palette editor is open, as far as the core can tell.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Editor {
-    Closed,
-    /// From the [`View::edit`] that asked for it until [`Event::EditEnd`] or
-    /// the first press, which dismisses it.
-    Open,
-    /// The press that dismissed an editor is in flight: its moves and release
-    /// are swallowed too, so it never draws.
-    Dismissing,
-}
-
 #[derive(Debug)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "Draw Mode, the two modifiers and the dismissing press are independent states"
+)]
 pub struct Annotator {
     ink: Ink,
     draw_mode: bool,
@@ -222,9 +214,16 @@ pub struct Annotator {
     /// Slots are kept apart from values so two slots may hold one value.
     slots: Style,
     style: Appearance,
-    /// Set by a secondary click on a Palette button, until the next event.
+    /// Set by the Color Picker's "...", until the next event.
     edit: Option<EditRequest>,
-    editor: Editor,
+    /// The Color Picker or Width Picker.
+    picker: Picker,
+    recent: RecentColors,
+    /// A press that closed the picker, or was used on it, is in flight: its
+    /// moves and release are swallowed too, so it never draws.
+    dismissing: bool,
+    /// The slot the system color panel is editing, until [`Event::EditEnd`].
+    panel_run: Option<usize>,
     /// The slot whose edits are being coalesced into one restyle.
     editing: Option<(SlotKind, usize)>,
     /// The Appearance of the selected Elements before the restyle in progress.
@@ -254,7 +253,10 @@ impl Default for Annotator {
             slots: Style::default(),
             style: Appearance::default(),
             edit: None,
-            editor: Editor::Closed,
+            picker: Picker::default(),
+            recent: RecentColors::default(),
+            dismissing: false,
+            panel_run: None,
             editing: None,
             restyling: None,
         }

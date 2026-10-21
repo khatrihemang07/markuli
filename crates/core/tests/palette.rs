@@ -1,8 +1,10 @@
 //! Seam 1: the editable Palette through the annotator interface only.
 
+mod support;
+
 use markuli_core::{
-    Annotator, Button, DisplayId, EditRequest, Element, Event, Key, Palette, Point, Side, SlotKind,
-    SlotValue, Style, ToolKind, ToolbarPosition,
+    Annotator, Button, DisplayId, Element, Event, Key, Palette, PickerPart, Point, SlotKind,
+    SlotValue, Style, ToolKind,
 };
 
 fn p(x: f32, y: f32) -> Point {
@@ -43,10 +45,6 @@ fn stroke(a: &mut Annotator, y: f32) {
     a.handle(Event::PointerUp(p(400.0, y)));
 }
 
-fn center(a: &Annotator, b: Button) -> Point {
-    a.button_center(b).expect("the toolbar is shown")
-}
-
 fn last(a: &Annotator) -> &Element {
     a.ink().elements().last().expect("a stroke")
 }
@@ -62,15 +60,21 @@ fn colors(a: &Annotator) -> Vec<[u8; 3]> {
 const TEAL: [u8; 3] = [0x12, 0xb8, 0xa6];
 const PINK: [u8; 3] = [0xff, 0x66, 0xcc];
 const RED: [u8; 3] = [0xe0, 0x31, 0x31];
-const BLUE: [u8; 3] = [0x19, 0x71, 0xc2];
-const GREEN: [u8; 3] = [0x2f, 0x9e, 0x44];
+const AMBER: [u8; 3] = [0xf5, 0x9e, 0x0b];
+const GREEN: [u8; 3] = [0x16, 0xa3, 0x4a];
 
 fn edit_color(a: &mut Annotator, slot: usize, rgb: [u8; 3]) {
     a.handle(Event::EditColor { slot, rgb });
 }
 
+/// Sets a width slot's value (a startup Palette) and chooses the slot. The
+/// Width Picker's own edits are in `width_picker.rs`.
 fn edit_width(a: &mut Annotator, slot: usize, width: f32) {
-    a.handle(Event::EditWidth { slot, width });
+    let mut palette = a.view().palette;
+    palette.widths[slot] = width;
+    a.handle(Event::Palette(palette));
+    let color = a.view().style.color;
+    a.handle(Event::Style(Style { color, width: slot }));
 }
 
 #[test]
@@ -121,7 +125,7 @@ fn an_edited_color_is_drawn_by_the_next_stroke_and_by_key_n() {
     assert_eq!(last(&a).stroke_color(), TEAL);
     key(&mut a, '2');
     stroke(&mut a, 200.0);
-    assert_eq!(last(&a).stroke_color(), BLUE);
+    assert_eq!(last(&a).stroke_color(), AMBER);
     key(&mut a, '3');
     stroke(&mut a, 300.0);
     assert_eq!(last(&a).stroke_color(), TEAL);
@@ -156,37 +160,15 @@ fn editing_chooses_the_slot_for_every_tool_and_hands_over_to_the_pen() {
         if let Some(tool) = tool {
             key(&mut a, tool);
         }
-        edit_width(&mut a, 0, 12.0);
+        support::picker::open(&mut a, Button::Width(0));
+        support::picker::drag(&mut a, &[PickerPart::Track(0.4)]);
         let v = a.view();
         assert_eq!(v.tool, ToolKind::Pen, "width edit from {kind:?}");
         assert_eq!(v.style.width, 0);
+        assert!(v.palette.widths[0] > 8.0, "{}", v.palette.widths[0]);
         stroke(&mut a, 100.0);
-        assert!((last(&a).stroke_width() - 12.0).abs() < f32::EPSILON);
+        assert!((last(&a).stroke_width() - v.palette.widths[0]).abs() < f32::EPSILON);
     }
-}
-
-#[test]
-fn width_edits_are_clamped_and_snapped_to_quarter_steps() {
-    let mut a = session();
-    for (given, expected) in [
-        (0.1, 0.5),
-        (0.6, 0.5),
-        (0.63, 0.75),
-        (3.3, 3.25),
-        (29.9, 30.0),
-        (500.0, 30.0),
-        (-3.0, 0.5),
-    ] {
-        edit_width(&mut a, 2, given);
-        assert!(
-            (a.view().palette.widths[2] - expected).abs() < f32::EPSILON,
-            "{given} -> {expected}"
-        );
-    }
-    edit_width(&mut a, 2, 6.0);
-    edit_width(&mut a, 2, f32::NAN);
-    edit_width(&mut a, 2, f32::INFINITY);
-    assert!((a.view().palette.widths[2] - 6.0).abs() < f32::EPSILON);
 }
 
 #[test]
@@ -194,7 +176,6 @@ fn an_out_of_range_slot_is_ignored() {
     let mut a = session();
     let before = a.view();
     edit_color(&mut a, 5, TEAL);
-    edit_width(&mut a, 3, 9.0);
     assert_eq!(a.view().palette, before.palette);
     assert_eq!(a.view().style, before.style);
 }
@@ -266,12 +247,19 @@ fn editing_with_a_selection_restyles_it_in_one_undo_step() {
 #[test]
 fn a_width_edit_with_a_selection_restyles_and_undoes_in_one_step() {
     let mut a = two_selected();
-    for w in [3.0, 5.0, 6.5] {
-        edit_width(&mut a, 0, w);
-    }
-    a.handle(Event::EditEnd);
+    support::picker::open(&mut a, Button::Width(0));
+    support::picker::drag(
+        &mut a,
+        &[
+            PickerPart::Track(0.1),
+            PickerPart::Track(0.2),
+            PickerPart::Track(0.3),
+        ],
+    );
+    let dragged = a.view().palette.widths[0];
+    assert!(dragged > 8.0);
     for e in a.ink().elements() {
-        assert!((e.stroke_width() - 6.5).abs() < f32::EPSILON);
+        assert!((e.stroke_width() - dragged).abs() < f32::EPSILON);
     }
     command(&mut a, 'z');
     for e in a.ink().elements() {
@@ -300,7 +288,7 @@ fn a_key_after_an_edit_closes_the_coalescing() {
     edit_color(&mut a, 2, PINK);
     a.handle(Event::EditEnd);
     command(&mut a, 'z');
-    assert_eq!(colors(&a), vec![BLUE; 2]);
+    assert_eq!(colors(&a), vec![AMBER; 2]);
 }
 
 #[test]
@@ -328,203 +316,6 @@ fn copied_excalidraw_json_carries_the_custom_values() {
     let end = at + json[at..].find(',').expect("comma");
     let sw: f32 = json[at..end].parse().expect("a number");
     assert!((sw - 7.5 / 6.01).abs() < 0.005, "{json}");
-}
-
-fn secondary(a: &mut Annotator, at: Point) -> Option<EditRequest> {
-    a.handle(Event::SecondaryClick(at)).edit
-}
-
-#[test]
-fn a_secondary_click_on_a_color_or_width_button_requests_an_edit() {
-    let mut a = session();
-    edit_color(&mut a, 2, TEAL);
-    let at = center(&a, Button::Color(2));
-    let request = secondary(&mut a, at).expect("a color request");
-    assert_eq!(request.kind, SlotKind::Color);
-    assert_eq!(request.index, 2);
-    assert_eq!(request.value, SlotValue::Color(TEAL));
-    let anchor = request.anchor;
-    assert!(anchor.w > 0.0 && anchor.h > 0.0);
-    assert!(at.x >= anchor.x && at.x <= anchor.x + anchor.w);
-    assert!(at.y >= anchor.y && at.y <= anchor.y + anchor.h);
-
-    edit_width(&mut a, 1, 7.0);
-    let at = center(&a, Button::Width(1));
-    let request = secondary(&mut a, at).expect("a width request");
-    assert_eq!(request.kind, SlotKind::Width);
-    assert_eq!(request.index, 1);
-    assert_eq!(request.value, SlotValue::Width(7.0));
-}
-
-#[test]
-fn the_edit_request_lasts_until_the_next_event() {
-    let mut a = session();
-    let at = center(&a, Button::Color(0));
-    assert!(secondary(&mut a, at).is_some());
-    assert!(a.handle(Event::PointerMove(at)).edit.is_none());
-}
-
-#[test]
-fn a_secondary_click_elsewhere_does_nothing() {
-    let mut a = session();
-    let before = a.view();
-    let targets = [
-        center(&a, Button::Tool(0)),
-        center(&a, Button::Undo),
-        center(&a, Button::Redo),
-        center(&a, Button::Clear),
-        p(400.0, 300.0),
-        p(5.0, 5.0),
-    ];
-    for at in targets {
-        assert!(secondary(&mut a, at).is_none());
-    }
-    assert!(a.ink().is_empty());
-    assert_eq!(a.view().tool, before.tool);
-    assert_eq!(a.view().style, before.style);
-    assert_eq!(a.view().palette, before.palette);
-}
-
-#[test]
-fn a_secondary_click_never_draws_or_changes_the_tool() {
-    let mut a = session();
-    key(&mut a, 'e');
-    let at = center(&a, Button::Color(3));
-    secondary(&mut a, at);
-    a.handle(Event::EditEnd);
-    secondary(&mut a, p(300.0, 300.0));
-    assert_eq!(a.view().tool, ToolKind::Eraser);
-    assert_eq!(a.view().style, Style::default());
-    key(&mut a, 'p');
-    assert!(a.ink().is_empty());
-    // Nor does one in the middle of a Stroke end or add to it.
-    a.handle(Event::PointerDown(p(300.0, 100.0)));
-    secondary(&mut a, p(320.0, 100.0));
-    a.handle(Event::PointerUp(p(340.0, 100.0)));
-    assert_eq!(a.ink().elements().len(), 1);
-}
-
-#[test]
-fn a_secondary_click_outside_draw_mode_does_nothing() {
-    let mut a = Annotator::new();
-    a.handle(Event::Resize {
-        width: 800,
-        height: 600,
-    });
-    assert!(secondary(&mut a, p(10.0, 10.0)).is_none());
-}
-
-fn ink_count(a: &Annotator) -> usize {
-    a.ink().elements().len()
-}
-
-fn open_editor(a: &mut Annotator) {
-    let at = center(a, Button::Color(2));
-    assert!(secondary(a, at).is_some());
-}
-
-#[test]
-fn the_click_that_dismisses_an_editor_never_draws() {
-    let mut a = session();
-    open_editor(&mut a);
-    a.handle(Event::PointerDown(p(300.0, 300.0)));
-    a.handle(Event::PointerMove(p(350.0, 320.0)));
-    a.handle(Event::PointerUp(p(400.0, 340.0)));
-    assert_eq!(ink_count(&a), 0);
-    // The edit is over: the next click draws.
-    stroke(&mut a, 200.0);
-    assert_eq!(ink_count(&a), 1);
-}
-
-#[test]
-fn the_dismissing_click_may_land_before_or_after_edit_end() {
-    let mut a = session();
-    open_editor(&mut a);
-    a.handle(Event::PointerDown(p(300.0, 300.0)));
-    a.handle(Event::EditEnd);
-    a.handle(Event::PointerMove(p(350.0, 300.0)));
-    a.handle(Event::PointerUp(p(400.0, 300.0)));
-    assert_eq!(ink_count(&a), 0);
-    stroke(&mut a, 200.0);
-    assert_eq!(ink_count(&a), 1);
-}
-
-#[test]
-fn a_closed_editor_swallows_nothing() {
-    let mut a = session();
-    open_editor(&mut a);
-    a.handle(Event::EditEnd);
-    stroke(&mut a, 200.0);
-    assert_eq!(ink_count(&a), 1);
-}
-
-#[test]
-fn editing_with_a_value_change_still_swallows_the_dismissing_click() {
-    let mut a = session();
-    open_editor(&mut a);
-    edit_color(&mut a, 2, TEAL);
-    a.handle(Event::PointerDown(p(300.0, 300.0)));
-    a.handle(Event::PointerUp(p(300.0, 300.0)));
-    assert_eq!(ink_count(&a), 0);
-}
-
-#[test]
-fn a_dismissing_click_on_a_toolbar_button_does_not_activate_it() {
-    let mut a = session();
-    open_editor(&mut a);
-    let pen_before = a.view().tool;
-    let at = center(&a, Button::Tool(2));
-    a.handle(Event::PointerDown(at));
-    a.handle(Event::PointerUp(at));
-    assert_eq!(a.view().tool, pen_before);
-}
-
-fn side_of(position: ToolbarPosition, width: u32, height: u32) -> Side {
-    let mut a = Annotator::new();
-    a.handle(Event::Resize { width, height });
-    a.handle(Event::ToolbarPosition(position));
-    a.handle(Event::ToggleDrawMode(DisplayId::new(1)));
-    let at = center(&a, Button::Width(1));
-    secondary(&mut a, at).expect("a width request").side
-}
-
-#[test]
-fn the_editor_opens_on_the_side_facing_away_from_the_toolbar() {
-    assert_eq!(side_of(ToolbarPosition::Top, 1200, 800), Side::Below);
-    assert_eq!(side_of(ToolbarPosition::Bottom, 1200, 800), Side::Above);
-    assert_eq!(side_of(ToolbarPosition::Left, 1200, 800), Side::Right);
-    assert_eq!(side_of(ToolbarPosition::Right, 1200, 800), Side::Left);
-}
-
-#[test]
-fn a_column_that_does_not_fit_falls_back_to_the_top_row_side() {
-    assert_eq!(side_of(ToolbarPosition::Left, 1200, 300), Side::Below);
-    assert_eq!(side_of(ToolbarPosition::Right, 1200, 300), Side::Below);
-}
-
-#[test]
-fn width_text_drops_a_useless_fraction() {
-    assert_eq!(Palette::width_text(2.0), "2");
-    assert_eq!(Palette::width_text(2.5), "2.5");
-    assert_eq!(Palette::width_text(0.5), "0.5");
-    assert_eq!(Palette::width_text(2.25), "2.25");
-    assert_eq!(Palette::width_text(12.75), "12.75");
-}
-
-#[test]
-fn typed_widths_snap_and_clamp() {
-    assert_eq!(Palette::parse_width(" 3 "), Some(3.0));
-    assert_eq!(Palette::parse_width("2.3"), Some(2.25));
-    assert_eq!(Palette::parse_width("2,5"), Some(2.5));
-    assert_eq!(Palette::parse_width("0"), Some(0.5));
-    assert_eq!(Palette::parse_width("57"), Some(30.0));
-}
-
-#[test]
-fn typed_junk_is_not_a_width() {
-    for junk in ["", "abc", "inf", "NaN", "-"] {
-        assert_eq!(Palette::parse_width(junk), None, "{junk:?}");
-    }
 }
 
 #[test]

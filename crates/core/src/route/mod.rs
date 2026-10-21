@@ -1,19 +1,27 @@
 //! Event routing: how each [`Event`] changes the Annotator's state, and the
-//! gestures behind pointer, key and toolbar input.
+//! gestures behind pointer, key and toolbar input. The Color Picker and Width
+//! Picker's share is in `picker`.
 
-use crate::palette::{Palette, COLORS, WIDTHS};
+mod picker;
+
+use crate::palette::COLORS;
 use crate::style;
 use crate::style::Appearance;
 use crate::tools::{Ctx, StyleTarget, Tool, ToolKind, Tools};
 use crate::{
-    excalidraw, Annotator, Button, Choice, DisplayId, EditRequest, Editor, Element, Event, Ink,
-    Key, Point, SlotKind, SlotValue, View,
+    excalidraw, Annotator, Button, Choice, DisplayId, Element, Event, Ink, Key, Point, SlotKind,
+    View,
 };
 
 impl Annotator {
     /// The single way into the core.
     pub fn handle(&mut self, event: Event) -> View {
         self.edit = None;
+        // A press that has no picker to belong to starts afresh: the release
+        // of the one that opened the system panel may never arrive.
+        if matches!(event, Event::PointerDown(_)) && !self.picker.is_open() {
+            self.dismissing = false;
+        }
         match event {
             Event::ToggleDrawMode(display) => self.toggle(display),
             Event::SurfaceReset => self.paint.full(),
@@ -39,20 +47,16 @@ impl Annotator {
             }
             Event::EditColor { slot, rgb } if slot < COLORS => {
                 self.palette.colors[slot] = rgb;
+                self.panel_run = Some(slot);
                 self.edit_slot(SlotKind::Color, slot, Choice::Color(slot));
             }
-            Event::EditWidth { slot, width } if slot < WIDTHS => {
-                if let Some(width) = Palette::snap_width(width) {
-                    self.palette.widths[slot] = width;
-                    self.edit_slot(SlotKind::Width, slot, Choice::Width(slot));
-                }
-            }
             Event::EditEnd => {
-                if self.editor == Editor::Open {
-                    self.editor = Editor::Closed;
-                }
                 self.finish_restyle();
+                if let Some(slot) = self.panel_run.take() {
+                    self.recent.push(self.palette.colors[slot]);
+                }
             }
+            Event::RecentColors(recent) => self.recent = recent,
             Event::SecondaryClick(at) if self.draw_mode => self.secondary_click(at),
             Event::Theme(theme) => {
                 self.toolbar.theme = theme;
@@ -67,6 +71,7 @@ impl Annotator {
                 if self.draw_mode
                     && dy.is_finite()
                     && !self.tool_busy()
+                    && !self.picker.dragging()
                     && !self.toolbar.pressing() =>
             {
                 let (_, mut ctx) = self.tool();
@@ -77,14 +82,20 @@ impl Annotator {
                 self.toolbar.set_scale(scale);
                 self.paint.full();
             }
-            Event::PointerDown(_) if self.draw_mode && self.editor == Editor::Open => {
-                self.finish_restyle();
-                self.editor = Editor::Dismissing;
+            Event::PointerDown(at) if self.draw_mode && self.picker.is_open() => {
+                self.picker_down(at);
             }
-            Event::PointerUp(_) if self.editor == Editor::Dismissing => {
-                self.editor = Editor::Closed;
+            Event::PointerMove(at) if self.draw_mode && self.picker.dragging() => {
+                self.picker_drag(at);
             }
-            Event::PointerMove(_) if self.editor == Editor::Dismissing => {}
+            Event::PointerUp(_) if self.draw_mode && self.picker.dragging() => {
+                self.picker_release();
+            }
+            Event::PointerUp(_) if self.dismissing => self.dismissing = false,
+            Event::PointerMove(_) if self.dismissing => {}
+            Event::PointerMove(at) if self.draw_mode && self.picker.is_open() => {
+                self.picker_hover(at);
+            }
             Event::PointerDown(at) if self.draw_mode => self.pointer_down(at),
             Event::PointerMove(at) if self.draw_mode => self.pointer_move(at),
             Event::PointerUp(at) if self.draw_mode => self.pointer_up(at),
@@ -158,37 +169,6 @@ impl Annotator {
         style::finish(self.restyling.take(), &self.ink, &mut self.history);
     }
 
-    /// A secondary click: on a color or width button, ask for its editor.
-    fn secondary_click(&mut self, at: Point) {
-        let Some((button, anchor, side)) = self.toolbar.palette_button_at(at, self.tools.len())
-        else {
-            return;
-        };
-        let (kind, index, value) = match button {
-            Button::Color(i) => (
-                SlotKind::Color,
-                i,
-                self.palette.colors.get(i).copied().map(SlotValue::Color),
-            ),
-            Button::Width(i) => (
-                SlotKind::Width,
-                i,
-                self.palette.widths.get(i).copied().map(SlotValue::Width),
-            ),
-            _ => return,
-        };
-        self.edit = value.map(|value| EditRequest {
-            kind,
-            index,
-            anchor,
-            side,
-            value,
-        });
-        if self.edit.is_some() {
-            self.editor = Editor::Open;
-        }
-    }
-
     /// The active Tool with what it may change.
     fn tool(&mut self) -> (&mut dyn Tool, Ctx<'_>) {
         let ctx = Ctx {
@@ -240,7 +220,11 @@ impl Annotator {
     fn pointer_up(&mut self, at: Point) {
         if self.toolbar.pressing() {
             if let Some(button) = self.toolbar.release_at(at, self.tools.len()) {
+                // Read before the click chooses the slot: a click on the slot
+                // that was already chosen opens its picker.
+                let was = self.chosen_style();
                 self.activate(button);
+                self.open_if_chosen(button, &was);
             }
         } else {
             self.toolbar.hover_at(at, self.tools.len());
@@ -263,6 +247,10 @@ impl Annotator {
     }
 
     fn key(&mut self, key: Key, command: bool, shift: bool, alt: bool) {
+        if key == Key::Escape && self.picker.is_open() {
+            self.picker_escape();
+            return;
+        }
         self.finish_restyle();
         let (tool, mut ctx) = self.tool();
         if tool.key(&mut ctx, key, command, shift) {
@@ -365,7 +353,8 @@ impl Annotator {
 
     fn toggle(&mut self, display: DisplayId) {
         self.finish_gesture();
-        self.editor = Editor::Closed;
+        self.picker.free();
+        self.dismissing = false;
         self.toolbar.forget_pointer();
         self.selection.clear();
         if self.draw_mode {

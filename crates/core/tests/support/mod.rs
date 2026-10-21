@@ -6,6 +6,9 @@
 
 #![allow(dead_code, reason = "each test binary uses a subset")]
 
+pub mod golden;
+pub mod picker;
+
 use tiny_skia::Pixmap;
 
 fn crc32(bytes: &[u8]) -> u32 {

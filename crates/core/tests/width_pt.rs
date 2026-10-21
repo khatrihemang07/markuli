@@ -59,9 +59,16 @@ fn thickness(a: &mut Annotator, pm: &mut Pixmap, scale: f32) -> f32 {
     column(pm, 130.0, scale) - column(pm, 20.0, scale)
 }
 
+/// A startup Palette with width slot `slot` set to `pt`.
+fn set_width(a: &mut Annotator, slot: usize, pt: f32) {
+    let mut palette = a.view().palette;
+    palette.widths[slot] = pt;
+    a.handle(Event::Palette(palette));
+}
+
 fn measure(pt: f32, scale: f32) -> f32 {
     let (mut a, mut pm) = session(scale);
-    a.handle(Event::EditWidth { slot: 1, width: pt });
+    set_width(&mut a, 1, pt);
     // The toolbar is not at y=100.
     draw(&mut a, scale, 100.0);
     thickness(&mut a, &mut pm, scale)
@@ -83,10 +90,7 @@ fn a_slot_of_n_pt_draws_a_stroke_n_pt_thick() {
 #[test]
 fn copied_json_stroke_width_is_pt_over_6_01() {
     let (mut a, _pm) = session(1.0);
-    a.handle(Event::EditWidth {
-        slot: 1,
-        width: 6.0,
-    });
+    set_width(&mut a, 1, 6.0);
     draw(&mut a, 1.0, 100.0);
     a.handle(Event::Key {
         key: Key::Char('a'),
@@ -113,10 +117,10 @@ fn copied_json_stroke_width_is_pt_over_6_01() {
 fn the_new_defaults() {
     let d = Palette::DEFAULT;
     assert_eq!(d.colors[0], [0xe0, 0x31, 0x31]);
-    assert_eq!(d.colors[1], [0x19, 0x71, 0xc2]);
-    assert_eq!(d.colors[2], [0x2f, 0x9e, 0x44]);
-    assert_eq!(d.colors[3], [0xfa, 0xb0, 0x05]);
-    assert_eq!(d.colors[4], [0x1e, 0x1e, 0x1e]);
+    assert_eq!(d.colors[1], [0xf5, 0x9e, 0x0b]);
+    assert_eq!(d.colors[2], [0x16, 0xa3, 0x4a]);
+    assert_eq!(d.colors[3], [0x00, 0x7a, 0xff]);
+    assert_eq!(d.colors[4], [0xbe, 0x4b, 0xdb]);
     assert_eq!(d.widths, [2.0, 4.0, 8.0]);
     let (mut a, _) = session(1.0);
     assert_eq!((a.view().style.color, a.view().style.width), (0, 1));
@@ -135,23 +139,12 @@ fn widths_clamp_to_half_to_thirty_and_snap_to_quarters() {
     assert_eq!(Palette::snap_width(99.0), Some(30.0));
     assert_eq!(Palette::snap_width(2.3), Some(2.25));
     assert_eq!(Palette::snap_width(2.4), Some(2.5));
-    assert_eq!(Palette::parse_width("2,25"), Some(2.25));
-    assert_eq!(Palette::width_text(2.25), "2.25");
-    assert_eq!(Palette::width_text(2.5), "2.5");
-    assert_eq!(Palette::width_text(2.0), "2");
-    assert_eq!(Palette::width_text(10.0), "10");
-    assert_eq!(Palette::width_text(20.5), "20.5");
-    assert_eq!(Palette::width_text(30.0), "30");
+    assert_eq!(Palette::snap_width(f32::NAN), None);
+    // The Palette event applies the same rule to a startup width.
     let (mut a, _) = session(1.0);
-    a.handle(Event::EditWidth {
-        slot: 0,
-        width: 31.0,
-    });
+    set_width(&mut a, 0, 31.0);
     assert!((a.view().palette.widths[0] - 30.0).abs() < f32::EPSILON);
-    a.handle(Event::EditWidth {
-        slot: 0,
-        width: 3.1,
-    });
+    set_width(&mut a, 0, 3.1);
     assert!((a.view().palette.widths[0] - 3.0).abs() < f32::EPSILON);
 }
 
@@ -160,7 +153,7 @@ fn the_pen_ring_follows_the_width_in_pt() {
     let (mut a, _) = session(1.0);
     let mut rings = Vec::new();
     for pt in [2.0, 4.0, 8.0] {
-        a.handle(Event::EditWidth { slot: 1, width: pt });
+        set_width(&mut a, 1, pt);
         let Cursor::Pen { diameter, .. } = a.view().cursor else {
             panic!("pen cursor");
         };
