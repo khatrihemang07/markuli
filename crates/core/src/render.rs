@@ -14,15 +14,13 @@
 //! with `strokeColor` at `globalAlpha = opacity / 100`. Deviation: Excalidraw
 //! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
+pub(crate) use crate::canvas::Canvas;
 use crate::ink::{Element, Ink, Rect};
 use crate::laser::Laser;
 use crate::picker::Popover;
 use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
-use tiny_skia::{
-    Color, FillRule, FilterQuality, Paint, Path, PathBuilder, Pattern, PixmapMut, PixmapRef,
-    Rect as SkiaRect, SpreadMode, Stroke, Transform,
-};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Transform};
 
 /// Channel order of the platform's buffer. tiny-skia writes RGBA; Windows
 /// layered-window DIBs are BGRA, so colors are swapped at paint time and
@@ -45,89 +43,6 @@ pub struct Damage {
 /// The scratch pixmap holds at most this many bytes, so a huge damaged
 /// region is drawn in bands instead of needing a screen-sized second buffer.
 const BAND_BYTES: usize = 1 << 20;
-
-/// A target seen from a band: drawing code works in target pixel coordinates,
-/// the canvas shifts them into the band's own pixmap.
-pub(crate) struct Canvas<'a, 'b> {
-    pm: &'a mut PixmapMut<'b>,
-    shift: Transform,
-    /// One path builder for every `*_with` shape of the frame.
-    builder: &'a mut Option<PathBuilder>,
-}
-
-impl<'a, 'b> Canvas<'a, 'b> {
-    /// `pm`'s top-left pixel is the target pixel `(x, y)`.
-    fn new(
-        pm: &'a mut PixmapMut<'b>,
-        (x, y): (u32, u32),
-        builder: &'a mut Option<PathBuilder>,
-    ) -> Self {
-        Self {
-            pm,
-            shift: Transform::from_translate(-to_f32(x), -to_f32(y)),
-            builder,
-        }
-    }
-
-    /// Fills the shape `build` draws. The path is built in the frame's
-    /// reused builder, so a shape costs no allocation once warm (rule 8).
-    pub fn fill_with(&mut self, build: impl FnOnce(&mut PathBuilder), paint: &Paint<'_>) {
-        let mut path = self.builder.take().unwrap_or_default();
-        build(&mut path);
-        if let Some(path) = path.finish() {
-            self.pm
-                .fill_path(&path, paint, FillRule::Winding, self.shift, None);
-            *self.builder = Some(path.clear());
-        }
-    }
-
-    pub fn stroke_with(
-        &mut self,
-        build: impl FnOnce(&mut PathBuilder),
-        paint: &Paint<'_>,
-        stroke: &Stroke,
-    ) {
-        let mut path = self.builder.take().unwrap_or_default();
-        build(&mut path);
-        if let Some(path) = path.finish() {
-            self.pm.stroke_path(&path, paint, stroke, self.shift, None);
-            *self.builder = Some(path.clear());
-        }
-    }
-
-    /// Paints `pixels` (target pixel order) with their corner at `origin`,
-    /// only inside the shape `build` draws: a picture with rounded corners
-    /// and no mask to allocate.
-    pub fn draw_pixmap(
-        &mut self,
-        build: impl FnOnce(&mut PathBuilder),
-        pixels: PixmapRef<'_>,
-        origin: (f32, f32),
-    ) {
-        let paint = Paint {
-            shader: Pattern::new(
-                pixels,
-                SpreadMode::Pad,
-                FilterQuality::Nearest,
-                1.0,
-                Transform::from_translate(origin.0, origin.1),
-            ),
-            anti_alias: true,
-            ..Paint::default()
-        };
-        self.fill_with(build, &paint);
-    }
-
-    /// `at` maps the path into target pixels first.
-    pub fn stroke_path(&mut self, path: &Path, paint: &Paint<'_>, stroke: &Stroke, at: Transform) {
-        let to_band = at.post_concat(self.shift);
-        self.pm.stroke_path(path, paint, stroke, to_band, None);
-    }
-
-    pub fn fill_rect(&mut self, rect: SkiaRect, paint: &Paint<'_>) {
-        self.pm.fill_rect(rect, paint, self.shift, None);
-    }
-}
 
 /// Anti-aliasing and curve slack around changed geometry, in pixels.
 const DAMAGE_PAD: f32 = 2.0;

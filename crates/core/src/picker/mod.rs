@@ -15,6 +15,7 @@ mod color;
 mod custom;
 mod layout;
 mod paint;
+mod sliders;
 mod width;
 
 use crate::ink::Point;
