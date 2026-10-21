@@ -1,8 +1,8 @@
-//! The shared color panel as the editor of a color slot.
+//! The shared color panel, for the exact value of a color slot.
 
-use super::target::{color_of, frame, reset_button, Target};
+use super::target::{color_of, Target};
 use objc2::rc::Retained;
-use objc2::{msg_send, sel, MainThreadMarker, MainThreadOnly};
+use objc2::{msg_send, sel, MainThreadMarker};
 use objc2_app_kit::{NSColorPanel, NSView, NSWindowLevel};
 
 /// What the open color panel needs to be put back as it was.
@@ -37,12 +37,6 @@ pub(super) fn open(
         panel.setAction(Some(sel!(colorChanged:)));
     }
 
-    let accessory = NSView::initWithFrame(NSView::alloc(mtm), frame(0.0, 0.0, 120.0, 36.0));
-    let reset = reset_button(&target, sel!(resetColor:), mtm);
-    reset.setFrame(frame(10.0, 6.0, 80.0, 24.0));
-    accessory.addSubview(&reset);
-    panel.setAccessoryView(Some(&accessory));
-
     // SAFETY: NSWindow's delegate is weak; the target outlives it (see above)
     // and implements `windowWillClose:`.
     unsafe {
@@ -64,7 +58,6 @@ pub(super) fn close(panel: &Panel, mtm: MainThreadMarker) {
         shared.setTarget(None);
         shared.setAction(None);
     }
-    shared.setAccessoryView(None);
     shared.setLevel(panel.level);
     shared.orderOut(None);
 }

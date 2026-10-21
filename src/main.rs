@@ -12,7 +12,9 @@ mod settings;
 use editors::EditorEvent;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use hotkeys::{Binding, Hotkeys, RebindError};
-use markuli_core::{Annotator, Config, Cursor, DisplayId, Event, Insets, Key, Point, Theme, View};
+use markuli_core::{
+    Annotator, Config, Cursor, DisplayId, EditRequest, Event, Insets, Key, Point, Theme, View,
+};
 use platform::{Presenter, SettingsWindow};
 use settings::SettingsEvent;
 use std::time::{Duration, Instant};
@@ -317,27 +319,32 @@ impl App {
         }
     }
 
-    /// Saves the config when the Pen's Style or the Palette changed, and
-    /// only then.
+    /// Saves the config when the Pen's Style, the Palette or the Recent
+    /// Colors changed, and only then.
     fn remember_style(&mut self, view: View) {
-        if view.style != self.config.style || view.palette != self.config.palette {
+        if view.style != self.config.style
+            || view.palette != self.config.palette
+            || view.recent != self.config.recent
+        {
             self.config.style = view.style;
             self.config.palette = view.palette;
+            self.config.recent = view.recent;
             settings::save(&self.config);
         }
     }
 
-    /// A right click, or Control+click on macOS. On a Palette button the
-    /// core reports `View::edit` and the platform editor runs until closed.
+    /// A right click, or Control+click on macOS: the core opens the Color
+    /// Picker or Width Picker (or closes it) and draws it itself.
     fn secondary_click(&mut self, event_loop: &ActiveEventLoop) {
-        // An editor still open ends its edit before the new request arrives.
-        platform::close_editor(&mut |event| self.input(event_loop, event));
         self.input(event_loop, Event::SecondaryClick(self.cursor));
-        let Some(request) = self.core.view().edit else {
-            return;
-        };
-        // The raw handle is Copy, so the editor does not borrow the Overlay
-        // while its edits come back through `input`.
+    }
+
+    /// The Color Picker's "..." asked for the system color panel, which runs
+    /// until closed. A panel still open ends its edit first.
+    fn open_system_panel(&mut self, event_loop: &ActiveEventLoop, request: EditRequest) {
+        platform::close_editor(&mut |event| self.input(event_loop, event));
+        // The raw handle is Copy, so the panel does not borrow the Overlay
+        // while its colors come back through `input`.
         let owner = self
             .overlay
             .as_ref()
@@ -348,12 +355,11 @@ impl App {
         }
     }
 
-    /// An editor changed a value or closed: the core hears it like any input,
-    /// so the Palette is saved and the Toolbar and Selection repainted.
+    /// The system color panel changed a color or closed: the core hears it like
+    /// any input, so the Palette is saved and the Toolbar and Selection repainted.
     fn on_editor(&mut self, event_loop: &ActiveEventLoop, event: EditorEvent) {
         let event = match event {
             EditorEvent::Color { slot, rgb } => Event::EditColor { slot, rgb },
-            EditorEvent::Width { slot, width } => Event::EditWidth { slot, width },
             EditorEvent::Closed { generation } => {
                 platform::editor_closed(generation, &mut |event| self.input(event_loop, event));
                 return;
@@ -377,6 +383,11 @@ impl App {
         }
         if view.needs_render {
             self.redraw();
+        }
+        // Last: on Windows the panel is modal, and the picker that asked for
+        // it must be off the screen by then.
+        if let Some(request) = view.edit {
+            self.open_system_panel(event_loop, request);
         }
     }
 }
@@ -678,6 +689,7 @@ fn main() {
     core.handle(Event::Palette(config.palette));
     core.handle(Event::Style(config.style));
     core.handle(Event::ToolbarPosition(config.toolbar));
+    core.handle(Event::RecentColors(config.recent));
 
     let mut app = App {
         core,

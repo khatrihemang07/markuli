@@ -3,11 +3,12 @@
 //! - `window_attributes` tunes the Overlay window before it is created.
 //! - `monitor_under_cursor` picks the display for Draw Mode.
 //! - `config_dir`, `set_launch_at_login` and `SettingsWindow` serve Settings.
-//! - `open_editor` runs the Palette editor for a `View::edit` request until
-//!   it closes, sending edits to the core as they happen. On macOS the editor
-//!   is not modal: it returns at once and later edits arrive as `editors`
-//!   events. `close_editor` ends one still open, and `editor_closed` ends the
-//!   current one when it reports closing (a stale report is ignored).
+//! - `open_editor` runs the system color panel for a `View::edit` request (the
+//!   Color Picker's "...") until it closes, sending colors to the core as they
+//!   happen. On macOS the panel is not modal: it returns at once and later
+//!   colors arrive as `editors` events. `close_editor` ends one still open, and
+//!   `editor_closed` ends the current one when it reports closing (a stale
+//!   report is ignored).
 //! - `Presenter` owns the pixel buffer and puts it on screen with per-pixel
 //!   alpha (softbuffer cannot, see the PR notes).
 //!
@@ -34,8 +35,6 @@ mod windows_editors;
 mod windows_recorder;
 #[cfg(target_os = "windows")]
 mod windows_settings;
-#[cfg(target_os = "windows")]
-mod windows_width;
 #[cfg(target_os = "windows")]
 use windows as imp;
 #[cfg(target_os = "windows")]
