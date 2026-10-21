@@ -6,14 +6,14 @@
 //! around their common box. The drag box is filled `rgba(0, 0, 200, 0.04)` and
 //! outlined in the selection color. Deviations: no resize or rotation handles
 //! (the spec excludes them), and in the dark theme the color is the lightened
-//! post-filter `#a8a5ff` because Markuli has no canvas color filter.
+//! post-filter `#a8a5ff` because Markuli has no painter color filter.
 //!
 //! Painting is never incremental: [`Selection::flush`] marks the old and new
 //! overlay areas as damage, and the renderer redraws that whole area (Ink,
 //! then this, then the toolbar), so a repaint never stacks on itself.
 
 use crate::ink::{Ink, Rect};
-use crate::render::{Canvas, Format, Pending};
+use crate::render::{Format, Painter, Pending};
 use crate::toolbar::Theme;
 use tiny_skia::{Color, Paint, PathBuilder, Rect as SkiaRect, Stroke, StrokeDash, Transform};
 
@@ -187,7 +187,7 @@ impl Selection {
     pub fn paint(
         &self,
         ink: &Ink,
-        target: &mut Canvas<'_, '_>,
+        target: &mut Painter<'_, '_>,
         scale: f32,
         format: Format,
         scroll: f32,
@@ -233,7 +233,7 @@ fn dashed_stroke(scale: f32) -> Stroke {
 
 /// Strokes `rect` (logical) with a line that sits exactly on pixel centres.
 fn outline(
-    target: &mut Canvas<'_, '_>,
+    target: &mut Painter<'_, '_>,
     rect: Rect,
     scale: f32,
     paint: &Paint<'_>,

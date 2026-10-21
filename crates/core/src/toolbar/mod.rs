@@ -95,7 +95,7 @@ pub(crate) struct Look {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Hit {
     Button(Button),
-    /// Island padding: inert, but still not the canvas.
+    /// Island padding: inert, but still not the Overlay.
     Dead,
 }
 

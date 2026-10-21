@@ -3,7 +3,6 @@
 //! One way in: [`Annotator::handle`] takes an [`Event`]. Out come the
 //! [`View`] state, the [`Ink`], and pixels via [`Annotator::render`].
 
-mod canvas;
 mod config;
 mod excalidraw;
 pub mod freehand;
@@ -11,6 +10,7 @@ mod history;
 mod icons;
 mod ink;
 pub mod laser;
+mod painter;
 mod palette;
 mod picker;
 mod recent;

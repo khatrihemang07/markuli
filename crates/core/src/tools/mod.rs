@@ -131,7 +131,7 @@ pub(crate) trait Tool: Debug {
     fn toggle(&self) -> Option<(&'static [char], ToolKind)> {
         None
     }
-    /// The cursor over the canvas; `style` is the style of the next Strokes.
+    /// The cursor over the Overlay; `style` is the style of the next Strokes.
     fn cursor(&self, style: Appearance) -> Cursor;
     /// What the color and width buttons apply to while this Tool is active.
     fn styles(&self) -> StyleTarget {

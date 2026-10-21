@@ -6,9 +6,9 @@
 //! A Tool brings its own icon as a `const Icon`, so adding one never edits
 //! this file's other icons.
 
-use crate::render::Canvas;
+use crate::render::Painter;
 use crate::svg_path;
-use tiny_skia::{LineCap, LineJoin, Paint, Stroke, Transform};
+use tiny_skia::{LineCap, LineJoin, Paint, Path, Stroke, Transform};
 
 pub(crate) struct Icon {
     /// The square viewBox edge, in path units.
@@ -87,7 +87,7 @@ pub(crate) const REDO: Icon = Icon {
     paths: &["M12.5 10.833 15.833 7.5 12.5 4.167M15.833 7.5H6.667a3.333 3.333 0 1 0 0 6.667H7.5"],
 };
 
-/// `TrashIcon`, Excalidraw's own "Clear canvas" glyph.
+/// `TrashIcon`, Excalidraw's own "Clear painter" glyph.
 pub(crate) const TRASH: Icon = Icon {
     view: 20.0,
     stroke: 1.25,
@@ -128,7 +128,7 @@ pub(crate) const MORE: Icon = Icon {
 
 /// Strokes `icon` into a `size` x `size` pixel square at `(x, y)`.
 pub(crate) fn draw(
-    target: &mut Canvas<'_, '_>,
+    target: &mut Painter<'_, '_>,
     icon: &Icon,
     (x, y, size): (f32, f32, f32),
     paint: &Paint<'_>,
@@ -143,19 +143,60 @@ pub(crate) fn draw(
     );
 }
 
+/// An [`Icon`] whose path data was parsed once, for a picture that is painted
+/// again and again (a drag) and so must not parse on every frame.
+#[derive(Debug)]
+pub(crate) struct Parsed {
+    view: f32,
+    stroke: f32,
+    paths: Vec<Path>,
+}
+
+impl Parsed {
+    pub fn new(icon: &Icon) -> Self {
+        Self {
+            view: icon.view,
+            stroke: icon.stroke,
+            paths: icon
+                .paths
+                .iter()
+                .filter_map(|d| svg_path::parse(d))
+                .collect(),
+        }
+    }
+
+    /// Strokes the icon into a `size` pixel square at `(x, y)`.
+    pub fn draw(
+        &self,
+        target: &mut Painter<'_, '_>,
+        (x, y, size): (f32, f32, f32),
+        paint: &Paint<'_>,
+    ) {
+        let k = size / self.view;
+        let at = Transform::from_row(k, 0.0, 0.0, k, x, y);
+        for path in &self.paths {
+            target.stroke_path(path, paint, &stroke_of(self.stroke), at);
+        }
+    }
+}
+
+fn stroke_of(width: f32) -> Stroke {
+    Stroke {
+        width,
+        line_cap: LineCap::Round,
+        line_join: LineJoin::Round,
+        ..Stroke::default()
+    }
+}
+
 fn stroke_paths(
-    target: &mut Canvas<'_, '_>,
+    target: &mut Painter<'_, '_>,
     paths: &[&str],
     width: f32,
     at: Transform,
     paint: &Paint<'_>,
 ) {
-    let stroke = Stroke {
-        width,
-        line_cap: LineCap::Round,
-        line_join: LineJoin::Round,
-        ..Stroke::default()
-    };
+    let stroke = stroke_of(width);
     for d in paths {
         if let Some(path) = svg_path::parse(d) {
             target.stroke_path(&path, paint, &stroke, at);

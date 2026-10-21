@@ -5,7 +5,7 @@ use super::layout::{self, Area};
 use super::theme::{fill_rounded, rounded_rect, shadow, solid_paint, Tokens, RADIUS};
 use super::{Button, Chrome, Toolbar, UiState};
 use crate::icons::{self, Icon};
-use crate::render::{Canvas, Format};
+use crate::render::{Format, Painter};
 use crate::tools::Tools;
 use tiny_skia::{LineCap, PathBuilder, Stroke, Transform};
 
@@ -34,7 +34,7 @@ struct Brush<'a> {
 }
 
 impl Chrome<'_> {
-    pub fn paint(&self, target: &mut Canvas<'_, '_>, format: Format) {
+    pub fn paint(&self, target: &mut Painter<'_, '_>, format: Format) {
         let (toolbar, tools) = (&*self.toolbar, self.tools);
         let Some(l) = toolbar.layout(tools.len()) else {
             return;
@@ -64,7 +64,7 @@ impl Chrome<'_> {
 }
 
 impl Brush<'_> {
-    fn button(&self, target: &mut Canvas<'_, '_>, rect: Area, button: Button) {
+    fn button(&self, target: &mut Painter<'_, '_>, rect: Area, button: Button) {
         let (toolbar, ui) = (self.toolbar, self.ui);
         let selected = match button {
             Button::Tool(t) => t == ui.active,
@@ -105,7 +105,7 @@ impl Brush<'_> {
         }
     }
 
-    fn icon(&self, target: &mut Canvas<'_, '_>, rect: Area, button: Button, ink: [u8; 3]) {
+    fn icon(&self, target: &mut Painter<'_, '_>, rect: Area, button: Button, ink: [u8; 3]) {
         let icon: &Icon = match button {
             Button::Tool(t) => match self.tools.get(t) {
                 Some(tool) => tool.icon(),
@@ -128,7 +128,7 @@ impl Brush<'_> {
     /// A palette color in a bordered square; the chosen one gets a ring.
     fn swatch(
         &self,
-        target: &mut Canvas<'_, '_>,
+        target: &mut Painter<'_, '_>,
         rect: Area,
         index: usize,
         chosen: bool,
@@ -163,7 +163,7 @@ impl Brush<'_> {
     }
 
     /// A horizontal round-capped line as thick as the width it chooses.
-    fn width_line(&self, target: &mut Canvas<'_, '_>, rect: Area, index: usize, ink: [u8; 3]) {
+    fn width_line(&self, target: &mut Painter<'_, '_>, rect: Area, index: usize, ink: [u8; 3]) {
         let Some(&width) = self.ui.palette.widths.get(index) else {
             return;
         };

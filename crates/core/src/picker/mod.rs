@@ -25,7 +25,7 @@ use crate::toolbar::{Area, Theme};
 use color::{Hsv, NEUTRALS};
 use custom::Custom;
 pub(crate) use layout::Frame;
-use layout::{Geometry, Part, Tab};
+use layout::{Drag, Geometry, Part, Tab};
 
 /// A constant stand-in for the Custom color while another tab is up, so that a
 /// hue remembered meanwhile never repaints the Presets.
@@ -52,14 +52,6 @@ pub(crate) enum Outcome {
     More,
     /// A press on nothing: swallowed.
     Inert,
-}
-
-/// What a drag in progress moves.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Drag {
-    Square,
-    Hue,
-    Track,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -111,6 +103,7 @@ pub(crate) struct Picker {
     /// The pointer is over the popover (for the cursor).
     over: bool,
     custom: Custom,
+    glyphs: Option<paint::Glyphs>,
     painted: Option<Look>,
 }
 
@@ -135,6 +128,7 @@ impl Picker {
     /// is what the slot holds.
     pub fn open(&mut self, kind: SlotKind, index: usize, value: SlotValue) {
         let hsv = self.hsv_of(value);
+        self.glyphs.get_or_insert_with(paint::Glyphs::new);
         self.open = Some(Open {
             kind,
             index,
@@ -153,6 +147,7 @@ impl Picker {
     pub fn free(&mut self) {
         self.close();
         self.custom = Custom::default();
+        self.glyphs = None;
         self.painted = None;
     }
 
@@ -193,7 +188,7 @@ impl Picker {
         };
         let part = Self::part_at(&g, at, recent)
             // Pictures and the slider are not buttons: nothing to highlight.
-            .filter(|p| !matches!(p, Part::Square | Part::Hue | Part::Track));
+            .filter(|p| p.drag().is_none());
         self.over = g.rect().contains(at);
         if let Some(open) = self.open.as_mut() {
             open.hover = part;
@@ -235,13 +230,8 @@ impl Picker {
             Part::Reset => Outcome::Reset,
             Part::More => Outcome::More,
             Part::Square | Part::Hue | Part::Track => {
-                let drag = match part {
-                    Part::Square => Drag::Square,
-                    Part::Hue => Drag::Hue,
-                    _ => Drag::Track,
-                };
                 if let Some(open) = self.open.as_mut() {
-                    open.drag = Some(drag);
+                    open.drag = part.drag();
                     open.hover = None;
                 }
                 self.drag(at, frame).map_or(Outcome::Inert, Outcome::Set)

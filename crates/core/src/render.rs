@@ -14,9 +14,9 @@
 //! with `strokeColor` at `globalAlpha = opacity / 100`. Deviation: Excalidraw
 //! truncates path numbers to 2 decimals; we keep full f32 (at most 0.01 px).
 
-pub(crate) use crate::canvas::Canvas;
 use crate::ink::{Element, Ink, Rect};
 use crate::laser::Laser;
+pub(crate) use crate::painter::Painter;
 use crate::picker::Popover;
 use crate::selection::Selection;
 use crate::toolbar::{Area, Chrome};
@@ -320,19 +320,19 @@ fn compose_band(
         (scale, scroll),
         format,
     );
-    let mut canvas = Canvas::new(&mut region, (band.x, band.y), builder);
+    let mut painter = Painter::new(&mut region, (band.x, band.y), builder);
     let this = Area::from_bounds(bounds_of(band));
     if selection
         .shown()
         .is_some_and(|area| overlaps(area, bounds_of(band)))
     {
-        selection.paint(ink, &mut canvas, scale, format, scroll);
+        selection.paint(ink, &mut painter, scale, format, scroll);
     }
     if chrome.region().is_some_and(|r| r.intersects(&this)) {
-        chrome.paint(&mut canvas, format);
+        chrome.paint(&mut painter, format);
     }
     if let Some(look) = popover.look.filter(|l| l.region().intersects(&this)) {
-        popover.picker.paint(&mut canvas, &look, format);
+        popover.picker.paint(&mut painter, &look, format);
     }
     let stride = target.width() as usize * 4;
     let data = target.data_mut();

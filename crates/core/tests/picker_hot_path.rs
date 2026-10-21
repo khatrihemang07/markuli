@@ -44,12 +44,17 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOCATOR: Counting = Counting;
 
-fn handle_and_render(a: &mut Annotator, pm: &mut Pixmap, at: Point) -> (usize, usize) {
+fn handle_and_render(a: &mut Annotator, pm: &mut Pixmap, at: Point) -> (usize, usize, usize) {
     let c0 = CALLS.load(Ordering::Relaxed);
     a.handle(Event::PointerMove(at));
     let (c1, b1) = (CALLS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed));
+    let r0 = CALLS.load(Ordering::Relaxed);
     a.render(&mut pm.as_mut(), Format::Rgba);
-    (c1 - c0, BYTES.load(Ordering::Relaxed) - b1)
+    (
+        c1 - c0,
+        BYTES.load(Ordering::Relaxed) - b1,
+        CALLS.load(Ordering::Relaxed) - r0,
+    )
 }
 
 /// 40 moves along `along`, after a warm-up of the same path.
@@ -57,17 +62,25 @@ fn assert_alloc_free(what: &str, a: &mut Annotator, pm: &mut Pixmap, along: &dyn
     for i in 0..20 {
         handle_and_render(a, pm, along(i));
     }
-    let (mut calls, mut bytes) = (0, 0);
+    let (mut calls, mut bytes, mut render_calls) = (0, 0, 0);
     for i in 0..40 {
-        let (c, b) = handle_and_render(a, pm, along(i));
+        let (c, b, r) = handle_and_render(a, pm, along(i));
         calls += c;
         bytes += b;
+        render_calls += r;
     }
     assert_eq!(calls, 0, "{what}: allocations handling 40 moves");
     // The popover and the Toolbar next to it are repainted whole: tiny-skia's
     // transient edge buffers (measured about 430 KiB at this width) are
     // bounded by the width of the area, not by Ink; the same cap as a full
     // redraw in `hot_path.rs`.
+    // Mostly tiny-skia's transient buffers and the Toolbar's icons (measured
+    // 290 to 570); a path built or an icon parsed per cell would add hundreds.
+    assert!(
+        render_calls / 40 < 800,
+        "{what}: {} calls per render",
+        render_calls / 40
+    );
     assert!(
         bytes / 40 < 1024 * 1024,
         "{what}: {} bytes per render",

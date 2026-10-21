@@ -5,10 +5,10 @@
 use super::color::{self, NEUTRALS, PRESETS};
 use super::layout::{Geometry, Part, Tab, CELL};
 use super::{Look, Picker};
-use crate::icons::{self, Icon};
+use crate::icons::{self, Parsed};
 use crate::palette::{SlotKind, SlotValue};
 use crate::recent::CAPACITY;
-use crate::render::{Canvas, Format};
+use crate::render::{Format, Painter};
 use crate::toolbar::{fill_rounded, shadow, solid_paint, Area, Tokens, RADIUS};
 use tiny_skia::{LineCap, LineJoin, Paint, PathBuilder, Rect, Stroke};
 
@@ -23,15 +23,37 @@ pub(super) const HAIRLINE: f32 = 0.6;
 const EMPTY: f32 = 0.9;
 
 /// What every shape of one popover is painted from.
+/// The popover's icons, parsed once when it opens (and freed with the Custom
+/// buffers), so repainting during a drag parses nothing.
+#[derive(Debug)]
+pub(super) struct Glyphs {
+    grid: Parsed,
+    spectrum: Parsed,
+    pub(super) reset: Parsed,
+    more: Parsed,
+}
+
+impl Glyphs {
+    pub fn new() -> Self {
+        Self {
+            grid: Parsed::new(&icons::GRID),
+            spectrum: Parsed::new(&icons::SPECTRUM),
+            reset: Parsed::new(&icons::RESET),
+            more: Parsed::new(&icons::MORE),
+        }
+    }
+}
+
 pub(super) struct Brush<'a, 'c, 'd> {
-    pub(super) target: &'a mut Canvas<'c, 'd>,
+    pub(super) glyphs: &'a Glyphs,
+    pub(super) target: &'a mut Painter<'c, 'd>,
     pub(super) tokens: &'static Tokens,
     pub(super) format: Format,
     pub(super) s: f32,
 }
 
 impl Picker {
-    pub fn paint(&mut self, target: &mut Canvas<'_, '_>, look: &Look, format: Format) {
+    pub fn paint(&mut self, target: &mut Painter<'_, '_>, look: &Look, format: Format) {
         let g = look.geom;
         let rect = g.rect();
         let s = g.rect_scale();
@@ -43,7 +65,11 @@ impl Picker {
             RADIUS * s,
             &solid_paint(tokens.island, 1.0, format),
         );
+        let Some(glyphs) = self.glyphs.as_ref() else {
+            return;
+        };
         let mut brush = Brush {
+            glyphs,
             target,
             tokens,
             format,
@@ -128,14 +154,14 @@ impl Brush<'_, '_, '_> {
         }
     }
 
-    fn icon(&mut self, r: Area, icon: &Icon, rgb: [u8; 3]) {
+    fn icon(&mut self, r: Area, icon: &Parsed, rgb: [u8; 3]) {
         let size = ICON * self.s;
         let at = (r.x + (r.w - size) / 2.0, r.y + (r.h - size) / 2.0, size);
-        icons::draw(self.target, icon, at, &self.paint(rgb, 1.0));
+        icon.draw(self.target, at, &self.paint(rgb, 1.0));
     }
 
     /// One icon button, lit when hovered.
-    pub(super) fn button(&mut self, g: &Geometry, look: &Look, part: Part, icon: &Icon) {
+    pub(super) fn button(&mut self, g: &Geometry, look: &Look, part: Part, icon: &Parsed) {
         let Some(r) = g.rect_of(part) else { return };
         let hot = look.hover == Some(part);
         self.backing(r, hot, false);
@@ -160,8 +186,8 @@ impl Brush<'_, '_, '_> {
         let fill = self.paint(self.tokens.hover, 1.0);
         self.rounded(track, RADIUS, &fill);
         for (tab, icon) in [
-            (Tab::Presets, &icons::GRID),
-            (Tab::Custom, &icons::SPECTRUM),
+            (Tab::Presets, &self.glyphs.grid),
+            (Tab::Custom, &self.glyphs.spectrum),
         ] {
             let Some(r) = g.rect_of(Part::Tab(tab)) else {
                 continue;
@@ -195,8 +221,8 @@ impl Brush<'_, '_, '_> {
         if let Some(line) = rect(g.divider()) {
             self.target.fill_rect(line, &hairline);
         }
-        self.button(&g, look, Part::Reset, &icons::RESET);
-        self.button(&g, look, Part::More, &icons::MORE);
+        self.button(&g, look, Part::Reset, &self.glyphs.reset);
+        self.button(&g, look, Part::More, &self.glyphs.more);
         let rgb = rgb_of(look.value);
         let at = g.chip();
         self.swatch(at, CELL / 2.0 + 1.0, rgb);

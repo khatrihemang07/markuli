@@ -2,7 +2,7 @@
 //! shadow, solid paints and rounded rectangles.
 
 use super::layout::Area;
-use crate::render::{Canvas, Format};
+use crate::render::{Format, Painter};
 use tiny_skia::{Color, Paint, Path, PathBuilder};
 
 /// Corner radius of islands and buttons, in logical pixels.
@@ -72,7 +72,7 @@ impl Theme {
 
 /// Stock `--shadow-island`, approximated by stacked translucent rounded
 /// rectangles, outermost first: (grow, offset down, alpha), logical pixels.
-pub(crate) fn shadow(target: &mut Canvas<'_, '_>, island: Area, s: f32, format: Format) {
+pub(crate) fn shadow(target: &mut Painter<'_, '_>, island: Area, s: f32, format: Format) {
     const LAYERS: [(f32, f32, f32); 6] = [
         (13.0, 7.0, 0.010),
         (10.0, 6.0, 0.015),
@@ -111,7 +111,7 @@ pub(crate) fn solid_paint(rgb: [u8; 3], alpha: f32, format: Format) -> Paint<'st
     paint
 }
 
-pub(crate) fn fill_rounded(target: &mut Canvas<'_, '_>, r: Area, radius: f32, paint: &Paint<'_>) {
+pub(crate) fn fill_rounded(target: &mut Painter<'_, '_>, r: Area, radius: f32, paint: &Paint<'_>) {
     target.fill_with(|pb| push_rounded(pb, r, radius), paint);
 }
 

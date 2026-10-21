@@ -5,7 +5,6 @@ use super::color;
 use super::layout::{Part, KNOB};
 use super::paint::{round_px, Brush, HAIRLINE};
 use super::{width, Look};
-use crate::icons;
 use crate::palette::SlotValue;
 use crate::toolbar::{push_rounded, Area, RADIUS};
 use tiny_skia::{PathBuilder, Stroke};
@@ -91,7 +90,7 @@ impl Brush<'_, '_, '_> {
             pt * s,
             &self.paint(look.stroke, 1.0),
         );
-        self.button(&g, look, Part::Reset, &icons::RESET);
+        self.button(&g, look, Part::Reset, &self.glyphs.reset);
         let Some(track) = g.rect_of(Part::Track) else {
             return;
         };

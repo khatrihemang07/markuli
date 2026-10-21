@@ -131,7 +131,7 @@ fn a_press_on_any_toolbar_button_or_gap_never_starts_a_stroke() {
         a.handle(Event::PointerMove(p(at.x + 3.0, at.y + 100.0)));
         a.handle(Event::PointerUp(p(at.x + 3.0, at.y + 100.0)));
     }
-    // The gap between two buttons of one group is padding: dead, not canvas.
+    // The gap between two buttons of one group is padding: dead, not Overlay.
     let (c0, c1) = (center(&a, Button::Color(0)), center(&a, Button::Color(1)));
     click(&mut a, p(f32::midpoint(c0.x, c1.x), c0.y));
     assert!(a.ink().is_empty());

@@ -76,6 +76,26 @@ pub(crate) enum Part {
     Panel,
 }
 
+/// What a drag in progress moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Drag {
+    Square,
+    Hue,
+    Track,
+}
+
+impl Part {
+    /// The drag a press on this part starts, if it is a picture or the slider.
+    pub fn drag(self) -> Option<Drag> {
+        match self {
+            Self::Square => Some(Drag::Square),
+            Self::Hue => Some(Drag::Hue),
+            Self::Track => Some(Drag::Track),
+            _ => None,
+        }
+    }
+}
+
 /// Everything the placement depends on, in physical pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Frame {
