@@ -23,10 +23,12 @@ The build is unsigned. On first launch, right-click the app and choose **Open**.
 | Wheel or trackpad | Scroll the Ink up and down, with any Tool |
 | `Page Up` / `Page Down` | Scroll the Ink by most of a screen |
 | `Option` + drag | Scroll the Ink by dragging, with any Tool (the Hand Tool does it without the key) |
-| `1`–`5` | Color: red, blue, green, yellow, black |
+| `1`–`5` | Color: red, amber, green, blue, grape |
 | `[` / `]` | Thinner / bolder (thin 2 pt, medium 4 pt, bold 8 pt) |
 | `Cmd` + `Z` / `Cmd` + `Shift` + `Z` | Undo / redo |
 | `Cmd` + `C` | Copy the Ink as Excalidraw data |
+
+Right-click (or Control-click) a color or width on the Toolbar, or click the one already chosen, to pick another from the Color Picker or Width Picker.
 
 Ink shows only in Draw Mode. When you enter Draw Mode again on the same display, your Ink comes back, scrolled as you left it. You change hotkeys and launch at login from the tray icon.
 
