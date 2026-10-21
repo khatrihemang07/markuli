@@ -45,15 +45,30 @@ The Tool whose drag changes the Scroll. It never changes Ink. Holding Alt (Optio
 The Elements currently chosen with the Select Tool, for moving, deleting or copying.
 
 **Toolbar**:
-One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing. It is part of the Overlay, not Ink.
+One row or column of islands shown in Draw Mode: the Tools, the five colors, the three widths, then Undo, Redo and Clear. It is always the same size. The color and width controls are dimmed when the active Tool styles nothing, and the Color Picker and Width Picker open from them. It is part of the Overlay, not Ink.
 _Avoid_: panel, style panel
 
 **Toolbar Position**:
 Which edge of the Overlay the Toolbar sits on: top, bottom, left or right. It stays clear of the menu bar, notch, Dock and taskbar. A Setting; the default is top.
 
 **Palette**:
-The 5 color slots and 3 width slots on the Toolbar. The user can edit them (a secondary click on a slot), and they are remembered across launches. Editing a slot also chooses it. Elements already drawn keep their own color and width. A width is the drawn line's thickness in pt (logical px) at mid pressure, from 0.5 to 30 in steps of 0.25. Defaults are red, blue, green, yellow and black, and widths 2, 4 and 8 pt. The config marks this format with `palette=2`; an older file's colors, widths and chosen slots are ignored once.
-_Avoid_: swatches, presets
+The 5 color slots and 3 width slots on the Toolbar. The user can edit them (a secondary click on a slot, or a click on the slot that is already chosen opens its Color Picker or Width Picker), and they are remembered across launches. Editing a slot also chooses it. Elements already drawn keep their own color and width. A width is the drawn line's thickness in pt (logical px) at mid pressure, from 0.5 to 30 in steps of 0.25. Defaults are red, amber, green, blue and grape, and widths 2, 4 and 8 pt. The config marks this format with `palette=3`; a `palette=2` file keeps the slots the user changed and gives the rest the new defaults, and an older file's colors, widths and chosen slots are ignored once.
+_Avoid_: swatches
+
+**Color Picker**:
+The popover the core draws next to a color slot to edit it. It has two tabs: **Presets** and Custom (a saturation/value square and a hue strip). Choosing a preset closes it at once; releasing a Custom drag closes it. A Reset restores the slot's default. A "..." hands over to the system color panel for exact values. It has no text. A color that is hard to see on the theme's page (contrast under 3:1) carries a warning badge.
+_Avoid_: palette editor, color panel (that is the system's)
+
+**Width Picker**:
+The popover the core draws next to a width slot: a slider from 0.5 to 30 pt and a preview stroke in the current color, which is how the width is read. A Reset restores the slot's default. In code, the Color Picker and the Width Picker are together the "picker".
+_Avoid_: width editor, width popover
+
+**Presets**:
+The curated colors on the Color Picker's first tab: a neutral row, then nine hues in four tones from light to dark. The default colors are among them, so the chosen default is always ringed.
+_Avoid_: swatches, palette (that is the five slots)
+
+**Recent Colors**:
+The last 6 colors picked from the Presets, a Custom drag or the system color panel, newest first, shown under the Presets. Remembered across launches. A Reset never adds one.
 
 **Style**:
 The color and width the next Stroke is drawn with, and that Select applies to the Selection. A color slot and a width slot of the Palette. It is remembered across launches, but it is not a Setting, and it is not reset when Draw Mode is entered.
