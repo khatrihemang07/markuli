@@ -636,18 +636,44 @@ fn wheel_dy(delta: MouseScrollDelta, scale: f64) -> f32 {
     }
 }
 
-/// A 32x32 monochrome ring; macOS tints template icons for light/dark bars.
+/// Distance from (px, py) to the segment a-b.
+fn segment_distance(px: f32, py: f32, a: (f32, f32), b: (f32, f32)) -> f32 {
+    let (vx, vy) = (b.0 - a.0, b.1 - a.1);
+    let t = (((px - a.0) * vx + (py - a.1) * vy) / (vx * vx + vy * vy)).clamp(0.0, 1.0);
+    (px - a.0 - t * vx).hypot(py - a.1 - t * vy)
+}
+
+/// Distance from (px, py) to the squiggle: the app icon's wave at 1/4 scale,
+/// two periods from x=6 to x=24 around y=20.
+fn wave_distance(px: f32, py: f32) -> f32 {
+    const STEPS: u8 = 72;
+    let point = |i: u8| {
+        let x = 6.0 + 18.0 * f32::from(i) / f32::from(STEPS);
+        (
+            x,
+            20.0 - 1.75 * (std::f32::consts::TAU * (x - 6.0) / 9.0).sin(),
+        )
+    };
+    (1..=STEPS).fold(f32::MAX, |best, i| {
+        best.min(segment_distance(px, py, point(i - 1), point(i)))
+    })
+}
+
+/// A 32x32 monochrome template icon matching the app icon: a bar over a
+/// squiggle. macOS tints template icons for light/dark bars.
 fn tray_icon_image() -> Icon {
     const SIZE: u32 = 32;
     let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
     for y in 0..SIZE {
         for x in 0..SIZE {
-            let (dx, dy) = (
-                f32::from(u8::try_from(x).unwrap_or(0)) - 15.5,
-                f32::from(u8::try_from(y).unwrap_or(0)) - 15.5,
+            let (px, py) = (
+                f32::from(u8::try_from(x).unwrap_or(0)),
+                f32::from(u8::try_from(y).unwrap_or(0)),
             );
-            let distance = dx.hypot(dy);
-            let coverage = (1.5 - (distance - 11.0).abs()).clamp(0.0, 1.0);
+            // Stroke coverage with a 1px antialiased edge, as the ring had.
+            let bar = (2.0 - segment_distance(px, py, (8.0, 11.0), (23.0, 11.0))).clamp(0.0, 1.0);
+            let wave = (1.75 - wave_distance(px, py)).clamp(0.0, 1.0);
+            let coverage = bar.max(wave);
             #[allow(
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss,

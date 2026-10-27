@@ -15,10 +15,11 @@ cargo build --release --locked --target x86_64-apple-darwin
 
 rm -rf dist
 APP="dist/stage/Markuli.app"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 lipo -create -output "$APP/Contents/MacOS/markuli" \
   target/aarch64-apple-darwin/release/markuli \
   target/x86_64-apple-darwin/release/markuli
+cp assets/Markuli.icns "$APP/Contents/Resources/"
 
 # LSUIElement: no Dock icon, matching the Accessory activation policy in code.
 cat > "$APP/Contents/Info.plist" <<EOF
@@ -30,6 +31,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<key>CFBundleDisplayName</key><string>Markuli</string>
 	<key>CFBundleIdentifier</key><string>com.markuli.app</string>
 	<key>CFBundleExecutable</key><string>markuli</string>
+	<key>CFBundleIconFile</key><string>Markuli</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleVersion</key><string>${VERSION}</string>
 	<key>CFBundleShortVersionString</key><string>${VERSION}</string>
