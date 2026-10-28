@@ -1,0 +1,63 @@
+{
+    "generation_info": {
+        "timestamp": "2026-10-28T05:07:00.779047+00:00",
+        "provider": "claude-code",
+        "main_model": "claude-sonnet-5-5",
+        "generator_version": "2.0.0",
+        "repo_path": "/Users/mandalorian/Documents/Code/markuli",
+        "commit_id": "798fa3031354df5ecdebaab9360389bd4ff760be",
+        "language": null,
+        "layout": "hierarchical"
+    },
+    "statistics": {
+        "total_components": 785,
+        "leaf_nodes": 120,
+        "max_depth": 2
+    },
+    "files_generated": [
+        "overview.md",
+        "module_tree.json",
+        "first_module_tree.json",
+        "coding-standards.md",
+        "release-checklist.md"
+    ],
+    "usage": {
+        "scope": "this run only (modules resumed from disk cost nothing)",
+        "n_calls": 1,
+        "totals": {
+            "input_tokens": 8,
+            "output_tokens": 6310,
+            "total_tokens": 6318,
+            "cache_read_tokens": 392621,
+            "cache_write_tokens": 190588,
+            "cost_usd": 0.8647301000000001
+        },
+        "by_phase": {
+            "modules": {
+                "calls": 1,
+                "input_tokens": 8,
+                "output_tokens": 6310,
+                "total_tokens": 6318,
+                "cache_read_tokens": 392621,
+                "cache_write_tokens": 190588,
+                "cost_usd": 0.8647301000000001
+            }
+        },
+        "unpriced_models": [],
+        "calls": [
+            {
+                "phase": "modules",
+                "kind": "module_agent",
+                "target": "markuli",
+                "model": "claude-sonnet-5-5",
+                "seconds": 71.88,
+                "input_tokens": 8,
+                "output_tokens": 6310,
+                "total_tokens": 6318,
+                "cache_read_tokens": 392621,
+                "cache_write_tokens": 190588,
+                "cost_usd": 0.8647301000000001
+            }
+        ]
+    }
+}
